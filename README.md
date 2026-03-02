@@ -59,7 +59,7 @@ All constraints below are applied at inference time to the **same** pre-trained 
 <br>
 
 <p align="center">
-  <img src="images/flow_matching_mninst_samples_eci_center_hole.png" width="400" title="Center Hole Constraint">
+  <img src="images/flow_matching_mnist_samples_eci_center_hole.png" width="400" title="Center Hole Constraint">
 </p>
 
 #### Experiment B: Physics-Inspired Constraints (Total Ink)
@@ -68,8 +68,8 @@ All constraints below are applied at inference time to the **same** pre-trained 
 *Left: Low Ink (K = 60). Right: High Ink (K = 150).*
 
 <p align="center">
-  <img src="images/flow_matching_mninst_samples_eci_ink_amount_60.png" width="350" style="margin-right: 20px;">
-  <img src="images/flow_matching_mninst_samples_eci_ink_amount_150.png" width="350">
+  <img src="images/flow_matching_mnist_samples_eci_ink_amount_60.png" width="350" style="margin-right: 20px;">
+  <img src="images/flow_matching_mnist_samples_eci_ink_amount_150.png" width="350">
 </p>
 
 #### Experiment C: Subspace Projection (Classifier-Free Guidance)
@@ -77,10 +77,10 @@ All constraints below are applied at inference time to the **same** pre-trained 
 
 *Targeting Digit: 3*
 <p align="center">
-  <img src="images/flow_matching_mninst_samples_eci_specific_digit_3.png" width="400" title="PCA Constraint: 3">
+  <img src="images/flow_matching_mnist_samples_eci_specific_digit_3.png" width="400" title="PCA Constraint: 3">
 </p>
 
 *Targeting All Digits (0-9)*
 <p align="center">
-  <img src="images/flow_matching_mninst_samples_eci_specific_digit_all.png" width="600" title="PCA Constraint: All Digits">
+  <img src="images/flow_matching_mnist_samples_eci_specific_digit_all.png" width="600" title="PCA Constraint: All Digits">
 </p>

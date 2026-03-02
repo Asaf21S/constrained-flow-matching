@@ -78,6 +78,12 @@ Standard unconditional generation of MNIST digits using a U-Net based vector fie
 ### Hard-Constrained Generation
 The constraints below are applied at inference time to the same pre-trained unconditional model, comparing the ECI and HardFlow sampling trajectories.
 
+| ECI Implementation | HardFlow Implementation |
+| :--- | :--- |
+| <a href="https://colab.research.google.com/github/Asaf21S/constrained-flow-matching/blob/main/notebooks/flow_matching_mnist_ECI.ipynb" target="_blank"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a> | <a href="https://colab.research.google.com/github/Asaf21S/constrained-flow-matching/blob/main/notebooks/flow_matching_mnist_HardFlow.ipynb" target="_blank"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a> |
+
+<br>
+
 #### Experiment A: Inpainting
 **Constraint:** Force the center $6 \times 6$ pixels to be black.
 

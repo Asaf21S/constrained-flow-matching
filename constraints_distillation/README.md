@@ -44,31 +44,31 @@ To optimize the student, we engineered relative distance features and computed *
 The distilled dynamic student successfully guides the flow to respect varying, unseen boundaries at inference time with zero backpropagation, closely matching the Teacher's baseline accuracy across drastically different constraints.
 
 **Dynamic Boundaries: [-3, 3]**
-*(Accuracy: 99.61%)*
+*(Accuracy: 99.47%)*
 ![Student -3 to 3](images/2_peaks/1d_gmm_fm_hardflow_student_-3_3.png)
 
 **Dynamic Boundaries: [-2, 2]**
-*(Accuracy: 97.96%)*
+*(Accuracy: 97.09%)*
 ![Student -2 to 2](images/2_peaks/1d_gmm_fm_hardflow_student_-2_2.png)
 
 **Dynamic Boundaries: [-1, 1]**
-*(Accuracy: 95.06%)*
+*(Accuracy: 92.58%)*
 ![Student -1 to 1](images/2_peaks/1d_gmm_fm_hardflow_student_-1_1.png)
 
 **Dynamic Boundaries: [-2, 4]**
-*(Accuracy: 99.75%)*
+*(Accuracy: 99.78%)*
 ![Student -2 to 4](images/2_peaks/1d_gmm_fm_hardflow_student_-2_4.png)
 
 **Dynamic Boundaries: [-7, 2]**
-*(Accuracy: 98.81%)*
+*(Accuracy: 97.61%)*
 ![Student -7 to 2](images/2_peaks/1d_gmm_fm_hardflow_student_-7_2.png)
 
 **Dynamic Boundaries: [0, 3]**
-*(Accuracy: 99.57%)*
+*(Accuracy: 99.18%)*
 ![Student 0 to 3](images/2_peaks/1d_gmm_fm_hardflow_student_0_3.png)
 
 **Dynamic Boundaries: [-3, 0]**
-*(Accuracy: 95.04%)*
+*(Accuracy: 91.72%)*
 ![Student -3 to 0](images/2_peaks/1d_gmm_fm_hardflow_student_-3_0.png)
 
 ### Conclusion

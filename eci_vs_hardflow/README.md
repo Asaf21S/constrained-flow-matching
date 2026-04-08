@@ -1,8 +1,10 @@
-# Constrained Flow Matching
+# ECI vs. HardFlow: Constrained Sampling Algorithms
 
-A PyTorch implementation of **Flow Matching**, exploring standard unconditional generation and various zero-shot hard-constrained sampling methods.
+*[← Back to Main Repository](../README.md)*
 
-This repository focuses on adapting pre-trained Flow Matching models to satisfy geometric, structural, and physics-inspired constraints *without retraining*. We explore and compare two distinct inference-time sampling algorithms to enforce these constraints: **ECI** and **HardFlow**.
+A PyTorch implementation of **Flow Matching**, exploring standard unconditional generation and comparing zero-shot hard-constrained sampling methods.
+
+This module focuses on adapting pre-trained Flow Matching models to satisfy geometric, structural, and physics-inspired constraints *without retraining*. We explore and compare two distinct inference-time sampling algorithms to enforce these constraints: **ECI** and **HardFlow**.
 
 ---
 
@@ -26,7 +28,7 @@ This repository focuses on adapting pre-trained Flow Matching models to satisfy 
 ### Standard Generation (Unconstrained)
 A baseline implementation of Flow Matching on 2D checkerboard data.
 <br>
-<a href="https://colab.research.google.com/github/Asaf21S/constrained-flow-matching/blob/main/notebooks/eci_vs_hardflow/flow_matching_checkerboard.ipynb" target="_blank">
+<a href="https://colab.research.google.com/github/Asaf21S/constrained-flow-matching/blob/main/eci_vs_hardflow/flow_matching_checkerboard.ipynb" target="_blank">
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
 </a>
 <p align="center">
@@ -38,7 +40,7 @@ Forcing the generated points to land strictly inside the valid black checkerboar
 
 **ECI Method:**
 <br>
-<a href="https://colab.research.google.com/github/Asaf21S/constrained-flow-matching/blob/main/notebooks/eci_vs_hardflow/flow_matching_checkerboard_ECI.ipynb" target="_blank">
+<a href="https://colab.research.google.com/github/Asaf21S/constrained-flow-matching/blob/main/eci_vs_hardflow/flow_matching_checkerboard_ECI.ipynb" target="_blank">
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
 </a>
 <p align="center">
@@ -47,7 +49,7 @@ Forcing the generated points to land strictly inside the valid black checkerboar
 
 **HardFlow Method:**
 <br>
-<a href="https://colab.research.google.com/github/Asaf21S/constrained-flow-matching/blob/main/notebooks/eci_vs_hardflow/flow_matching_checkerboard_HardFlow.ipynb" target="_blank">
+<a href="https://colab.research.google.com/github/Asaf21S/constrained-flow-matching/blob/main/eci_vs_hardflow/flow_matching_checkerboard_HardFlow.ipynb" target="_blank">
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
 </a>
 <p align="center">
@@ -66,7 +68,7 @@ Another interesting thing to see is where the flow takes the points most of the 
 ### Standard Generation (Unconstrained)
 Standard unconditional generation of MNIST digits using a U-Net based vector field.
 <br>
-<a href="https://colab.research.google.com/github/Asaf21S/constrained-flow-matching/blob/main/notebooks/eci_vs_hardflow/flow_matching_mnist.ipynb" target="_blank">
+<a href="https://colab.research.google.com/github/Asaf21S/constrained-flow-matching/blob/main/eci_vs_hardflow/flow_matching_mnist.ipynb" target="_blank">
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
 </a>
 <p align="center">
@@ -80,7 +82,7 @@ The constraints below are applied at inference time to the same pre-trained unco
 
 | ECI Implementation | HardFlow Implementation |
 | :--- | :--- |
-| <a href="https://colab.research.google.com/github/Asaf21S/constrained-flow-matching/blob/main/notebooks/eci_vs_hardflow/flow_matching_mnist_ECI.ipynb" target="_blank"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a> | <a href="https://colab.research.google.com/github/Asaf21S/constrained-flow-matching/blob/main/notebooks/eci_vs_hardflow/flow_matching_mnist_HardFlow.ipynb" target="_blank"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a> |
+| <a href="https://colab.research.google.com/github/Asaf21S/constrained-flow-matching/blob/main/eci_vs_hardflow/flow_matching_mnist_ECI.ipynb" target="_blank"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a> | <a href="https://colab.research.google.com/github/Asaf21S/constrained-flow-matching/blob/main/eci_vs_hardflow/flow_matching_mnist_HardFlow.ipynb" target="_blank"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a> |
 
 <br>
 

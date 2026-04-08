@@ -1,1 +1,6 @@
-mnist_unet.pth
+# Ignore all PyTorch model weights
+*.pth
+*.pt
+
+# Ignore PyCharm configuration files
+.idea/

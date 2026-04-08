@@ -30,7 +30,7 @@ A baseline implementation of Flow Matching on 2D checkerboard data.
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
 </a>
 <p align="center">
-  <img src="images/eci_vs_hardflow/flow_matching_checkerboard_samples.png" width="500" title="Unconstrained Checkerboard">
+  <img src="images/flow_matching_checkerboard_samples.png" width="500" title="Unconstrained Checkerboard">
 </p>
 
 ### Constrained Sampling: Valid Black Squares
@@ -42,7 +42,7 @@ Forcing the generated points to land strictly inside the valid black checkerboar
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
 </a>
 <p align="center">
-  <img src="images/eci_vs_hardflow/flow_matching_checkerboard_samples_eci.png" width="500" title="ECI Constrained Checkerboard">
+  <img src="images/flow_matching_checkerboard_samples_eci.png" width="500" title="ECI Constrained Checkerboard">
 </p>
 
 **HardFlow Method:**
@@ -51,11 +51,11 @@ Forcing the generated points to land strictly inside the valid black checkerboar
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
 </a>
 <p align="center">
-  <img src="images/eci_vs_hardflow/flow_matching_checkerboard_samples_hardflow.png" width="500" title="HardFlow Constrained Checkerboard">
+  <img src="images/flow_matching_checkerboard_samples_hardflow.png" width="500" title="HardFlow Constrained Checkerboard">
 </p>  
 Another interesting thing to see is where the flow takes the points most of the time. We can see it by generating a lot of points (100,000) and setting them to be almost transparent. This flow structure is the result of the Flow Matching model training.
 <p align="center">
-  <img src="images/eci_vs_hardflow/flow_matching_checkerboard_samples_hardflow_b.png" width="500" title="Flow Structure">
+  <img src="images/flow_matching_checkerboard_samples_hardflow_b.png" width="500" title="Flow Structure">
 </p>  
 
 ---
@@ -70,7 +70,7 @@ Standard unconditional generation of MNIST digits using a U-Net based vector fie
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
 </a>
 <p align="center">
-  <img src="images/eci_vs_hardflow/flow_matching_mnist_samples.png" width="600" title="Standard MNIST Generation">
+  <img src="images/flow_matching_mnist_samples.png" width="600" title="Standard MNIST Generation">
 </p>
 
 ---
@@ -94,8 +94,8 @@ The constraints below are applied at inference time to the same pre-trained unco
       <td align="center"><b>HardFlow</b></td>
     </tr>
     <tr>
-      <td><img src="images/eci_vs_hardflow/flow_matching_mnist_samples_eci_center_hole.png" width="500"></td>
-      <td><img src="images/eci_vs_hardflow/flow_matching_mnist_samples_hardflow_center_hole.png" width="500"></td>
+      <td><img src="images/flow_matching_mnist_samples_eci_center_hole.png" width="500"></td>
+      <td><img src="images/flow_matching_mnist_samples_hardflow_center_hole.png" width="500"></td>
     </tr>
   </table>
 </div>
@@ -111,12 +111,12 @@ The constraints below are applied at inference time to the same pre-trained unco
       <td align="center"><b>HardFlow</b></td>
     </tr>
     <tr>
-      <td align="center"><img src="images/eci_vs_hardflow/flow_matching_mnist_samples_eci_ink_amount_60.png" width="500"></td>
-      <td align="center"><img src="images/eci_vs_hardflow/flow_matching_mnist_samples_hardflow_ink_amount_60.png" width="500"></td>
+      <td align="center"><img src="images/flow_matching_mnist_samples_eci_ink_amount_60.png" width="500"></td>
+      <td align="center"><img src="images/flow_matching_mnist_samples_hardflow_ink_amount_60.png" width="500"></td>
     </tr>
     <tr>
-      <td align="center"><img src="images/eci_vs_hardflow/flow_matching_mnist_samples_eci_ink_amount_150.png" width="500"></td>
-      <td align="center"><img src="images/eci_vs_hardflow/flow_matching_mnist_samples_hardflow_ink_amount_150.png" width="500"></td>
+      <td align="center"><img src="images/flow_matching_mnist_samples_eci_ink_amount_150.png" width="500"></td>
+      <td align="center"><img src="images/flow_matching_mnist_samples_hardflow_ink_amount_150.png" width="500"></td>
     </tr>
   </table>
 </div>
@@ -131,8 +131,8 @@ The constraints below are applied at inference time to the same pre-trained unco
       <td align="center"><b>HardFlow</b></td>
     </tr>
     <tr>
-      <td><img src="images/eci_vs_hardflow/flow_matching_mnist_samples_eci_specific_digit_3.png" width="500"></td>
-      <td><img src="images/eci_vs_hardflow/flow_matching_mnist_samples_hardflow_specific_digit_3.png" width="500"></td>
+      <td><img src="images/flow_matching_mnist_samples_eci_specific_digit_3.png" width="500"></td>
+      <td><img src="images/flow_matching_mnist_samples_hardflow_specific_digit_3.png" width="500"></td>
     </tr>
   </table>
 </div>
@@ -140,9 +140,9 @@ The constraints below are applied at inference time to the same pre-trained unco
 *Targeting All Digits (0-9) using PCA Constraint:*
 <p align="center">
   <b>ECI:</b><br>
-  <img src="images/eci_vs_hardflow/flow_matching_mnist_samples_eci_specific_digit_all.png" width="600"><br>
+  <img src="images/flow_matching_mnist_samples_eci_specific_digit_all.png" width="600"><br>
   <b>HardFlow:</b><br>
-  <img src="images/eci_vs_hardflow/flow_matching_mnist_samples_hardflow_specific_digit_all.png" width="600">
+  <img src="images/flow_matching_mnist_samples_hardflow_specific_digit_all.png" width="600">
 </p>
 
 #### Experiment D: Structural Symmetry
@@ -155,8 +155,8 @@ The constraints below are applied at inference time to the same pre-trained unco
       <td align="center"><b>HardFlow</b></td>
     </tr>
     <tr>
-      <td><img src="images/eci_vs_hardflow/flow_matching_mnist_samples_eci_symmetry.png" width="500"></td>
-      <td><img src="images/eci_vs_hardflow/flow_matching_mnist_samples_hardflow_symmetry.png" width="500"></td>
+      <td><img src="images/flow_matching_mnist_samples_eci_symmetry.png" width="500"></td>
+      <td><img src="images/flow_matching_mnist_samples_hardflow_symmetry.png" width="500"></td>
     </tr>
   </table>
 </div>

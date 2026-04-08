@@ -1,5 +1,7 @@
 # Distilling Dynamic HardFlow for 1D Flow Matching
 
+*[← Back to Main Repository](../README.md)*
+
 This module explores applying **HardFlow constraints** to a Flow Matching model through distillation of the expensive gradient-guided sampling process into a blazing-fast, **dynamic Student MLP**.
 
 ## 1. The Target Dataset

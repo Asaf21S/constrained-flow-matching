@@ -4,6 +4,10 @@
 
 This module explores applying **HardFlow constraints** to a Flow Matching model through distillation of the expensive gradient-guided sampling process into a blazing-fast, **dynamic Student MLP**.
 
+<a href="https://colab.research.google.com/github/Asaf21S/constrained-flow-matching/blob/main/constraints_distillation/constrained_gaussian_distillation.ipynb" target="_blank">
+  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
+</a>
+
 ## 1. The Target Dataset
 The ground truth data is a 1D Gaussian Mixture Model (GMM) consisting of two distinct peaks:
 * Peak 1: Mean 2, Std 1

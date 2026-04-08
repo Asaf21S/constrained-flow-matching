@@ -17,7 +17,8 @@ This module compares two distinct inference-time sampling algorithms designed to
 * **ECI (Extrapolation, Correction, Interpolation):** A fast, gradient-free geometric projection method.
 * **HardFlow (Trajectory Optimization):** A differentiable method that uses gradient guidance to gently steer the vector field around constraints.
 
-**Experiments Include:** * 2D Checkerboard bounded generation.
+**Experiments Include:**
+* 2D Checkerboard bounded generation.
 * High-dimensional MNIST constraints (Inpainting, Total Ink control, PCA Subspace projection, and Structural Symmetry).
 
 ### 2. [Dynamic HardFlow Distillation](./constraints_distillation)

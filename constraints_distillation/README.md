@@ -4,7 +4,7 @@
 
 This module explores applying **HardFlow constraints** to a Flow Matching model through distillation of the expensive gradient-guided sampling process into a blazing-fast, **dynamic Student MLP**.
 
-<a href="https://colab.research.google.com/github/Asaf21S/constrained-flow-matching/blob/main/constraints_distillation/constrained_gaussian_distillation.ipynb" target="_blank">
+<a href="https://colab.research.google.com/github/Asaf21S/constrained-flow-matching/blob/main/constraints_distillation/notebooks/constrained_gaussian_distillation.ipynb" target="_blank">
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
 </a>
 

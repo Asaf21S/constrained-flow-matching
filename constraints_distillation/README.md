@@ -18,7 +18,7 @@ The ground truth data is a 1D Gaussian Mixture Model (GMM) consisting of two dis
 ## 2. The Unconstrained Base Model
 The foundational baseline is an unconditional Flow Matching MLP trained to map standard Gaussian noise to the unconstrained 1D GMM target distribution. 
 
-![Unconstrained FM Generation](images/2_peaks/1d_gmm_fm.png)
+![Unconstrained FM Generation](images/2_peaks/distillation_attempt/1d_gmm_fm.png)
 
 ---
 
@@ -36,23 +36,23 @@ Using a squared Softplus provides a smooth, continuous gradient as points approa
 
 **Example: Static Boundaries at [-3, 3]**
 *(Achieved 99.44% boundary accuracy)*
-![HardFlow Base Model](images/2_peaks/1d_gmm_fm_hardflow.png)
+![HardFlow Base Model](images/2_peaks/distillation_attempt/1d_gmm_fm_hardflow.png)
 
 #### Dynamic Distillation
 Calculating `requires_grad` inside an ODE solver is computationally expensive. We trained a **Student MLP** to predict the necessary gradient correction in a single forward pass. By generating a teacher dataset with randomized boundaries for every sample, we forced the student to learn arbitrary, dynamic constraints.
 
 * **Dynamic Boundaries: [-3, 3]** *(Accuracy: 99.45%)*
-  ![Student -3 to 3](images/2_peaks/1d_gmm_fm_hardflow_student_-3_3.png)
+  ![Student -3 to 3](images/2_peaks/distillation_attempt/1d_gmm_fm_hardflow_student_-3_3.png)
 * **Dynamic Boundaries: [-2, 2]** *(Accuracy: 96.84%)*
-  ![Student -2 to 2](images/2_peaks/1d_gmm_fm_hardflow_student_-2_2.png)
+  ![Student -2 to 2](images/2_peaks/distillation_attempt/1d_gmm_fm_hardflow_student_-2_2.png)
 
 ### Part B: The Symmetry Constraint
 For our second constraint, we force the final distribution to be mathematically symmetric around an arbitrary center point, $c$. The loss is calculated over the entire batch by sorting the points and minimizing the squared error of paired endpoints, introducing **Interacting Particle System** dynamics.
 
 * **Dynamic Symmetry: Center = 0.0** *(MSE: 0.05550)*
-  ![Symmetry Student 0](images/2_peaks/1d_gmm_fm_symmetry_hardflow_student_0.png)
+  ![Symmetry Student 0](images/2_peaks/distillation_attempt/1d_gmm_fm_symmetry_hardflow_student_0.png)
 * **Dynamic Symmetry: Center = 1.5** *(MSE: 0.00505)*
-  ![Symmetry Student 1.5](images/2_peaks/1d_gmm_fm_symmetry_hardflow_student_1.5.png)
+  ![Symmetry Student 1.5](images/2_peaks/distillation_attempt/1d_gmm_fm_symmetry_hardflow_student_1.5.png)
 
 ---
 

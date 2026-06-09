@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import matplotlib.cm as cm
 from tqdm.auto import tqdm
+import seaborn as sns
 
 from constrained_fm.src.utils.polynomials import compute_poly_features, evaluate_poly
 from constrained_fm.src.evaluation import compute_success_rate_bbox, compute_success_rate_polynomial
@@ -371,5 +372,23 @@ def visualize_sampled_polynomials(degree=POLYNOMIAL_DEGREE, num_samples=4, num_p
         if i == 0:
             ax.legend(loc='upper right', fontsize=8)
 
+    plt.tight_layout()
+    plt.show()
+
+
+def visualize_ecdf_plot(success_rate_list: list, success_threshold: float = 90):
+    median_success_rate = np.median(success_rate_list)
+    sns.set_theme(style="whitegrid")
+    plt.figure(figsize=(8, 5))
+
+    sns.ecdfplot(data=success_rate_list, linewidth=3, color="darkorange")
+
+    plt.axvline(success_threshold, color='red', linestyle='--', alpha=0.5, label=f'{success_threshold}% Success Threshold')
+
+    plt.title(f"Empirical CDF of Polynomial Constraints\nMedian Success Rate: {median_success_rate}", fontsize=14)
+    plt.xlabel("Success Rate (%)", fontsize=12)
+    plt.ylabel("Proportion of Constraints", fontsize=12)
+    plt.legend()
+    plt.xlim(0, 100)
     plt.tight_layout()
     plt.show()

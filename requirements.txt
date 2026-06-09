@@ -3,3 +3,4 @@ flow_matching
 matplotlib
 numpy
 tqdm
+seaborn

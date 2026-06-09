@@ -218,7 +218,7 @@ def run_evaluation_inference(model, x0, bounds=None, coeffs=None, step_size=0.05
     return final_samples_reshaped
 
 
-def filter_true_samples(x_true: torch.Tensor, bounds=None, coeffs=None):
+def filter_true_samples(x_true: torch.Tensor, bounds=None, coeffs=None, x_pow=None, y_pow=None):
     """Filters the ground truth samples to only include those satisfying the constraint."""
     if bounds is not None:
         x_min, y_min, x_max, y_max = bounds
@@ -227,7 +227,8 @@ def filter_true_samples(x_true: torch.Tensor, bounds=None, coeffs=None):
         return x_true[mask]
 
     elif coeffs is not None:
-        x_pow, y_pow = compute_poly_features(x_true)
+        if x_pow is None or y_pow is None:
+            x_pow, y_pow = compute_poly_features(x_true)
         batch_C = coeffs.unsqueeze(0).expand(x_true.shape[0], -1, -1)
         p_vals = evaluate_poly(x_pow, y_pow, batch_C).squeeze()
         mask = p_vals <= 0
@@ -296,15 +297,35 @@ def compute_jsd(samples_gen: torch.Tensor, samples_true: torch.Tensor, grid_size
     return float(js_distance ** 2)
 
 
-def evaluate_distributional_metrics(samples_gen, x_true_pool, bounds=None, coeffs=None):
+def evaluate_distributional_metrics_batched(samples_gen_batched, x_true_pool, bounds=None, coeffs=None):
     """
-    Evaluates SWD, MMD, and JSD of generated samples against the ground truth.
-    Automatically filters the ground truth pool to match the given constraint.
+    Evaluates SWD, MMD, and JSD for batched constraints.
+
+    Parameters:
+    samples_gen_batched: Tensor of shape (C, N, 2)
+    x_true_pool: Tensor of shape (M, 2) containing all unconstrained ground truth points
+    bounds: List of bounds [[x1,y1,x2,y2], ...] of length C
+    coeffs: Tensor of shape (C, D+1, D+1)
     """
-    x_true_filtered = filter_true_samples(x_true_pool, bounds=bounds, coeffs=coeffs)
-    metrics = {
-        "swd": compute_swd(samples_gen, x_true_filtered),
-        "mmd": compute_mmd(samples_gen, x_true_filtered),
-        "jsd": compute_jsd(samples_gen, x_true_filtered)
+    C_dim = samples_gen_batched.shape[0]
+
+    results = {
+        "swd": [],
+        "mmd": [],
+        "jsd": []
     }
-    return metrics
+
+    if coeffs:
+        x_pow_true, y_pow_true = compute_poly_features(x_true_pool)
+    else:
+        x_pow_true, y_pow_true = None, None
+
+    for i in range(C_dim):
+        samples_gen_single = samples_gen_batched[i]
+        x_true_filtered = filter_true_samples(x_true_pool, bounds=bounds[i], coeffs=coeffs[i], x_pow=x_pow_true, y_pow=y_pow_true)
+
+        results["swd"].append(compute_swd(samples_gen_single, x_true_filtered))
+        results["mmd"].append(compute_mmd(samples_gen_single, x_true_filtered))
+        results["jsd"].append(compute_jsd(samples_gen_single, x_true_filtered))
+
+    return results

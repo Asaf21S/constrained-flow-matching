@@ -9,6 +9,7 @@ import matplotlib.cm as cm
 from tqdm.auto import tqdm
 
 from constrained_fm.src.utils.polynomials import compute_poly_features, evaluate_poly
+from constrained_fm.src.evaluation import compute_success_rate_bbox, compute_success_rate_polynomial
 from constrained_fm.src.consts import GMM_MEANS, GMM_COVS, GMM_WEIGHTS, POLYNOMIAL_DEGREE, PLANE_SCALE
 from constrained_fm.src.data_handlers.gmm_2d import get_points, compute_gmm_density
 
@@ -182,21 +183,11 @@ def generate_and_visualize_samples(model, num_samples=50000, step_size=0.05,
     final_samples = samples_np[-1]
 
     if bounds is not None:
-        x_min, y_min, x_max, y_max = bounds
-
-        inside_mask = (final_samples[:, 0] >= x_min) & (final_samples[:, 0] <= x_max) & \
-                      (final_samples[:, 1] >= y_min) & (final_samples[:, 1] <= y_max)
-
-        success_rate = inside_mask.mean() * 100
+        success_rate = compute_success_rate_bbox(final_samples, bounds)
         final_title = f"Samples\nSuccess Rate: {success_rate:.3f}%"
 
     elif coeffs is not None:
-        final_samples_t = torch.tensor(final_samples, dtype=torch.float32, device=device)
-        x_pow, y_pow = compute_poly_features(final_samples_t, degree=degree, scale=scale)
-        batch_C = coeffs.unsqueeze(0).expand(final_samples_t.shape[0], -1, -1)
-        p_vals = evaluate_poly(x_pow, y_pow, batch_C).squeeze().cpu().numpy()
-
-        success_rate = (p_vals <= 0).mean() * 100
+        success_rate = compute_success_rate_polynomial(final_samples, coeffs, degree, scale, device)
         final_title = f"Samples\nSuccess Rate: {success_rate:.3f}%"
 
     # Visualization 2: The final target distribution

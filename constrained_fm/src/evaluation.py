@@ -89,7 +89,7 @@ def compute_success_rate_polynomial(
     return (p_vals <= 0).mean() * 100.0
 
 
-def run_evaluation_inference(model, x0, bounds=None, coeffs=None, step_size=0.01, batch_size=10000):
+def run_evaluation_inference(model, x0, bounds=None, coeffs=None, step_size=0.05, batch_size=50000):
     model.eval()
     device = next(model.parameters()).device
 
@@ -130,7 +130,10 @@ def run_evaluation_inference(model, x0, bounds=None, coeffs=None, step_size=0.01
 
     final_samples_list = []
 
-    with torch.no_grad():
+    print(f"Model device: {next(model.parameters()).device}")
+    print(f"Data chunk device: {x0_expanded.device}")
+
+    with torch.inference_mode():
         for i in tqdm(range(0, total_evaluations, batch_size), desc="Evaluating Batches"):
             x0_chunk = x0_expanded[i:i + batch_size]
 

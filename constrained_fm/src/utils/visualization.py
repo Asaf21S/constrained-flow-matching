@@ -74,7 +74,7 @@ def visualize_single_step(data_slice, title, ax=None, cmap='Blues',
 
 def visualize_true_gmm_likelihood(means=GMM_MEANS, covs=GMM_COVS, weights=GMM_WEIGHTS, grid_size=200, device=None):
     density = compute_gmm_density(means=means, covs=covs, weights=weights, grid_size=grid_size, device=device)
-    # Reshape the flat density vector into a 2‑D grid for imshow
+
     density_grid = density.reshape(grid_size, grid_size)
     true_vmax = torch.max(density_grid).item()
 
@@ -258,7 +258,7 @@ def compute_and_visualize_likelihood(model, bounds=None, coeffs=None, degree=POL
     full_bounds_tensor = None
     full_coeffs_tensor = None
 
-    auto_vmax = calculate_vmax(bounds=bounds, coeffs=coeffs, degree=degree, scale=scale)
+    auto_vmax = calculate_vmax(bounds=bounds, coeffs=coeffs, degree=degree, scale=scale, device=device)
 
     if bounds is not None:
         absolute_bounds = torch.tensor([bounds], dtype=torch.float32, device=device)

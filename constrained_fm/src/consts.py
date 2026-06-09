@@ -1,3 +1,6 @@
+import os
+
+
 GMM_MEANS = [
     [-1.5, -1.5],
     [1.5, 2.0],
@@ -16,3 +19,5 @@ GMM_WEIGHTS = [0.35, 0.25, 0.15, 0.25]
 
 POLYNOMIAL_DEGREE = 3
 PLANE_SCALE = 4.0
+
+VALIDATION_SET_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "validation_set.pt"))

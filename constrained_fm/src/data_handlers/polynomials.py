@@ -1,28 +1,38 @@
 import torch
 
-from constrained_fm.src.consts import POLYNOMIAL_DEGREE
+from constrained_fm.src.consts import POLYNOMIAL_DEGREE, PLANE_SCALE
+from constrained_fm.src.data_handlers.gmm_2d import get_points
+from constrained_fm.src.utils.polynomials import compute_poly_features
 
 
-def sample_valid_polynomials(batch_size, proxy_x_pow, proxy_y_pow, degree=POLYNOMIAL_DEGREE, min_area=0.05, max_area=0.95):
+def sample_valid_polynomials(batch_size, degree=POLYNOMIAL_DEGREE, scale=PLANE_SCALE, proxy_x_pow=None, proxy_y_pow=None,
+                             min_area=0.05, max_area=0.95, device=None):
     """
     Sample polynomial coefficients that yield a valid region (area ratio between min_area and max_area).
     Args:
         batch_size: int
         degree: int
-        proxy_x_pow: torch tensor [N, degree+1] (proxy points x powers)
-        proxy_y_pow: torch tensor [N, degree+1] (proxy points y powers)
+        scale: float, scaling factor for the proxy grid
+        proxy_x_pow: precomputed x polynomial features of shape [N, degree+1]
+        proxy_y_pow: precomputed y polynomial features of shape [N, degree+1]
         min_area: float, minimum fraction of points that should satisfy P(x) <= 0
         max_area: float, maximum fraction of points that should satisfy P(x) <= 0
+        device: torch device
     Returns:
         C: torch tensor [batch_size, degree+1, degree+1] (normalized coefficients)
     """
-    valid_C = torch.empty((batch_size, degree + 1, degree + 1), device=proxy_x_pow.device)
+    if proxy_x_pow is None or proxy_y_pow is None:
+        proxy_x, _ = get_points(batch_size=10000, device=device)
+        proxy_x = proxy_x.to(device)
+        proxy_x_pow, proxy_y_pow = compute_poly_features(proxy_x, degree=degree, scale=scale)
+
+    valid_C = torch.empty((batch_size, degree + 1, degree + 1), device=device)
     needed = batch_size
     valid_idx = 0
 
     while needed > 0:
         # Over-sample slightly to minimize loop iterations
-        C_cand = torch.randn(needed * 2, degree + 1, degree + 1, device=proxy_x_pow.device)
+        C_cand = torch.randn(needed * 2, degree + 1, degree + 1, device=device)
 
         # B = batch, N = proxy points, I/J = polynomial degrees
         P_vals = torch.einsum('ni, bij, nj -> bn', proxy_x_pow, C_cand, proxy_y_pow)

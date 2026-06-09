@@ -19,10 +19,7 @@ def generate_validation_set(num_bboxes=100, num_polys=100, degree=POLYNOMIAL_DEG
             val_set['bboxes'].append([xs[0].item(), ys[0].item(), xs[1].item(), ys[1].item()])
 
     print(f"Generating {num_polys} Valid Polynomials via Proxy-Grid...")
-    proxy_x, _ = get_points(batch_size=10000, device=device)
-    proxy_x = proxy_x.to(device)
-    proxy_x_pow, proxy_y_pow = compute_poly_features(proxy_x, degree=degree, scale=scale)
-    C_batch = sample_valid_polynomials(num_polys, proxy_x_pow, proxy_y_pow, degree=degree, min_area=0.1, max_area=0.9)
+    C_batch = sample_valid_polynomials(num_polys, degree=degree, scale=scale, min_area=0.1, max_area=0.9, device=device)
     val_set['polynomials'] = [C_batch[i] for i in range(num_polys)]
 
     return val_set

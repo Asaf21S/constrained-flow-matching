@@ -80,14 +80,27 @@ def visualize_true_gmm_likelihood(means=GMM_MEANS, covs=GMM_COVS, weights=GMM_WE
 
     norm = cm.colors.Normalize(vmax=true_vmax, vmin=0.0)
 
-    ax.imshow(density, extent=(-4.5, 4.5, -4.5, 4.5), origin='lower', cmap='viridis', norm=norm)
+    ax.imshow(density.cpu().numpy(), extent=(-4.5, 4.5, -4.5, 4.5), origin='lower', cmap='viridis', norm=norm)
 
     ax.set_title(f'Ground Truth GMM Likelihood\nPeak Density: {true_vmax:.3f}')
     fig.colorbar(cm.ScalarMappable(norm=norm, cmap='viridis'), ax=ax, orientation='vertical', label='True Density')
     ax.set_aspect('equal')
     plt.show()
 
-    return true_vmax
+
+def plot_loss_curve(losses):
+    plt.figure(figsize=(8, 5))
+    plt.plot(losses, color='indigo')
+
+    plt.title("2D Flow Matching Training Loss")
+    plt.xlabel("Epoch")
+    plt.ylabel("MSE Loss")
+    plt.grid(True, alpha=0.3)
+
+    plt.gca().set_facecolor('#f8f9fa')
+
+    plt.tight_layout()
+    plt.show()
 
 
 def assign_gaussian_to_points(points, means=GMM_MEANS, covs=GMM_COVS, weights=GMM_WEIGHTS, device=None):

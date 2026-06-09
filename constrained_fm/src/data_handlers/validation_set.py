@@ -33,9 +33,9 @@ def generate_validation_set(
         ys = torch.sort(torch.rand(2) * 8.0 - 4.0)[0]
 
         if (1.0 <= xs[1] - xs[0] <= 6.5) and (1.0 <= ys[1] - ys[0] <= 6.5):
-            val_set["bboxes"].append(
+            val_set["bboxes"].append(torch.tensor(
                 [xs[0].item(), ys[0].item(), xs[1].item(), ys[1].item()]
-            )
+            ))
 
     # ------------------------------------------------------------
     # 2. Polynomial constraints via proxy‑grid
@@ -44,7 +44,7 @@ def generate_validation_set(
     C_batch = sample_valid_polynomials(
         num_polys, degree=degree, scale=scale, min_area=0.1, max_area=0.9, device=device
     )
-    val_set["polynomials"] = [C_batch[i] for i in range(num_polys)]
+    val_set["polynomials"] = C_batch
 
     # ------------------------------------------------------------
     # 3. Large sample batches for evaluation (stored as tensors)

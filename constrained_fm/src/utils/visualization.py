@@ -1,7 +1,6 @@
 import torch
 import numpy as np
-from torch.distributions import Independent, Normal, MultivariateNormal, Categorical, MixtureSameFamily
-from flow_matching.utils import ModelWrapper
+from torch.distributions import Independent, Normal, MultivariateNormal
 from flow_matching.solver import ODESolver
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
@@ -12,6 +11,7 @@ from constrained_fm.src.utils.polynomials import compute_poly_features, evaluate
 from constrained_fm.src.evaluation import compute_success_rate_bbox, compute_success_rate_polynomial
 from constrained_fm.src.consts import GMM_MEANS, GMM_COVS, GMM_WEIGHTS, POLYNOMIAL_DEGREE, PLANE_SCALE
 from constrained_fm.src.data_handlers.gmm_2d import get_points, compute_gmm_density
+from constrained_fm.src.models.wrapper import WrappedModel
 
 
 def visualize_single_step(data_slice, title, ax=None, cmap='Blues',
@@ -128,11 +128,6 @@ def assign_gaussian_to_points(points, means=GMM_MEANS, covs=GMM_COVS, weights=GM
     labels = torch.argmax(log_probs, dim=1).cpu().numpy()
 
     return labels
-
-
-class WrappedModel(ModelWrapper):
-    def forward(self, x: torch.Tensor, t: torch.Tensor, **extras):
-        return self.model(x, t, **extras)
 
 
 def generate_and_visualize_samples(model, num_samples=50000, step_size=0.05,

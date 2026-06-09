@@ -7,7 +7,10 @@ They are used by :func:`generate_and_visualize_samples` in
 """
 
 import torch
+from flow_matching.solver import ODESolver
+
 from constrained_fm.src.utils.polynomials import compute_poly_features, evaluate_poly
+from constrained_fm.src.models.wrapper import WrappedModel
 
 
 def compute_success_rate_bbox(samples: torch.Tensor | list, bounds: list) -> float:
@@ -82,3 +85,28 @@ def compute_success_rate_polynomial(
     batch_C = coeffs.unsqueeze(0).expand(samples_t.shape[0], -1, -1)
     p_vals = evaluate_poly(x_pow, y_pow, batch_C).squeeze().cpu().numpy()
     return (p_vals <= 0).mean() * 100.0
+
+
+def run_evaluation_inference(model, x0, bounds=None, coeffs=None, step_size=0.01):
+    num_samples = x0.shape[0]
+    model.eval()
+
+    # Safely grab device from model to prevent crashes
+    device = next(model.parameters()).device
+
+    wrapped_vf = WrappedModel(model)
+    solver = ODESolver(velocity_model=wrapped_vf)
+
+    kwargs = {}
+    if bounds is not None:
+        bounds_tensor = torch.tensor([bounds], dtype=torch.float32, device=device)
+        kwargs['bounds'] = bounds_tensor.expand(num_samples, 4)
+    elif coeffs is not None:
+        coeffs_flat = coeffs.view(1, -1)
+        kwargs['coeffs'] = coeffs_flat.expand(num_samples, -1)
+
+    with torch.no_grad():
+        samples = solver.sample(x_init=x0, method='midpoint', step_size=step_size, return_intermediates=True, **kwargs)
+
+    samples_np = samples.cpu().numpy()
+    return samples_np[-1]

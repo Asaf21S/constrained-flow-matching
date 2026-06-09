@@ -47,17 +47,16 @@ def generate_validation_set(
     val_set["polynomials"] = [C_batch[i] for i in range(num_polys)]
 
     # ------------------------------------------------------------
-    # 3. Large sample batches for evaluation (saved as numpy for consistency)
+    # 3. Large sample batches for evaluation (stored as tensors)
     # ------------------------------------------------------------
     print(f"Generating {n_train_samples} training samples (x0, x1)...")
     # x0 – standard normal samples.
     x0_tensor = torch.randn(n_train_samples, 2, device=device)
     # x1 – samples from the GMM.
     x1_tensor, _ = get_points(batch_size=n_train_samples, device=device)
-    # Convert to CPU NumPy arrays (or Python lists) to match the simple data types
-    # used for bboxes and polynomials.
-    val_set["x0"] = x0_tensor.cpu().numpy()
-    val_set["x1"] = x1_tensor.cpu().numpy()
+    # Store tensors directly (retain device information). Users can move to CPU as needed.
+    val_set["x0"] = x0_tensor
+    val_set["x1"] = x1_tensor
 
     return val_set
 

@@ -74,13 +74,15 @@ def visualize_single_step(data_slice, title, ax=None, cmap='Blues',
 
 def visualize_true_gmm_likelihood(means=GMM_MEANS, covs=GMM_COVS, weights=GMM_WEIGHTS, grid_size=200, device=None):
     density = compute_gmm_density(means=means, covs=covs, weights=weights, grid_size=grid_size, device=device)
-    true_vmax = torch.max(density).item()
+    # Reshape the flat density vector into a 2‑D grid for imshow
+    density_grid = density.reshape(grid_size, grid_size)
+    true_vmax = torch.max(density_grid).item()
 
     fig, ax = plt.subplots(figsize=(6, 6))
 
     norm = cm.colors.Normalize(vmax=true_vmax, vmin=0.0)
 
-    ax.imshow(density.cpu().numpy(), extent=(-4.5, 4.5, -4.5, 4.5), origin='lower', cmap='viridis', norm=norm)
+    ax.imshow(density_grid.cpu().numpy(), extent=(-4.5, 4.5, -4.5, 4.5), origin='lower', cmap='viridis', norm=norm)
 
     ax.set_title(f'Ground Truth GMM Likelihood\nPeak Density: {true_vmax:.3f}')
     fig.colorbar(cm.ScalarMappable(norm=norm, cmap='viridis'), ax=ax, orientation='vertical', label='True Density')

@@ -20,4 +20,4 @@ GMM_WEIGHTS = [0.35, 0.25, 0.15, 0.25]
 POLYNOMIAL_DEGREE = 3
 PLANE_SCALE = 4.0
 
-VALIDATION_SET_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "validation_set.pt"))
+VALIDATION_SET_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "benchmark", "validation_set.pt"))

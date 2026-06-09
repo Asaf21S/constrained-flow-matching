@@ -7,3 +7,5 @@
 
 *.npy
 *.env
+
+!constrained_fm/benchmark/validation_set.pt

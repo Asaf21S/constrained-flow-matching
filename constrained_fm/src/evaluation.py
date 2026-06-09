@@ -320,7 +320,7 @@ def evaluate_distributional_metrics_batched(samples_gen_batched, x_true_pool, bo
     else:
         x_pow_true, y_pow_true = None, None
 
-    for i in range(C_dim):
+    for i in tqdm(range(C_dim), desc="Distributional Metrics Evaluation"):
         samples_gen_single = samples_gen_batched[i]
         current_bounds = bounds[i] if bounds is not None else None
         current_coeffs = coeffs[i] if coeffs is not None else None

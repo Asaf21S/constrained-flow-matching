@@ -385,7 +385,7 @@ def visualize_ecdf_plot(success_rate_list: list, success_threshold: float = 90):
 
     plt.axvline(success_threshold, color='red', linestyle='--', alpha=0.5, label=f'{success_threshold}% Success Threshold')
 
-    plt.title(f"Empirical CDF of Polynomial Constraints\nMedian Success Rate: {median_success_rate}", fontsize=14)
+    plt.title(f"Empirical CDF of Polynomial Constraints\nMedian Success Rate: {median_success_rate:.2f}", fontsize=14)
     plt.xlabel("Success Rate (%)", fontsize=12)
     plt.ylabel("Proportion of Constraints", fontsize=12)
     plt.legend()

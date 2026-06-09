@@ -1,10 +1,8 @@
 import torch
 import os
 
-from constrained_fm.src.consts import POLYNOMIAL_DEGREE, PLANE_SCALE
-from constrained_fm.src.data_handlers.gmm_2d import get_points
+from constrained_fm.src.consts import POLYNOMIAL_DEGREE, PLANE_SCALE, VALIDATION_SET_PATH
 from constrained_fm.src.data_handlers.polynomials import sample_valid_polynomials
-from constrained_fm.src.utils.polynomials import compute_poly_features
 
 
 def generate_validation_set(num_bboxes=100, num_polys=100, degree=POLYNOMIAL_DEGREE, scale=PLANE_SCALE, device=None):
@@ -25,7 +23,7 @@ def generate_validation_set(num_bboxes=100, num_polys=100, degree=POLYNOMIAL_DEG
     return val_set
 
 
-def get_validation_set(val_set_path='validation_set.pt', device=None):
+def get_validation_set(val_set_path=VALIDATION_SET_PATH, device=None):
     if os.path.exists(val_set_path):
         print(f"Found existing validation set at '{val_set_path}'. Loading...")
         val_set = torch.load(val_set_path, map_location=device)

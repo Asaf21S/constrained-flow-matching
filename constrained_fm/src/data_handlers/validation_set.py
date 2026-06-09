@@ -22,7 +22,7 @@ def generate_validation_set(
     * ``x0`` – random Gaussian start points of shape ``(n_train_samples, 2)``.
     * ``x1`` – points drawn from the GMM via ``get_points`` of the same size.
     """
-    val_set = {"bboxes": [], "polynomials": []}
+    val_set = {"bboxes": []}
 
     # ------------------------------------------------------------
     # 1. Bounding‑box constraints
@@ -33,9 +33,10 @@ def generate_validation_set(
         ys = torch.sort(torch.rand(2) * 8.0 - 4.0)[0]
 
         if (1.0 <= xs[1] - xs[0] <= 6.5) and (1.0 <= ys[1] - ys[0] <= 6.5):
-            val_set["bboxes"].append(torch.tensor(
+            val_set["bboxes"].append(
                 [xs[0].item(), ys[0].item(), xs[1].item(), ys[1].item()]
-            ))
+            )
+    val_set["bboxes"] = torch.tensor(val_set["bboxes"])
 
     # ------------------------------------------------------------
     # 2. Polynomial constraints via proxy‑grid

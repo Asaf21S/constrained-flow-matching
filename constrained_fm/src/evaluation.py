@@ -322,7 +322,10 @@ def evaluate_distributional_metrics_batched(samples_gen_batched, x_true_pool, bo
 
     for i in range(C_dim):
         samples_gen_single = samples_gen_batched[i]
-        x_true_filtered = filter_true_samples(x_true_pool, bounds=bounds[i], coeffs=coeffs[i], x_pow=x_pow_true, y_pow=y_pow_true)
+        current_bounds = bounds[i] if bounds is not None else None
+        current_coeffs = coeffs[i] if coeffs is not None else None
+        x_true_filtered = filter_true_samples(x_true_pool, bounds=current_bounds, coeffs=current_coeffs,
+                                              x_pow=x_pow_true, y_pow=y_pow_true)
 
         results["swd"].append(compute_swd(samples_gen_single, x_true_filtered))
         results["mmd"].append(compute_mmd(samples_gen_single, x_true_filtered))

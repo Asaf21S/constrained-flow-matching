@@ -386,6 +386,10 @@ def log_evaluation_metrics(metrics_dict: dict, note: str, eval_type: str = "unco
         "raw_metrics": raw_data
     }
 
+    log_dir = os.path.dirname(path)
+    if log_dir:
+        os.makedirs(log_dir, exist_ok=True)
+
     if os.path.exists(path):
         try:
             with open(path, "r") as f:

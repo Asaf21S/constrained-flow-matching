@@ -312,6 +312,11 @@ def evaluate_distributional_metrics_batched(samples_gen_batched, x_true_pool, bo
     bounds: List of bounds [[x1,y1,x2,y2], ...] of length C
     coeffs: Tensor of shape (C, D+1, D+1)
     """
+    return_single = False
+    if samples_gen_batched.ndim == 2:
+        return_single = True
+        samples_gen_batched = samples_gen_batched.unsqueeze(0)
+
     C_dim = samples_gen_batched.shape[0]
 
     results = {
@@ -335,6 +340,9 @@ def evaluate_distributional_metrics_batched(samples_gen_batched, x_true_pool, bo
         results["swd"].append(compute_swd(samples_gen_single, x_true_filtered))
         results["mmd"].append(compute_mmd(samples_gen_single, x_true_filtered))
         results["jsd"].append(compute_jsd(samples_gen_single, x_true_filtered))
+
+    if return_single:
+        return {k: v[0] for k, v in results.items()}
 
     return results
 

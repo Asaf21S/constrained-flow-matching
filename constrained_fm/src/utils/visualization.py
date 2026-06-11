@@ -283,6 +283,7 @@ def compute_and_visualize_likelihood(model, bounds=None, coeffs=None, degree=POL
 
     # Visualization
     fig, ax = plt.subplots(figsize=(6, 6))
+    ax.grid(False)
     norm = cm.colors.Normalize(vmax=auto_vmax, vmin=0.0)
 
     ax.imshow(likelihood, extent=(-4.5, 4.5, -4.5, 4.5), origin='lower', cmap='viridis', norm=norm)

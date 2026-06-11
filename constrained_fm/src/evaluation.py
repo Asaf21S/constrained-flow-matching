@@ -14,9 +14,14 @@ import ot
 from sklearn.metrics.pairwise import rbf_kernel
 from scipy.stats import gaussian_kde
 from scipy.spatial.distance import jensenshannon
+import os
+import json
+from datetime import datetime
+
 
 from constrained_fm.src.utils.polynomials import compute_poly_features, evaluate_poly
 from constrained_fm.src.models.wrapper import WrappedModel
+from constrained_fm.src.consts import EVALUATION_RESULTS_PATH
 
 
 def compute_success_rate_bbox(samples: torch.Tensor | list, bounds: list) -> float | list[float]:
@@ -332,3 +337,63 @@ def evaluate_distributional_metrics_batched(samples_gen_batched, x_true_pool, bo
         results["jsd"].append(compute_jsd(samples_gen_single, x_true_filtered))
 
     return results
+
+
+def log_evaluation_metrics(metrics_dict: dict, note: str, eval_type: str = "unconstrained",
+                           path: str = EVALUATION_RESULTS_PATH):
+    """
+    Appends evaluation metrics to a JSON log file with a timestamp and tracking note.
+
+    Parameters:
+    -----------
+    metrics_dict: dict
+        The dictionary containing your metrics (e.g., {'success_rate': [...], 'swd': [...]})
+    note: str
+        A short description of what changed in this run (e.g., "Increased ResBlocks to 5")
+    eval_type: str
+        The type of evaluation (e.g., "unconstrained", "bbox", "polynomial")
+    path: str
+        Path to the JSON log file.
+    """
+    summary_stats = {}
+    raw_data = {}
+
+    for key, val in metrics_dict.items():
+        if isinstance(val, (np.ndarray, torch.Tensor)):
+            val = val.tolist()
+
+        raw_data[key] = val
+
+        if isinstance(val, list) and len(val) > 0:
+            summary_stats[f"{key}_median"] = float(np.median(val))
+            summary_stats[f"{key}_mean"] = float(np.mean(val))
+        elif isinstance(val, (int, float)):
+            summary_stats[key] = float(val)
+
+    log_entry = {
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "eval_type": eval_type,
+        "note": note,
+        "summary": summary_stats,
+        "raw_metrics": raw_data
+    }
+
+    if os.path.exists(path):
+        try:
+            with open(path, "r") as f:
+                history = json.load(f)
+        except json.JSONDecodeError:
+            history = []
+    else:
+        history = []
+
+    history.append(log_entry)
+
+    with open(path, "w") as f:
+        json.dump(history, f, indent=4)
+
+    print(f"Logged {eval_type} metrics to '{path}'")
+    print(f"   Note: {note}")
+    for k, v in summary_stats.items():
+        if "median" in k or not any(x in k for x in ["median", "mean"]):
+            print(f"   - {k}: {v:.4f}")

@@ -21,3 +21,4 @@ POLYNOMIAL_DEGREE = 3
 PLANE_SCALE = 4.0
 
 VALIDATION_SET_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "benchmark", "validation_set.pt"))
+EVALUATION_RESULTS_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "evaluation_results", "experiment_tracking_log.json"))

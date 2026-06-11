@@ -376,19 +376,70 @@ def visualize_sampled_polynomials(degree=POLYNOMIAL_DEGREE, num_samples=4, num_p
     plt.show()
 
 
-def visualize_ecdf_plot(success_rate_list: list, success_threshold: float = 90):
-    median_success_rate = np.median(success_rate_list)
+def plot_comprehensive_evaluation(metrics_dict: dict, success_threshold: float = 90.0):
+    """
+    Plots a 1x4 grid of ECDFs for comprehensive model evaluation:
+    1. Success Rate (Higher is better)
+    2. Sliced Wasserstein Distance (Lower is better)
+    3. Maximum Mean Discrepancy (Lower is better)
+    4. Jensen-Shannon Divergence (Lower is better)
+
+    Expects metrics_dict = {'success_rate': [...], 'swd': [...], 'mmd': [...], 'jsd': [...]}
+    """
     sns.set_theme(style="whitegrid")
-    plt.figure(figsize=(8, 5))
+    fig, axes = plt.subplots(1, 4, figsize=(20, 5))
 
-    sns.ecdfplot(data=success_rate_list, linewidth=3, color="darkorange")
+    # ==========================================
+    # 1. Success Rate Plot (Higher is Better)
+    # ==========================================
+    ax_success = axes[0]
+    success_rate_list = metrics_dict.get('success_rate', [])
 
-    plt.axvline(success_threshold, color='red', linestyle='--', alpha=0.5, label=f'{success_threshold}% Success Threshold')
+    if len(success_rate_list) > 0:
+        median_success = np.median(success_rate_list)
 
-    plt.title(f"Empirical CDF of Polynomial Constraints\nMedian Success Rate: {median_success_rate:.2f}", fontsize=14)
-    plt.xlabel("Success Rate (%)", fontsize=12)
-    plt.ylabel("Proportion of Constraints", fontsize=12)
-    plt.legend()
-    plt.xlim(0, 100)
+        sns.ecdfplot(data=success_rate_list, ax=ax_success, linewidth=3, color="darkorange")
+        ax_success.axvline(success_threshold, color='red', linestyle='--', alpha=0.5,
+                           label=f'{success_threshold}% Threshold')
+
+        ax_success.set_title(f"Constraint Success Rate\nMedian: {median_success:.2f}%",
+                             fontsize=14, fontweight='bold')
+    else:
+        ax_success.set_title("Constraint Success Rate\nNo Data", fontsize=14, fontweight='bold')
+
+    ax_success.set_xlabel("Success Rate (%)", fontsize=12)
+    ax_success.set_ylabel("Proportion of Constraints", fontsize=12)
+    ax_success.set_xlim(0, 100)
+    ax_success.legend()
+
+    # ==========================================
+    # 2. Distributional Metrics (Lower is Better)
+    # ==========================================
+    metrics = [
+        ('swd', 'Sliced Wasserstein (SWD)', 'purple'),
+        ('mmd', 'Mean Discrepancy (MMD)', 'teal'),
+        ('jsd', 'Jensen-Shannon (JSD)', 'darkred')
+    ]
+
+    for i, (key, title, color) in enumerate(metrics):
+        ax = axes[i + 1]
+        data = metrics_dict.get(key, [])
+
+        if len(data) > 0:
+            median_val = np.median(data)
+
+            sns.ecdfplot(data=data, ax=ax, linewidth=3, color=color)
+
+            ax.set_title(f"{title}\nMedian: {median_val:.4f}", fontsize=14, fontweight='bold')
+            ax.set_xlabel("Error (Lower is Better)", fontsize=12)
+
+            upper_bound = sorted(data)[int(len(data) * 0.95)] * 1.5
+            ax.set_xlim(0, max(upper_bound, 1e-5))
+        else:
+            ax.set_title(f"{title}\nNo Data", fontsize=14, fontweight='bold')
+            ax.set_xlabel("Error (Lower is Better)", fontsize=12)
+
+        ax.set_ylabel("")
+
     plt.tight_layout()
     plt.show()

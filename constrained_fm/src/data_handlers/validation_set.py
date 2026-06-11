@@ -9,7 +9,8 @@ from constrained_fm.src.data_handlers.gmm_2d import get_points
 def generate_validation_set(
     num_bboxes=100,
     num_polys=100,
-    n_train_samples=50000,
+    n_train_samples_x0=10000,
+    n_train_samples_x1=100000,
     degree=POLYNOMIAL_DEGREE,
     scale=PLANE_SCALE,
     device=None,
@@ -50,11 +51,11 @@ def generate_validation_set(
     # ------------------------------------------------------------
     # 3. Large sample batches for evaluation (stored as tensors)
     # ------------------------------------------------------------
-    print(f"Generating {n_train_samples} training samples (x0, x1)...")
+    print(f"Generating {n_train_samples_x0}, {n_train_samples_x1} training samples (x0, x1)...")
     # x0 – standard normal samples.
-    x0_tensor = torch.randn(n_train_samples, 2, device=device)
+    x0_tensor = torch.randn(n_train_samples_x0, 2, device=device)
     # x1 – samples from the GMM.
-    x1_tensor, _ = get_points(batch_size=n_train_samples, device=device)
+    x1_tensor, _ = get_points(batch_size=n_train_samples_x1, device=device)
     # Store tensors directly (retain device information). Users can move to CPU as needed.
     val_set["x0"] = x0_tensor
     val_set["x1"] = x1_tensor

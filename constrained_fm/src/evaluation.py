@@ -409,3 +409,43 @@ def log_evaluation_metrics(metrics_dict: dict, note: str, eval_type: str = "unco
     for k, v in summary_stats.items():
         if "median" in k or not any(x in k for x in ["median", "mean"]):
             print(f"   - {k}: {v:.4f}")
+
+
+def print_readme_metrics_table(metrics_dict: dict):
+    """
+    Computes summary statistics from a metrics dictionary and prints
+    a formatted Markdown table ready for a README file.
+    """
+    lines = [
+        "| Metric | Median | Mean | Worst 5% | Target |",
+        "| :--- | :--- | :--- | :--- | :--- |"
+    ]
+
+    # 1. Success Rate
+    sr_data = metrics_dict.get('success_rate', [])
+    if len(sr_data) > 0:
+        median_sr = np.median(sr_data)
+        mean_sr = np.mean(sr_data)
+        worst_sr = np.percentile(sr_data, 5)
+        lines.append(
+            f"| **Success Rate (%)** | {median_sr:.2f} | {mean_sr:.2f} | {worst_sr:.2f} | *Higher is better* |")
+
+    # 2. Distributional Metrics
+    dist_metrics = [
+        ('swd', 'Sliced Wasserstein (SWD)'),
+        ('mmd', 'Mean Discrepancy (MMD)'),
+        ('jsd', 'Jensen-Shannon (JSD)')
+    ]
+
+    for key, name in dist_metrics:
+        data = metrics_dict.get(key, [])
+        if len(data) > 0:
+            median_val = np.median(data)
+            mean_val = np.mean(data)
+            worst_val = np.percentile(data, 95)
+
+            lines.append(f"| **{name}** | {median_val:.4f} | {mean_val:.4f} | {worst_val:.4f} | *Lower is better* |")
+
+    markdown_table = "\n".join(lines)
+
+    return markdown_table

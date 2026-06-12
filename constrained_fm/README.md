@@ -72,14 +72,25 @@ To prevent "Target Density Explosions" from vanishingly small valid areas, a **P
 **Random Target Examples ($P(x) \le 0$):**
 ![Polynomial Target Examples](images/checkerboard/constrained_polynomial_target_examples.png)
 
+**Example 1**
+![Polynomial Progression 1](images/checkerboard/constrained_polynomial_inference_progression_1.png)
 <p align="center">
   <img src="images/checkerboard/constrained_polynomial_inference_final_1.png" width="45%" alt="Poly Final 1">
   <img src="images/checkerboard/constrained_polynomial_inference_likelihood_1.png" width="45%" alt="Poly Likelihood 1">
 </p>
 
+**Example 2**
+![Polynomial Progression 2](images/checkerboard/constrained_polynomial_inference_progression_2.png)
 <p align="center">
   <img src="images/checkerboard/constrained_polynomial_inference_final_2.png" width="45%" alt="Poly Final 2">
   <img src="images/checkerboard/constrained_polynomial_inference_likelihood_2.png" width="45%" alt="Poly Likelihood 2">
+</p>
+
+**Example 3**
+![Polynomial Progression 3](images/checkerboard/constrained_polynomial_inference_progression_3.png)
+<p align="center">
+  <img src="images/checkerboard/constrained_polynomial_inference_final_3.png" width="45%" alt="Poly Final 3">
+  <img src="images/checkerboard/constrained_polynomial_inference_likelihood_3.png" width="45%" alt="Poly Likelihood 3">
 </p>
 
 ---
@@ -112,6 +123,13 @@ The model successfully maps the standard Gaussian prior into four overlapping cl
   <img src="images/gmm/unconstrained_inference_likelihood.png" width="45%" alt="GMM True vs Learned Likelihood">
 </p>
 
+#### Evaluation Metrics
+| Metric | Median / Value | Mean | Worst 5% | Target |
+| :--- | :--- | :--- | :--- | :--- |
+| **Sliced Wasserstein (SWD)** | 0.0315 | - | - | *Lower is better* |
+| **Mean Discrepancy (MMD)** | 0.0002 | - | - | *Lower is better* |
+| **Jensen-Shannon (JSD)** | 0.0019 | - | - | *Lower is better* |
+
 ### Geometric Constraints (BBox)
 When a geometric bounding box forces a strict cutoff through the middle of a continuous Gaussian tail, the model learns to compress the probability mass abruptly against the artificial boundary while maintaining the natural density gradient everywhere else.
 
@@ -134,8 +152,19 @@ When a geometric bounding box forces a strict cutoff through the middle of a con
   <img src="images/gmm/constrained_bbox_inference_likelihood_3.png" width="45%" alt="GMM BBox Likelihood 3">
 </p>
 
+#### Evaluation Metrics
+| Metric | Median / Value | Mean | Worst 5% | Target |
+| :--- | :--- | :--- | :--- | :--- |
+| **Success Rate (%)** | 95.20 | 94.02 | 87.79 | *Higher is better* |
+| **Sliced Wasserstein (SWD)** | 0.0668 | 0.0733 | 0.1426 | *Lower is better* |
+| **Mean Discrepancy (MMD)** | 0.0019 | 0.0024 | 0.0060 | *Lower is better* |
+| **Jensen-Shannon (JSD)** | 0.0061 | 0.0071 | 0.0137 | *Lower is better* |
+
 ### Algebraic Constraints (Polynomials)
 Polynomial curves are shown to be highly effective at isolating highly correlated, overlapping distributions. A continuous algebraic curve gracefully slices through the Gaussian bridges, and the model successfully redirects the remaining density without breaking the target topology.
+
+**Random Target Examples ($P(x) \le 0$):**
+![Polynomial Target Examples](images/gmm/constrained_polynomial_target_examples.png)
 
 **Inference Example 1**
 ![Poly Progression 1](images/gmm/constrained_polynomial_inference_progression_1.png)
@@ -157,3 +186,11 @@ Polynomial curves are shown to be highly effective at isolating highly correlate
   <img src="images/gmm/constrained_polynomial_inference_final_3.png" width="45%" alt="GMM Poly Final 3">
   <img src="images/gmm/constrained_polynomial_inference_likelihood_3.png" width="45%" alt="GMM Poly Likelihood 3">
 </p>
+
+#### Evaluation Metrics
+| Metric | Median / Value | Mean | Worst 5% | Target |
+| :--- | :--- | :--- | :--- | :--- |
+| **Success Rate (%)** | 98.24 | 97.31 | 93.48 | *Higher is better* |
+| **Sliced Wasserstein (SWD)** | 0.0822 | 0.1075 | 0.2805 | *Lower is better* |
+| **Mean Discrepancy (MMD)** | 0.0007 | 0.0015 | 0.0034 | *Lower is better* |
+| **Jensen-Shannon (JSD)** | 0.0048 | 0.0068 | 0.0177 | *Lower is better* |

@@ -259,6 +259,7 @@ def compute_and_visualize_likelihood(model, bounds=None, coeffs=None, degree=POL
     with torch.no_grad():
         for i in tqdm(range(0, num_points, eval_batch_size)):
             x_1_chunk = x_1[i:i + eval_batch_size]
+            print("Debug:", x_1_chunk[:10], x_1_chunk[-10:])
 
             chunk_kwargs = {}
             if full_bounds_tensor is not None:

@@ -253,13 +253,35 @@ def compute_and_visualize_likelihood(model, bounds=None, coeffs=None, degree=POL
     elif coeffs is not None:
         full_coeffs_tensor = coeffs.view(1, -1).expand(num_points, -1)
 
+    exact_log_p_full = torch.full((num_points,), float('-inf'), device=device)
+    valid_mask = torch.ones(num_points, dtype=torch.bool, device=device)
+
+    if bounds is not None:
+        x_min, y_min, x_max, y_max = bounds
+        valid_mask = (x_1[:, 0] >= x_min) & (x_1[:, 0] <= x_max) & \
+                     (x_1[:, 1] >= y_min) & (x_1[:, 1] <= y_max)
+    elif coeffs is not None:
+        x_pow, y_pow = compute_poly_features(x_1, degree=degree, scale=scale)
+        C_batch = coeffs.unsqueeze(0).expand(num_points, -1, -1)
+        p_vals = evaluate_poly(x_pow, y_pow, C_batch).squeeze()
+        valid_mask = p_vals <= 0
+
+    valid_indices = torch.nonzero(valid_mask).squeeze()
+    x_1_valid = x_1[valid_mask]
+    num_valid_points = x_1_valid.shape[0]
+
+    if full_bounds_tensor is not None:
+        full_bounds_tensor = full_bounds_tensor[valid_mask]
+    if full_coeffs_tensor is not None:
+        full_coeffs_tensor = full_coeffs_tensor[valid_mask]
+
     exact_log_p_list = []
-    print(f"Computing exact divergence for {num_points} points in chunks of {eval_batch_size}...")
+    print(
+        f"Computing exact divergence for {num_valid_points} valid points (skipped {num_points - num_valid_points} OOD) in chunks of {eval_batch_size}...")
 
     with torch.no_grad():
-        for i in tqdm(range(0, num_points, eval_batch_size)):
-            x_1_chunk = x_1[i:i + eval_batch_size]
-            print("Debug:", x_1_chunk[:10], x_1_chunk[-10:])
+        for i in tqdm(range(0, num_valid_points, eval_batch_size)):
+            x_1_chunk = x_1_valid[i:i + eval_batch_size]
 
             chunk_kwargs = {}
             if full_bounds_tensor is not None:
@@ -278,9 +300,11 @@ def compute_and_visualize_likelihood(model, bounds=None, coeffs=None, degree=POL
 
             exact_log_p_list.append(chunk_log_p)
 
-    exact_log_p = torch.cat(exact_log_p_list, dim=0)
+    if len(exact_log_p_list) > 0:
+        exact_log_p_valid = torch.cat(exact_log_p_list, dim=0)
+        exact_log_p_full[valid_indices] = exact_log_p_valid
 
-    likelihood = torch.exp(exact_log_p).cpu().reshape(grid_size, grid_size).numpy().T
+    likelihood = torch.exp(exact_log_p_full).cpu().reshape(grid_size, grid_size).numpy().T
 
     # Visualization
     fig, ax = plt.subplots(figsize=(6, 6))

@@ -411,6 +411,51 @@ def log_evaluation_metrics(metrics_dict: dict, note: str, eval_type: str = "unco
             print(f"   - {k}: {v:.4f}")
 
 
+def load_logged_metrics(path: str = EVALUATION_RESULTS_PATH, entry_index: int = -1):
+    """
+    Loads a specific run from the JSON log.
+
+    Parameters:
+    -----------
+    path: str
+        Path to the JSON log file.
+    entry_index: int
+        Which log entry to load. Defaults to -1 (the most recent run).
+    """
+    if not os.path.exists(path):
+        print(f"Error: Log file not found at '{path}'")
+        return None
+
+    with open(path, "r") as f:
+        try:
+            history = json.load(f)
+        except json.JSONDecodeError:
+            print("Error: Could not decode JSON. File might be empty or corrupted.")
+            return None
+
+    if len(history) == 0:
+        print("Log file is empty.")
+        return None
+
+    try:
+        entry = history[entry_index]
+    except IndexError:
+        print(f"Error: Index {entry_index} out of bounds. The log only has {len(history)} entries.")
+        return None
+
+    print(f"Loaded Run: {entry.get('timestamp', 'Unknown Time')}")
+    print(f"Evaluation Type: {entry.get('eval_type', 'N/A')}")
+    print(f"Note: {entry.get('note', 'No note provided')}")
+
+    metrics_dict = entry.get("raw_metrics", {})
+
+    if not metrics_dict:
+        print("Error: No raw metrics found in this log entry.")
+        return None
+
+    return metrics_dict
+
+
 def print_readme_metrics_table(metrics_dict: dict):
     """
     Computes summary statistics from a metrics dictionary and prints

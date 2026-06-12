@@ -460,26 +460,29 @@ def print_readme_metrics_table(metrics_dict: dict):
     """
     Computes summary statistics from a metrics dictionary and prints
     a formatted Markdown table ready for a README file.
+    Handles both batched lists (constrained) and single floats (unconstrained).
     """
     lines = [
-        "| Metric | Median | Mean | Worst 5% | Target |",
+        "| Metric | Median / Value | Mean | Worst 5% | Target |",
         "| :--- | :--- | :--- | :--- | :--- |"
     ]
 
     def clean_data(data_list):
-        arr = np.array(data_list)
+        arr = np.array(data_list, dtype=float)
         return arr[~np.isinf(arr)]
 
-    # 1. Success Rate
-    sr_data = clean_data(metrics_dict.get('success_rate', []))
-    if len(sr_data) > 0:
-        median_sr = np.median(sr_data)
-        mean_sr = np.mean(sr_data)
-        worst_sr = np.percentile(sr_data, 5)
-        lines.append(
-            f"| **Success Rate (%)** | {median_sr:.2f} | {mean_sr:.2f} | {worst_sr:.2f} | *Higher is better* |")
+    if 'success_rate' in metrics_dict:
+        sr_data = metrics_dict['success_rate']
 
-    # 2. Distributional Metrics
+        if isinstance(sr_data, (list, np.ndarray)) and len(sr_data) > 0:
+            clean_sr = clean_data(sr_data)
+            if len(clean_sr) > 0:
+                lines.append(
+                    f"| **Success Rate (%)** | {np.median(clean_sr):.2f} | {np.mean(clean_sr):.2f} | {np.percentile(clean_sr, 5):.2f} | *Higher is better* |")
+
+        elif isinstance(sr_data, (float, int)):
+            lines.append(f"| **Success Rate (%)** | {float(sr_data):.2f} | - | - | *Higher is better* |")
+
     dist_metrics = [
         ('swd', 'Sliced Wasserstein (SWD)'),
         ('mmd', 'Mean Discrepancy (MMD)'),
@@ -487,13 +490,18 @@ def print_readme_metrics_table(metrics_dict: dict):
     ]
 
     for key, name in dist_metrics:
-        data = metrics_dict.get(key, [])
-        if len(data) > 0:
-            median_val = np.median(data)
-            mean_val = np.mean(data)
-            worst_val = np.percentile(data, 95)
+        if key in metrics_dict:
+            raw_data = metrics_dict[key]
 
-            lines.append(f"| **{name}** | {median_val:.4f} | {mean_val:.4f} | {worst_val:.4f} | *Lower is better* |")
+            if isinstance(raw_data, (list, np.ndarray)) and len(raw_data) > 0:
+                clean_arr = clean_data(raw_data)
+                if len(clean_arr) > 0:
+                    lines.append(
+                        f"| **{name}** | {np.median(clean_arr):.4f} | {np.mean(clean_arr):.4f} | {np.percentile(clean_arr, 95):.4f} | *Lower is better* |")
+
+            elif isinstance(raw_data, (float, int)):
+                if not np.isinf(raw_data):
+                    lines.append(f"| **{name}** | {float(raw_data):.4f} | - | - | *Lower is better* |")
 
     markdown_table = "\n".join(lines)
     print(markdown_table)

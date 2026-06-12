@@ -466,8 +466,12 @@ def print_readme_metrics_table(metrics_dict: dict):
         "| :--- | :--- | :--- | :--- | :--- |"
     ]
 
+    def clean_data(data_list):
+        arr = np.array(data_list)
+        return arr[~np.isinf(arr)]
+
     # 1. Success Rate
-    sr_data = metrics_dict.get('success_rate', [])
+    sr_data = clean_data(metrics_dict.get('success_rate', []))
     if len(sr_data) > 0:
         median_sr = np.median(sr_data)
         mean_sr = np.mean(sr_data)
@@ -492,5 +496,4 @@ def print_readme_metrics_table(metrics_dict: dict):
             lines.append(f"| **{name}** | {median_val:.4f} | {mean_val:.4f} | {worst_val:.4f} | *Lower is better* |")
 
     markdown_table = "\n".join(lines)
-
-    return markdown_table
+    print(markdown_table)

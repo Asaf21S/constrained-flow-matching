@@ -325,7 +325,7 @@ def evaluate_distributional_metrics_batched(samples_gen_batched, x_true_pool, bo
         "jsd": []
     }
 
-    if coeffs:
+    if coeffs is not None:
         x_pow_true, y_pow_true = compute_poly_features(x_true_pool)
     else:
         x_pow_true, y_pow_true = None, None

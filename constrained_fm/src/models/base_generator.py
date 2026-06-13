@@ -45,7 +45,7 @@ class BaseFM(nn.Module):
         if return_intermediates:
             return samples, T
         else:
-            return samples[-1]
+            return samples
 
     def compute_likelihood_grid(self, bounds=None, coeffs=None, degree=3, scale=4.0, grid_size=200, step_size=0.05,
                                 eval_batch_size=4000, device=None):

@@ -505,3 +505,44 @@ def print_readme_metrics_table(metrics_dict: dict):
 
     markdown_table = "\n".join(lines)
     print(markdown_table)
+
+
+def evaluate_compound_metrics(samples, disjoint_boxes, x_true_pool, device=None):
+    """
+    Evaluates Success Rate, SWD, MMD, and JSD for a compound bounding box constraint.
+    """
+    num_samples = samples.shape[0]
+
+    sample_success_mask = torch.zeros(num_samples, dtype=torch.bool, device=device)
+    true_pool_mask = torch.zeros(x_true_pool.shape[0], dtype=torch.bool, device=device)
+
+    for i in range(disjoint_boxes.shape[0]):
+        x_min, y_min, x_max, y_max = disjoint_boxes[i].tolist()
+
+        s_in_x = (samples[:, 0] >= x_min) & (samples[:, 0] <= x_max)
+        s_in_y = (samples[:, 1] >= y_min) & (samples[:, 1] <= y_max)
+        sample_success_mask |= (s_in_x & s_in_y)
+
+        t_in_x = (x_true_pool[:, 0] >= x_min) & (x_true_pool[:, 0] <= x_max)
+        t_in_y = (x_true_pool[:, 1] >= y_min) & (x_true_pool[:, 1] <= y_max)
+        true_pool_mask |= (t_in_x & t_in_y)
+
+    success_rate = sample_success_mask.float().mean().item() * 100.0
+    x_true_filtered = x_true_pool[true_pool_mask]
+
+    # Compute Distributional Metrics
+    metrics = {
+        "success_rate": success_rate,
+        "swd": float('inf'),
+        "mmd": float('inf'),
+        "jsd": float('inf')
+    }
+
+    if len(x_true_filtered) > 10 and len(samples) > 10:
+        metrics["swd"] = compute_swd(samples, x_true_filtered)
+        metrics["mmd"] = compute_mmd(samples, x_true_filtered)
+        metrics["jsd"] = compute_jsd(samples, x_true_filtered)
+    else:
+        print("Warning: Not enough valid points in true pool or generated samples to compute SWD/MMD/JSD.")
+
+    return metrics

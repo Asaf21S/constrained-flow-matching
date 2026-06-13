@@ -1,10 +1,11 @@
 import torch
 import torch.nn as nn
 
+from constrained_fm.src.models.base_generator import BaseFM
 from constrained_fm.src.models.layers import SinusoidalPosEmb, ResBlock
 
 
-class UnconstrainedFM(nn.Module):
+class UnconstrainedFM(BaseFM):
     def __init__(self, input_dim=2, time_dim=64, hidden_dim=512):
         super().__init__()
 

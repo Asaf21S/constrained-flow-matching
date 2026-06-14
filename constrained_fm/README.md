@@ -130,7 +130,7 @@ The model successfully maps the standard Gaussian prior into four overlapping cl
 | **Mean Discrepancy (MMD)** | 0.0002 | - | - | *Lower is better* |
 | **Jensen-Shannon (JSD)** | 0.0019 | - | - | *Lower is better* |
 
-### Geometric Constraints (BBox)
+### Geometric Constraints (BBox) - Improved Version
 When a geometric bounding box forces a strict cutoff through the middle of a continuous Gaussian tail, the model learns to compress the probability mass abruptly against the artificial boundary while maintaining the natural density gradient everywhere else.
 
 **Example 1**
@@ -155,10 +155,10 @@ When a geometric bounding box forces a strict cutoff through the middle of a con
 #### Evaluation Metrics
 | Metric | Median / Value | Mean | Worst 5% | Target |
 | :--- | :--- | :--- | :--- | :--- |
-| **Success Rate (%)** | 95.20 | 94.02 | 87.79 | *Higher is better* |
-| **Sliced Wasserstein (SWD)** | 0.0668 | 0.0733 | 0.1426 | *Lower is better* |
-| **Mean Discrepancy (MMD)** | 0.0019 | 0.0024 | 0.0060 | *Lower is better* |
-| **Jensen-Shannon (JSD)** | 0.0061 | 0.0071 | 0.0137 | *Lower is better* |
+| **Success Rate (%)** | 98.88 | 98.57 | 97.07 | *Higher is better* |
+| **Sliced Wasserstein (SWD)** | 0.0176 | 0.0203 | 0.0348 | *Lower is better* |
+| **Mean Discrepancy (MMD)** | 0.0003 | 0.0004 | 0.0008 | *Lower is better* |
+| **Jensen-Shannon (JSD)** | 0.0016 | 0.0019 | 0.0031 | *Lower is better* |
 
 ### Algebraic Constraints (Polynomials)
 Polynomial curves are shown to be highly effective at isolating highly correlated, overlapping distributions. A continuous algebraic curve gracefully slices through the Gaussian bridges, and the model successfully redirects the remaining density without breaking the target topology.

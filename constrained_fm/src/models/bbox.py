@@ -39,7 +39,7 @@ class BboxConstrainedFM(BaseFM):
         t_expanded = t.expand(x.shape[0], 1)
         t_emb = self.time_emb(t_expanded)
 
-        bounds = bounds.reshape(-1, self.cond_dim)
+        bounds = bounds.reshape(-1, 4)
 
         d_left = (x[:, 0] - bounds[:, 0]).unsqueeze(1)
         d_bottom = (x[:, 1] - bounds[:, 1]).unsqueeze(1)

@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from constrained_fm.src.models.base_generator import BaseFM
 from constrained_fm.src.models.layers import SinusoidalPosEmb, ResBlock
@@ -57,13 +58,13 @@ class BboxConstrainedFM(BaseFM):
         rel_coords = torch.stack([rel_x, rel_y], dim=1)
 
         scale = 10.0
-        exp_d_left = torch.exp(-scale * d_left)
-        exp_d_bottom = torch.exp(-scale * d_bottom)
-        exp_d_right = torch.exp(-scale * d_right)
-        exp_d_top = torch.exp(-scale * d_top)
+        sp_d_left = F.softplus(-scale * d_left)
+        sp_d_bottom = F.softplus(-scale * d_bottom)
+        sp_d_right = F.softplus(-scale * d_right)
+        sp_d_top = F.softplus(-scale * d_top)
 
-        h = torch.cat([x, t_emb, d_left, d_bottom, d_right, d_top, rel_coords, exp_d_left, exp_d_bottom,
-                       exp_d_right, exp_d_top], dim=1)
+        h = torch.cat([x, t_emb, d_left, d_bottom, d_right, d_top, rel_coords,
+                       sp_d_left, sp_d_bottom, sp_d_right, sp_d_top], dim=1)
         h = self.input_proj(h)
         h = self.res_blocks(h)
         output = self.output_proj(h)

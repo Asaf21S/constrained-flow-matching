@@ -6,7 +6,7 @@ from constrained_fm.src.models.layers import SinusoidalPosEmb, ResBlock
 
 
 class BboxConstrainedFM(BaseFM):
-    def __init__(self, input_dim=2, time_dim=64, cond_dim=4, hidden_dim=1024):
+    def __init__(self, input_dim=2, time_dim=64, cond_dim=10, hidden_dim=1024):
         super().__init__()
 
         self.input_dim = input_dim
@@ -46,7 +46,24 @@ class BboxConstrainedFM(BaseFM):
         d_right = (bounds[:, 2] - x[:, 0]).unsqueeze(1)
         d_top = (bounds[:, 3] - x[:, 1]).unsqueeze(1)
 
-        h = torch.cat([x, t_emb, d_left, d_bottom, d_right, d_top], dim=1)
+        w = bounds[:, 2] - bounds[:, 0]
+        h = bounds[:, 3] - bounds[:, 1]
+        cx = bounds[:, 0] + w / 2.0
+        cy = bounds[:, 1] + h / 2.0
+
+        rel_x = (x[:, 0] - cx) / (w / 2.0)
+        rel_y = (x[:, 1] - cy) / (h / 2.0)
+
+        rel_coords = torch.stack([rel_x, rel_y], dim=1)
+
+        scale = 10.0
+        exp_d_left = torch.exp(-scale * d_left)
+        exp_d_bottom = torch.exp(-scale * d_bottom)
+        exp_d_right = torch.exp(-scale * d_right)
+        exp_d_top = torch.exp(-scale * d_top)
+
+        h = torch.cat([x, t_emb, d_left, d_bottom, d_right, d_top, rel_coords, exp_d_left, exp_d_bottom,
+                       exp_d_right, exp_d_top], dim=1)
         h = self.input_proj(h)
         h = self.res_blocks(h)
         output = self.output_proj(h)

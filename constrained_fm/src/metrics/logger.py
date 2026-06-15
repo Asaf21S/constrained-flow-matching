@@ -1,59 +1,10 @@
 import torch
 import numpy as np
-from tqdm import tqdm
 import os
 import json
 from datetime import datetime
 
-
-from constrained_fm.src.geometry.polynomials import compute_poly_features
-from constrained_fm.src.metrics.distributional import compute_swd, compute_mmd, compute_jsd, filter_true_samples
 from constrained_fm.src.consts import EVALUATION_RESULTS_PATH
-
-
-def evaluate_distributional_metrics_batched(samples_gen_batched, x_true_pool, bounds=None, coeffs=None):
-    """
-    Evaluates SWD, MMD, and JSD for batched constraints.
-
-    Parameters:
-    samples_gen_batched: Tensor of shape (C, N, 2)
-    x_true_pool: Tensor of shape (M, 2) containing all unconstrained ground truth points
-    bounds: List of bounds [[x1,y1,x2,y2], ...] of length C
-    coeffs: Tensor of shape (C, D+1, D+1)
-    """
-    return_single = False
-    if samples_gen_batched.ndim == 2:
-        return_single = True
-        samples_gen_batched = samples_gen_batched.unsqueeze(0)
-
-    C_dim = samples_gen_batched.shape[0]
-
-    results = {
-        "swd": [],
-        "mmd": [],
-        "jsd": []
-    }
-
-    if coeffs is not None:
-        x_pow_true, y_pow_true = compute_poly_features(x_true_pool)
-    else:
-        x_pow_true, y_pow_true = None, None
-
-    for i in tqdm(range(C_dim), desc="Distributional Metrics Evaluation"):
-        samples_gen_single = samples_gen_batched[i]
-        current_bounds = bounds[i] if bounds is not None else None
-        current_coeffs = coeffs[i] if coeffs is not None else None
-        x_true_filtered = filter_true_samples(x_true_pool, bounds=current_bounds, coeffs=current_coeffs,
-                                              x_pow=x_pow_true, y_pow=y_pow_true)
-
-        results["swd"].append(compute_swd(samples_gen_single, x_true_filtered))
-        results["mmd"].append(compute_mmd(samples_gen_single, x_true_filtered))
-        results["jsd"].append(compute_jsd(samples_gen_single, x_true_filtered))
-
-    if return_single:
-        return {k: v[0] for k, v in results.items()}
-
-    return results
 
 
 def log_evaluation_metrics(metrics_dict: dict, note: str, eval_type: str = "unconstrained",

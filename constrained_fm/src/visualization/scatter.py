@@ -7,6 +7,7 @@ import matplotlib.cm as cm
 from constrained_fm.src.geometry.polynomials import compute_poly_features, evaluate_poly
 from constrained_fm.src.metrics.success_rates import compute_success_rate_bbox, compute_success_rate_polynomial
 from constrained_fm.src.consts import POLYNOMIAL_DEGREE, PLANE_SCALE, GMM_MEANS, GMM_COVS, GMM_WEIGHTS
+from constrained_fm.src.inference.evaluator import evaluate_single_configuration
 
 
 def visualize_single_step(data_slice, title, ax=None, cmap='Blues',
@@ -105,14 +106,16 @@ def plot_loss_curve(losses):
     plt.show()
 
 
-def generate_and_visualize_samples(model, num_samples=50000, step_size=0.05, bounds=None, coeffs=None,
-                                   degree=POLYNOMIAL_DEGREE, scale=PLANE_SCALE, cluster_points=True, metrics: dict = None):
+def generate_and_visualize_samples(model, x_true_pool=None, num_samples=50000, step_size=0.05, bounds=None, coeffs=None,
+                                   degree=POLYNOMIAL_DEGREE, scale=PLANE_SCALE, cluster_points=True):
     """Generate samples from ``model`` and visualise intermediate steps.
 
     Parameters
     ----------
     model: torch.nn.Module
         The flow‑matching model exposing a ``sample`` method.
+    x_true_pool: torch.Tensor | None
+        Optional ground truth pool. If provided, computes SWD, MMD, and JSD natively.
     num_samples: int
         Number of points to draw.
     step_size: float
@@ -147,21 +150,38 @@ def generate_and_visualize_samples(model, num_samples=50000, step_size=0.05, bou
     plt.tight_layout()
     plt.show()
 
-    final_samples = samples_np[-1]
+    final_samples_tensor = samples[-1]
+    final_samples_np = samples_np[-1]
     final_title = "Samples"
-    if bounds is not None:
-        success_rate = compute_success_rate_bbox(final_samples, bounds)
-        final_title = f"Samples\nSuccess Rate: {success_rate:.3f}%"
-    elif coeffs is not None:
-        success_rate = compute_success_rate_polynomial(final_samples, coeffs, degree, scale, device)
-        final_title = f"Samples\nSuccess Rate: {success_rate:.3f}%"
 
-    if metrics is not None:
+    if x_true_pool is not None:
+        metrics = evaluate_single_configuration(
+            samples=final_samples_tensor,
+            x_true_pool=x_true_pool,
+            bounds=bounds,
+            coeffs=coeffs,
+            degree=degree,
+            scale=scale,
+            device=device
+        )
+
+        success_rate = metrics.get("success_rate")
+        if success_rate is not None:
+            final_title = f"Samples\nSuccess Rate: {success_rate:.3f}%"
+
         metrics_str = f"SWD: {metrics.get('swd', 0):.4f}  |  MMD: {metrics.get('mmd', 0):.4f}  |  JSD: {metrics.get('jsd', 0):.4f}"
         final_title += f"\n{metrics_str}"
 
+    else:
+        if bounds is not None:
+            success_rate = compute_success_rate_bbox(final_samples_np, bounds)
+            final_title = f"Samples\nSuccess Rate: {success_rate:.3f}%"
+        elif coeffs is not None:
+            success_rate = compute_success_rate_polynomial(final_samples_np, coeffs, degree, scale, device)
+            final_title = f"Samples\nSuccess Rate: {success_rate:.3f}%"
+
     # Visualise the final distribution
-    visualize_single_step(samples_np[-1], title=final_title, cmap='Oranges',
+    visualize_single_step(final_samples_np, title=final_title, cmap='Oranges',
                           bbox=bounds, coeffs=coeffs, degree=degree, scale=scale,
                           labels=None)
     plt.show()

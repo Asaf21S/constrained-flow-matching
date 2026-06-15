@@ -1,6 +1,5 @@
 import torch
 
-
 from constrained_fm.src.geometry.polynomials import compute_poly_features, evaluate_poly
 from constrained_fm.src.metrics.distributional import compute_swd, compute_mmd, compute_jsd
 

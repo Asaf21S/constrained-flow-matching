@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from constrained_fm.src.models.base_generator import BaseFM
+from constrained_fm.src.models.base_fm import BaseFM
 from constrained_fm.src.models.layers import SinusoidalPosEmb, ResBlock
 
 

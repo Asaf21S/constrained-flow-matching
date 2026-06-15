@@ -14,7 +14,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.append(str(PROJECT_ROOT))
 
 from constrained_fm.src.consts import VALIDATION_SET_PATH
-from constrained_fm.src.data_handlers.validation_set import get_validation_set
+from constrained_fm.src.datasets.validation import get_validation_set
 
 
 def main():

@@ -198,7 +198,7 @@ def visualize_disjoint_bboxes(predictor, gmm_true_pool, disjoint_boxes, plot_poi
     plt.show()
 
 
-def visualize_compound_generation(samples, disjoint_boxes, points_per_box, device=None):
+def visualize_compound_generation(samples, disjoint_boxes, points_per_box, metrics: dict = None, device=None):
     """
     Visualizes the generated point cloud from a compound bounding box constraint.
     Annotates each box with the expected point count vs. the actual generated count.
@@ -238,7 +238,13 @@ def visualize_compound_generation(samples, disjoint_boxes, points_per_box, devic
                 bbox=dict(facecolor='white', alpha=0.8, edgecolor='none', pad=1.0))
 
     total_success_rate = global_success_mask.float().mean().item() * 100.0
-    ax.set_title(f"Compound Generation\nGlobal Success Rate: {total_success_rate:.2f}%", fontweight='bold')
+    title_str = f"Compound Generation\nGlobal Success Rate: {total_success_rate:.2f}%"
+
+    if metrics is not None:
+        metrics_str = f"SWD: {metrics.get('swd', 0):.4f}  |  MMD: {metrics.get('mmd', 0):.4f}  |  JSD: {metrics.get('jsd', 0):.4f}"
+        title_str += f"\n{metrics_str}"
+
+    ax.set_title(title_str, fontweight='bold')
     ax.set_xlim(-4.5, 4.5)
     ax.set_ylim(-4.5, 4.5)
     ax.set_aspect('equal')

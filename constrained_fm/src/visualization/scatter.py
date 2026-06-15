@@ -105,10 +105,8 @@ def plot_loss_curve(losses):
     plt.show()
 
 
-def generate_and_visualize_samples(model, num_samples=50000, step_size=0.05,
-                                   bounds: list | None = None, coeffs: torch.Tensor = None,
-                                   degree=POLYNOMIAL_DEGREE, scale=PLANE_SCALE,
-                                   cluster_points=True):
+def generate_and_visualize_samples(model, num_samples=50000, step_size=0.05, bounds=None, coeffs=None,
+                                   degree=POLYNOMIAL_DEGREE, scale=PLANE_SCALE, cluster_points=True, metrics: dict = None):
     """Generate samples from ``model`` and visualise intermediate steps.
 
     Parameters
@@ -157,6 +155,10 @@ def generate_and_visualize_samples(model, num_samples=50000, step_size=0.05,
     elif coeffs is not None:
         success_rate = compute_success_rate_polynomial(final_samples, coeffs, degree, scale, device)
         final_title = f"Samples\nSuccess Rate: {success_rate:.3f}%"
+
+    if metrics is not None:
+        metrics_str = f"SWD: {metrics.get('swd', 0):.4f}  |  MMD: {metrics.get('mmd', 0):.4f}  |  JSD: {metrics.get('jsd', 0):.4f}"
+        final_title += f"\n{metrics_str}"
 
     # Visualise the final distribution
     visualize_single_step(samples_np[-1], title=final_title, cmap='Oranges',

@@ -203,7 +203,7 @@ def visualize_compound_generation(samples, disjoint_boxes, points_per_box, devic
     Visualizes the generated point cloud from a compound bounding box constraint.
     Annotates each box with the expected point count vs. the actual generated count.
     """
-    fig, ax = plt.subplots(figsize=(7, 7))
+    fig, ax = plt.subplots(figsize=(6, 6))
 
     samples_np = samples.cpu().numpy()
     ax.scatter(samples_np[:, 0], samples_np[:, 1], c='darkturquoise', s=2, alpha=0.8, label='Generated Points')

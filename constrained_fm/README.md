@@ -194,3 +194,39 @@ Polynomial curves are shown to be highly effective at isolating highly correlate
 | **Sliced Wasserstein (SWD)** | 0.0822 | 0.1075 | 0.2805 | *Lower is better* |
 | **Mean Discrepancy (MMD)** | 0.0007 | 0.0015 | 0.0034 | *Lower is better* |
 | **Jensen-Shannon (JSD)** | 0.0048 | 0.0068 | 0.0177 | *Lower is better* |
+
+### Compound Geometric Constraints (Disjoint Bounding Boxes)
+
+To scale geometric constraints to complex, non-convex, or fragmented regions, the architecture supports **Compound Bounding Boxes**. This allows the framework to route probability mass into multiple disjoint rectangular regions simultaneously while strictly preserving the global underlying density distribution.
+
+#### 1. The Area Mass Predictor
+Because a standard conditional Flow Matching model determines *where* points go inside a constraint but not *how many* points belong there, an auxiliary **Mass Predictor** network is introduced. This lightweight model evaluates arbitrary bounding boxes and accurately predicts the proportion of the true target distribution's probability mass that falls within them.
+
+**Mass Prediction Inference Examples:**
+<p align="center">
+  <img src="images/gmm_compound_bbox/mass_predictor_example_1.png" width="24%" alt="Mass Predictor 1">
+  <img src="images/gmm_compound_bbox/mass_predictor_example_2.png" width="24%" alt="Mass Predictor 2">
+  <img src="images/gmm_compound_bbox/mass_predictor_example_3.png" width="24%" alt="Mass Predictor 3">
+  <img src="images/gmm_compound_bbox/mass_predictor_example_4.png" width="24%" alt="Mass Predictor 4">
+</p>
+
+#### 2. Piece-wise Generative Reconstruction
+Using the predicted probabilities from the Mass Predictor, the constrained bounding box model is dynamically queried to generate the exact required proportion of samples for each disjoint region. This effectively reconstructs a highly complex, multi-region distribution via a generative Riemann sum, strictly preventing mass leakage into the void space between the boxes.
+
+**Example 1**
+<p align="center">
+  <img src="images/gmm_compound_bbox/example_1_target.png" width="45%" alt="Compound Target 1">
+  <img src="images/gmm_compound_bbox/example_1_samples.png" width="45%" alt="Compound Samples 1">
+</p>
+
+**Example 2**
+<p align="center">
+  <img src="images/gmm_compound_bbox/example_2_target.png" width="45%" alt="Compound Target 2">
+  <img src="images/gmm_compound_bbox/example_2_samples.png" width="45%" alt="Compound Samples 2">
+</p>
+
+**Example 3**
+<p align="center">
+  <img src="images/gmm_compound_bbox/example_3_target.png" width="45%" alt="Compound Target 3">
+  <img src="images/gmm_compound_bbox/example_3_samples.png" width="45%" alt="Compound Samples 3">
+</p>

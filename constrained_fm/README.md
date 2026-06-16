@@ -213,7 +213,7 @@ Because a standard conditional Flow Matching model determines *where* points go 
 #### 2. Piece-wise Generative Reconstruction
 Using the predicted probabilities from the Mass Predictor, the constrained bounding box model is dynamically queried to generate the exact required proportion of samples for each disjoint region. This effectively reconstructs a highly complex, multi-region distribution via a generative Riemann sum, strictly preventing mass leakage into the void space between the boxes.
 
-**Example 1**
+**Example 1 (Left - Target, Right - Samples)**
 <p align="center">
   <img src="images/gmm_compound_bbox/example_1_target.png" width="45%" alt="Compound Target 1">
   <img src="images/gmm_compound_bbox/example_1_samples.png" width="45%" alt="Compound Samples 1">
@@ -229,4 +229,10 @@ Using the predicted probabilities from the Mass Predictor, the constrained bound
 <p align="center">
   <img src="images/gmm_compound_bbox/example_3_target.png" width="45%" alt="Compound Target 3">
   <img src="images/gmm_compound_bbox/example_3_samples.png" width="45%" alt="Compound Samples 3">
+</p>
+
+**Tiles Example**
+<p align="center">
+  <img src="images/gmm_compound_bbox/tiles_example_target.png" width="45%" alt="Target with Compound BBoxes and Predicted Mass"><br><br>
+  <img src="images/gmm_compound_bbox/tiles_example_samples.png" width="90%" alt="Tiled Generation Samples vs Clean Target">
 </p>

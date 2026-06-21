@@ -47,3 +47,19 @@ def compute_gmm_density(means=GMM_MEANS, covs=GMM_COVS, weights=GMM_WEIGHTS, gri
         density = torch.exp(log_prob)
 
     return density
+
+
+def compute_gmm_log_likelihood(x, means=GMM_MEANS, covs=GMM_COVS, weights=GMM_WEIGHTS, device=None):
+    """
+    Computes log p(x) for the target GMM.
+    x: [N, 2]
+    """
+    means_t = torch.as_tensor(means, dtype=torch.float32, device=device)
+    covs_t = torch.as_tensor(covs, dtype=torch.float32, device=device)
+    weights_t = torch.as_tensor(weights, dtype=torch.float32, device=device)
+
+    mix = Categorical(weights_t)
+    comp = MultivariateNormal(means_t, covs_t)
+    gmm = MixtureSameFamily(mix, comp)
+
+    return gmm.log_prob(x)

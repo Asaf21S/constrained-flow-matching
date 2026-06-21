@@ -7,6 +7,7 @@ from constrained_fm.src.geometry.bounding_boxes import sample_bbox_around_points
 from constrained_fm.src.geometry.polynomials import compute_poly_features, evaluate_poly
 from constrained_fm.src.consts import POLYNOMIAL_DEGREE, PLANE_SCALE
 from constrained_fm.src.datasets.gmm_target import get_points
+from constrained_fm.src.inference.importance_sampling import estimate_mass_importance_sampling
 
 
 def visualize_sampled_polynomials(degree=POLYNOMIAL_DEGREE, num_samples=4,
@@ -61,7 +62,7 @@ def visualize_sampled_polynomials(degree=POLYNOMIAL_DEGREE, num_samples=4,
 
 
 def visualize_predicted_bbox_mass(predictor, gmm_true_pool, num_samples=4, width_range=(0.1, 7.0), plot_points=40000,
-                                  device=None):
+                                  model=None, device=None):
     """
     Visualizes randomly generated bounding boxes, the GMM points inside/outside them,
     and compares the neural network's predicted mass to the exact true mass.
@@ -101,6 +102,15 @@ def visualize_predicted_bbox_mass(predictor, gmm_true_pool, num_samples=4, width
 
         pred_mass = predicted_masses[i].item()
 
+        is_mass_str = ""
+        if model is not None:
+            is_mass = estimate_mass_importance_sampling(
+                model=model,
+                box=box.tolist(),
+                device=device
+            )
+            is_mass_str = f"\nIS Estimated Mass: {is_mass:.2f}%"
+
         ax.scatter(vis_pool_np[~plot_mask, 0], vis_pool_np[~plot_mask, 1],
                    c='lightgray', s=1, alpha=0.5, label='Outside')
         ax.scatter(vis_pool_np[plot_mask, 0], vis_pool_np[plot_mask, 1],
@@ -116,7 +126,7 @@ def visualize_predicted_bbox_mass(predictor, gmm_true_pool, num_samples=4, width
         ax.set_aspect('equal')
 
         title_color = 'black' if abs(pred_mass - true_mass) < 2.0 else 'red'
-        ax.set_title(f"Predicted Mass: {pred_mass:.2f}%\nTrue Mass: {true_mass:.2f}%",
+        ax.set_title(f"Predicted Mass: {pred_mass:.2f}%{is_mass_str}\nTrue Mass: {true_mass:.2f}%",
                      color=title_color, fontweight='bold')
 
         if i == 0:

@@ -276,7 +276,7 @@ def generate_dataset(
         lambda: _random_convex_polygon(num_vertices=random.randint(4, 8)),
     ]
 
-    for idx in tqdm(range(num_shapes), title="Generating shapes", unit="shape"):
+    for idx in tqdm(range(num_shapes), desc="Generating shapes", unit="shape"):
         # Choose a shape type uniformly at random.
         factory = random.choice(shape_factories)
         inside_fn, boundary_sampler, params = factory()

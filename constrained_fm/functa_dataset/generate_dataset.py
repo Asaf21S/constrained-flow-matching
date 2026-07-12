@@ -31,12 +31,10 @@ both are already part of this repository's environment.
 
 from __future__ import annotations
 
-import argparse
-import math
-import os
 import random
 from pathlib import Path
 from typing import Callable, List, Tuple
+from tqdm.auto import tqdm
 
 import numpy as np
 import torch
@@ -45,7 +43,6 @@ import torch
 # Geometry helpers ----------------------------------------------------------
 # ---------------------------------------------------------------------------
 
-# Domain limits – the original plan uses a square around the origin.
 DOMAIN_MIN = -4.5
 DOMAIN_MAX = 4.5
 DOMAIN_SIZE = DOMAIN_MAX - DOMAIN_MIN
@@ -70,17 +67,19 @@ def _uniform_points(num: int) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 def _random_box() -> Tuple[Callable[[np.ndarray], np.ndarray], Callable[[int], np.ndarray], dict]:
-    """Create a random axis‑aligned rectangle, with a fast boundary sampler.
-
-    Returns a tuple ``(inside_fn, boundary_sampler, params)``. ``boundary_sampler``
-    generates ``num`` points on the rectangle edges with a small jitter of
-    ``±EPSILON``.
-    """
-    # Choose centre and half‑widths uniformly but keep the box inside the domain.
-    cx = random.uniform(DOMAIN_MIN + 1.0, DOMAIN_MAX - 1.0)
-    cy = random.uniform(DOMAIN_MIN + 1.0, DOMAIN_MAX - 1.0)
+    # 1. Sample the half-widths first
     hw = random.uniform(0.25, 3.5)
     hh = random.uniform(0.25, 3.5)
+
+    # 2. Constrain the center so the box + jitter fits perfectly inside the domain
+    min_cx = DOMAIN_MIN + hw + EPSILON
+    max_cx = DOMAIN_MAX - hw - EPSILON
+    cx = random.uniform(min_cx, max_cx)
+
+    min_cy = DOMAIN_MIN + hh + EPSILON
+    max_cy = DOMAIN_MAX - hh - EPSILON
+    cy = random.uniform(min_cy, max_cy)
+
     x_min, x_max = cx - hw, cx + hw
     y_min, y_max = cy - hh, cy + hh
 
@@ -88,9 +87,9 @@ def _random_box() -> Tuple[Callable[[np.ndarray], np.ndarray], Callable[[int], n
         return (pts[:, 0] >= x_min) & (pts[:, 0] <= x_max) & (pts[:, 1] >= y_min) & (pts[:, 1] <= y_max)
 
     def sample_boundary(num: int) -> np.ndarray:
-        # Randomly assign points to one of the 4 edges.
         edges = np.random.randint(0, 4, size=(num,))
         pts = np.empty((num, 2), dtype=np.float32)
+
         # Top edge
         top_mask = edges == 0
         pts[top_mask, 0] = np.random.uniform(x_min, x_max, size=(top_mask.sum(),))
@@ -107,9 +106,12 @@ def _random_box() -> Tuple[Callable[[np.ndarray], np.ndarray], Callable[[int], n
         right_mask = edges == 3
         pts[right_mask, 0] = x_max
         pts[right_mask, 1] = np.random.uniform(y_min, y_max, size=(right_mask.sum(),))
-        # Apply jitter.
+
+        # Apply jitter
         jitter = np.random.uniform(-EPSILON, EPSILON, size=(num, 2))
-        return np.clip(pts + jitter, DOMAIN_MIN, DOMAIN_MAX)
+        pts += jitter
+
+        return np.clip(pts, DOMAIN_MIN, DOMAIN_MAX)  # leaving the clip for safety net against floating point errors.
 
     params = {"type": "box", "center": [cx, cy], "half_width": hw, "half_height": hh}
     return inside, sample_boundary, params
@@ -123,8 +125,10 @@ def _random_circle() -> Tuple[Callable[[np.ndarray], np.ndarray], Callable[[int]
     ``±EPSILON``.
     """
     radius = random.uniform(0.5, 3)
-    cx = random.uniform(DOMAIN_MIN + radius, DOMAIN_MAX - radius)
-    cy = random.uniform(DOMAIN_MIN + radius, DOMAIN_MAX - radius)
+    min_c = DOMAIN_MIN + radius + EPSILON
+    max_c = DOMAIN_MAX - radius - EPSILON
+    cx = random.uniform(min_c, max_c)
+    cy = random.uniform(min_c, max_c)
 
     def inside(pts: np.ndarray) -> np.ndarray:
         return ((pts[:, 0] - cx) ** 2 + (pts[:, 1] - cy) ** 2) <= radius ** 2
@@ -132,28 +136,35 @@ def _random_circle() -> Tuple[Callable[[np.ndarray], np.ndarray], Callable[[int]
     def sample_boundary(num: int) -> np.ndarray:
         # Sample random angles uniformly around the circle.
         theta = np.random.uniform(0, 2 * np.pi, size=(num,))
-        x = cx + radius * np.cos(theta)
-        y = cy + radius * np.sin(theta)
+
+        # Apply the jitter directly to the radius so it is truly perpendicular to the boundary
+        jittered_radius = radius + np.random.uniform(-EPSILON, EPSILON, size=(num,))
+
+        x = cx + jittered_radius * np.cos(theta)
+        y = cy + jittered_radius * np.sin(theta)
         pts = np.stack([x, y], axis=-1)
-        # Apply a small uniform jitter perpendicular to the boundary.
-        jitter = np.random.uniform(-EPSILON, EPSILON, size=(num, 2))
-        return np.clip(pts + jitter, DOMAIN_MIN, DOMAIN_MAX).astype(np.float32)
+
+        return np.clip(pts, DOMAIN_MIN, DOMAIN_MAX).astype(np.float32)  # floating-point safety net
 
     params = {"type": "circle", "center": [cx, cy], "radius": radius}
     return inside, sample_boundary, params
 
 
-def _random_convex_polygon(num_vertices: int = 5) -> Tuple[Callable[[np.ndarray], np.ndarray], Callable[[int], np.ndarray], dict]:
+def _random_convex_polygon(num_vertices: int = 5) -> Tuple[
+    Callable[[np.ndarray], np.ndarray], Callable[[int], np.ndarray], dict]:
     """Generate a simple convex polygon and a fast boundary sampler.
 
     Returns a tuple ``(inside_fn, boundary_sampler, params)``. The ``boundary_sampler``
     draws points uniformly along the polygon edges (weighted by edge length) and
-    adds a small ``±EPSILON`` jitter.
+    adds a small ``±EPSILON`` jitter strictly perpendicular to the edges.
     """
     num_vertices = max(3, min(num_vertices, 8))
-    # Generate random points in the domain, compute their convex hull.
-    pts = np.random.uniform(DOMAIN_MIN, DOMAIN_MAX, size=(num_vertices * 5, 2))
-    # Compute hull using a quick Graham‑scan implementation.
+
+    safe_min = DOMAIN_MIN + EPSILON
+    safe_max = DOMAIN_MAX - EPSILON
+    pts = np.random.uniform(safe_min, safe_max, size=(num_vertices * 5, 2))
+
+    # Compute hull using a quick Graham-scan implementation.
     def _cross(o, a, b):
         return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
 
@@ -170,11 +181,9 @@ def _random_convex_polygon(num_vertices: int = 5) -> Tuple[Callable[[np.ndarray]
         upper.append(p)
     hull = lower[:-1] + upper[:-1]
     hull = np.array(hull, dtype=np.float32)
-    # Ensure the polygon is within the domain – clip any out‑of‑bounds vertices.
-    hull = np.clip(hull, DOMAIN_MIN, DOMAIN_MAX)
 
     def inside(pts_test: np.ndarray) -> np.ndarray:
-        # Ray‑casting algorithm for point‑in‑polygon. Vectorised for speed.
+        # Ray-casting algorithm for point-in-polygon. Vectorised for speed.
         x, y = pts_test[:, 0], pts_test[:, 1]
         inside_mask = np.zeros_like(x, dtype=bool)
         n = hull.shape[0]
@@ -182,30 +191,39 @@ def _random_convex_polygon(num_vertices: int = 5) -> Tuple[Callable[[np.ndarray]
             x0, y0 = hull[i]
             x1, y1 = hull[(i + 1) % n]
             cond = ((y0 > y) != (y1 > y)) & (
-                x < (x1 - x0) * (y - y0) / (y1 - y0 + 1e-12) + x0
+                    x < (x1 - x0) * (y - y0) / (y1 - y0 + 1e-12) + x0
             )
             inside_mask ^= cond
         return inside_mask
 
     def sample_boundary(num: int) -> np.ndarray:
-        # Compute edge vectors and lengths.
         verts = hull
         edges = np.stack([verts[(i + 1) % len(verts)] - verts[i] for i in range(len(verts))])
         lengths = np.linalg.norm(edges, axis=1)
+
+        # Calculate true perpendicular normals for each edge.
+        # If edge vector is (dx, dy), normal is (-dy, dx) normalized.
+        normals = np.stack([-edges[:, 1], edges[:, 0]], axis=-1) / lengths[:, None]
+
         cum_lengths = np.cumsum(lengths)
         total_len = cum_lengths[-1]
-        # Sample a random distance along the perimeter for each point.
+
+        # Vectorized sampling
         distances = np.random.uniform(0, total_len, size=num)
-        points = np.empty((num, 2), dtype=np.float32)
-        for i, d in enumerate(distances):
-            edge_idx = np.searchsorted(cum_lengths, d)
-            prev_len = cum_lengths[edge_idx - 1] if edge_idx > 0 else 0.0
-            t = (d - prev_len) / lengths[edge_idx]
-            start = verts[edge_idx]
-            points[i] = start + t * edges[edge_idx]
-        # Jitter perpendicular to the edge direction (approximate with uniform jitter).
-        jitter = np.random.uniform(-EPSILON, EPSILON, size=(num, 2))
-        return np.clip(points + jitter, DOMAIN_MIN, DOMAIN_MAX).astype(np.float32)
+        edge_indices = np.searchsorted(cum_lengths, distances)
+
+        # Calculate interpolation factor 't' for all points simultaneously
+        prev_lengths = np.where(edge_indices > 0, cum_lengths[edge_indices - 1], 0.0)
+        t = (distances - prev_lengths) / lengths[edge_indices]
+
+        starts = verts[edge_indices]
+        points = starts + t[:, None] * edges[edge_indices]
+
+        # Apply strict perpendicular jitter
+        jitter_mags = np.random.uniform(-EPSILON, EPSILON, size=(num, 1))
+        points += jitter_mags * normals[edge_indices]
+
+        return np.clip(points, DOMAIN_MIN, DOMAIN_MAX).astype(np.float32)
 
     params = {"type": "polygon", "vertices": hull.tolist()}
     return inside, sample_boundary, params
@@ -258,7 +276,7 @@ def generate_dataset(
         lambda: _random_convex_polygon(num_vertices=random.randint(4, 8)),
     ]
 
-    for idx in range(num_shapes):
+    for idx in tqdm(range(num_shapes), title="Generating shapes", unit="shape"):
         # Choose a shape type uniformly at random.
         factory = random.choice(shape_factories)
         inside_fn, boundary_sampler, params = factory()
@@ -278,37 +296,5 @@ def generate_dataset(
     print(f"Dataset saved to {output_path.resolve()}")
 
 
-# ---------------------------------------------------------------------------
-# CLI entry point ----------------------------------------------------------
-# ---------------------------------------------------------------------------
-
-def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Generate the Functa spatial oracle dataset (Phase 1)")
-    parser.add_argument(
-        "--num_shapes",
-        type=int,
-        default=10_000,
-        help="Number of distinct geometric shapes to generate (default: 10 000)",
-    )
-    parser.add_argument(
-        "--points_per_shape",
-        type=int,
-        default=5_000,
-        help="Number of (x, y) samples per shape (default: 5 000)",
-    )
-    parser.add_argument(
-        "--output_path",
-        type=str,
-        default="data/functa_spatial_oracle.pt",
-        help="Path where the ``.pt`` file will be written",
-    )
-    return parser.parse_args()
-
-
 if __name__ == "__main__":
-    args = _parse_args()
-    generate_dataset(
-        num_shapes=args.num_shapes,
-        points_per_shape=args.points_per_shape,
-        output_path=args.output_path,
-    )
+    generate_dataset()

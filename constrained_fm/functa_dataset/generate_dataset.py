@@ -160,9 +160,18 @@ def _random_convex_polygon(num_vertices: int = 5) -> Tuple[
     """
     num_vertices = max(3, min(num_vertices, 8))
 
-    safe_min = DOMAIN_MIN + EPSILON
-    safe_max = DOMAIN_MAX - EPSILON
-    pts = np.random.uniform(safe_min, safe_max, size=(num_vertices * 5, 2))
+    # Determine a random local scale (similar to circle radius or box half-width)
+    scale = random.uniform(0.5, 3.5)
+
+    # Enforce Safe Bounds based on this local scale
+    safe_min = DOMAIN_MIN + scale + EPSILON
+    safe_max = DOMAIN_MAX - scale - EPSILON
+    cx = random.uniform(safe_min, safe_max)
+    cy = random.uniform(safe_min, safe_max)
+
+    # Generate initial points ONLY within this localized bounding box
+    local_pts = np.random.uniform(-scale, scale, size=(num_vertices * 5, 2))
+    pts = local_pts + np.array([cx, cy])
 
     # Compute hull using a quick Graham-scan implementation.
     def _cross(o, a, b):
@@ -225,7 +234,7 @@ def _random_convex_polygon(num_vertices: int = 5) -> Tuple[
 
         return np.clip(points, DOMAIN_MIN, DOMAIN_MAX).astype(np.float32)
 
-    params = {"type": "polygon", "vertices": hull.tolist()}
+    params = {"type": "polygon", "vertices": hull.tolist(), "center": [cx, cy], "scale": scale}
     return inside, sample_boundary, params
 
 

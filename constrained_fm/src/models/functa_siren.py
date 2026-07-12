@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Modulated SIREN model for Functa (Phase 2).
+"""Modulated SIREN model for Functa.
 
 The model implements a SIREN (Sinusoidal Representation Network) whose
 layers are modulated by a 256‑dimensional latent vector ``z`` via FiLM
@@ -62,7 +62,7 @@ class FiLMModulation(nn.Module):
 class ModulatedSIREN(nn.Module):
     """SIREN with FiLM modulation.
 
-    The architecture follows the plan in ``functa_plan.txt``:
+    The architecture is as follows:
     * Input dimension: 2 (x, y)
     * Latent dimension: 256 (z)
     * Hidden dimension: configurable (default 256)
@@ -142,9 +142,9 @@ class ModulatedSIREN(nn.Module):
 
 
 # Convenience factory used by training scripts.
-def build_modulated_siren(latent_dim: int = 256, hidden_dim: int = 256, n_layers: int = 4) -> ModulatedSIREN:
+def build_modulated_siren(latent_dim: int = 256, hidden_dim: int = 256, n_layers: int = 4, w0: float = 30.0) -> ModulatedSIREN:
     """Create a ``ModulatedSIREN`` with the default hyper‑parameters.
     The function mirrors the description in the plan and makes model
     creation explicit for downstream code.
     """
-    return ModulatedSIREN(latent_dim=latent_dim, hidden_dim=hidden_dim, n_layers=n_layers)
+    return ModulatedSIREN(latent_dim=latent_dim, hidden_dim=hidden_dim, n_layers=n_layers, w0=w0)

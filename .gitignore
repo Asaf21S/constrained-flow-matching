@@ -9,3 +9,7 @@
 *.env
 
 !constrained_fm/benchmark/validation_set.pt
+
+dummy_script.py
+logs/
+__pycache__/

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""Phase 3 – Functa extraction via latent optimisation.
+"""Phase 3 – Functa extraction via latent optimisation.
 
-The auto‑decoder (Phase 2) learns a universal modulated SIREN and an embedding
+The auto‑decoder (Phase 2) learns a universal modulated SIREN and an embedding
 table ``embed`` that maps each training shape index to a latent vector ``z``.
 When a *new* unseen constraint (e.g. a novel shape) is presented we must
 *extract* its Functa without retraining the SIREN.  The standard DeepSDF
@@ -11,9 +11,7 @@ shape.
 
 This module provides a single public helper ``extract_latent`` that performs
 the optimisation for one shape (or a batch of shapes via ``torch.func.vmap``
-if desired).  The implementation follows the plan described in
-``constrained_fm/functa_plan.txt``:
-
+if desired).  The implementation is as follows:
 1. Initialise ``z`` – either randomly or from the mean of the learned
    embedding table (the latter usually speeds up convergence).
 2. Freeze the SIREN parameters.
@@ -31,7 +29,7 @@ import torch
 import torch.nn as nn
 
 # Import the modulated SIREN definition.
-from ..models.functa_siren import ModulatedSIREN
+from constrained_fm.src.models.functa_siren import ModulatedSIREN
 # Import vmap for batched operations
 from torch.func import vmap
 
@@ -93,7 +91,7 @@ def extract_latent(
     else:
         device = torch.device(device)
     X = X.to(device)
-    Y = Y.to(device)
+    Y = Y.to(device, torch.float32)
 
     # Freeze SIREN parameters – we only optimise ``z``.
     siren.eval()

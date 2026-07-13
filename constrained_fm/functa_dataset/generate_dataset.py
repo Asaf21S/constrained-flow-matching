@@ -293,8 +293,6 @@ def generate_dataset(
         X_all.append(torch.from_numpy(X_shape))
         Y_all.append(torch.from_numpy(Y_shape))
         meta_shapes.append({"index": idx, **params})
-        if (idx + 1) % 500 == 0:
-            print(f"[Dataset] Generated {idx + 1}/{num_shapes} shapes")
 
     X_tensor = torch.stack(X_all)  # (N, M, 2)
     Y_tensor = torch.stack(Y_all)  # (N, M)

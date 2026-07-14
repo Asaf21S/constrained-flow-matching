@@ -13,3 +13,6 @@
 dummy_script.py
 logs/
 __pycache__/
+
+!constrained_fm/functa_dataset/embed_final.pt
+!constrained_fm/functa_dataset/siren_final.pt

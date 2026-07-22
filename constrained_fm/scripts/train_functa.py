@@ -8,6 +8,7 @@ import numpy as np
 
 from constrained_fm.functa_dataset.generate_dataset import generate_dataset
 from constrained_fm.src.models.functa_siren import build_modulated_siren
+from constrained_fm.src.inference.latent_extractor import extract_latents_batched
 
 # --- 1. Headless Device Setup ---
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -30,33 +31,42 @@ n_layers = 4
 w0 = 10.0
 num_samples = 1500
 
-save_every = 50          
-patience = 50            
-min_delta = 1e-4         
+save_every = 50
+patience = 250
+min_delta = 1e-4
 
 DOMAIN_MIN = -4.5
 DOMAIN_MAX = 4.5
 DOMAIN_SIZE = DOMAIN_MAX - DOMAIN_MIN
 EPSILON = 0.05
 
-data_path = base_dir / "test_spatial_dataset.pt"
-
-if not data_path.exists():
+train_data_path = base_dir / "train_spatial_dataset.pt"
+if not train_data_path.exists():
     print("Dataset not found. Generating...")
     generate_dataset(
-        num_shapes=10000,
+        num_shapes=100000,
         points_per_shape=5000,
-        output_path=data_path
+        output_path=train_data_path
     )
 else:
-    print(f"Loading existing dataset from {data_path}")
+    print(f"Loading existing dataset from {train_data_path}")
 
-data = torch.load(data_path, weights_only=True)
-X = data["X"]
-Y = data["Y"]
-meta = data["meta"]
-
+train_data = torch.load(train_data_path, weights_only=True)
+X = train_data["X"]
+Y = train_data["Y"]
 N, M, _ = X.shape
+
+val_data_path = base_dir / "val_spatial_dataset.pt"
+if not val_data_path.exists():
+    print("Validation dataset not found. Generating 100 shapes...")
+    generate_dataset(num_shapes=100, points_per_shape=5000, output_path=val_data_path)
+else:
+    print(f"Loading existing validation dataset from {val_data_path}")
+
+val_data = torch.load(val_data_path, weights_only=True)
+val_X = val_data["X"].to(device)
+val_Y = val_data["Y"].to(device, dtype=torch.float32)
+
 indices_tensor = torch.arange(N, dtype=torch.long)
 dataset = TensorDataset(indices_tensor, X, Y)
 loader = DataLoader(
@@ -82,12 +92,15 @@ embed.train()
 # siren = torch.compile(siren)
 
 loss_history = []
-best_loss = float('inf')
+val_loss_history = []
+best_val_loss = float('inf')
 patience_counter = 0
 
 for epoch in tqdm(range(1, epochs + 1), desc="Training Auto-Decoder"):
+    siren.train()
+    embed.train()
     epoch_loss = 0.0
-    # Unpack idx, X, Y from the DataLoader (indices are already shuffled correctly)
+    
     for idx_batch, X_batch, Y_batch in loader:
         B = X_batch.shape[0]
         perm = torch.randperm(X_batch.shape[1])[:num_samples]
@@ -96,12 +109,10 @@ for epoch in tqdm(range(1, epochs + 1), desc="Training Auto-Decoder"):
         X_batch = X_batch[:, perm, :].to(device)
         Y_batch = Y_batch[:, perm].to(device, dtype=torch.float32)
 
-        # Retrieve the corresponding latent vectors using the true shuffled indices
         z_batch = embed(idx_batch)
 
-        # Explicit in_dims to avoid silent broadcasting issues
-        preds = vmap(siren, in_dims=(0, 0))(X_batch, z_batch)  # (B, M, 1)
-        preds = preds.squeeze(-1)  # (B, M)
+        preds = vmap(siren, in_dims=(0, 0))(X_batch, z_batch)
+        preds = preds.squeeze(-1)
 
         loss = bce_loss(preds, Y_batch) + lambda_z * (z_batch ** 2).mean()
         optimizer.zero_grad(set_to_none=True)
@@ -111,33 +122,59 @@ for epoch in tqdm(range(1, epochs + 1), desc="Training Auto-Decoder"):
 
         epoch_loss += loss.item() * B
 
-    # Average loss per shape (BCELoss already averages over points)
     avg_loss = epoch_loss / N
     loss_history.append(avg_loss)
-
     scheduler.step(avg_loss)
 
     if epoch % 10 == 0 or epoch == 1:
         current_lr = optimizer.param_groups[0]['lr']
-        print(f"Epoch {epoch:04d} – avg BCE+L2 loss: {avg_loss:.6f} | LR: {current_lr:.2e}")
+        print(f"Epoch {epoch:04d} - Train BCE+L2 loss: {avg_loss:.6f} | LR: {current_lr:.2e}")
 
     if epoch % save_every == 0:
+        print(f"\n--- Running Validation Extraction (Epoch {epoch}) ---")
+        siren.eval()
+        
+        val_perm = torch.randperm(val_X.shape[1])[:num_samples]
+        val_X_sub = val_X[:, val_perm, :]
+        val_Y_sub = val_Y[:, val_perm]
+        
+        _, val_losses = extract_latents_batched(
+            siren=siren,
+            X_batch=val_X_sub,
+            Y_batch=val_Y_sub,
+            embed=embed, 
+            latent_dim=latent_dim,
+            lr=0.01,
+            steps=300,
+            lambda_z=lambda_z
+        )
+        
+        for p in siren.parameters():
+            p.requires_grad = True
+
+        torch.cuda.empty_cache()
+            
+        avg_val_loss = val_losses.mean().item()
+        val_loss_history.append((epoch, avg_val_loss))
+        print(f"Validation Extraction Loss: {avg_val_loss:.6f}\n")
+        
         torch.save(siren.state_dict(), checkpoint_dir / f"siren_ep{epoch:04d}.pt")
         torch.save(embed.state_dict(), checkpoint_dir / f"embed_ep{epoch:04d}.pt")
         
-    if best_loss - avg_loss > min_delta:
-        best_loss = avg_loss
-        patience_counter = 0
-        torch.save(siren.state_dict(), base_dir / "siren_best.pt")
-        torch.save(embed.state_dict(), base_dir / "embed_best.pt")
-    else:
-        patience_counter += 1
-        
-    if patience_counter >= patience:
-        print(f"\n[Early Stopping] Triggered at Epoch {epoch}! Loss hasn't improved by {min_delta} for {patience} epochs.")
-        break
+        if best_val_loss - avg_val_loss > min_delta:
+            best_val_loss = avg_val_loss
+            patience_counter = 0
+            torch.save(siren.state_dict(), base_dir / "siren_best.pt")
+            torch.save(embed.state_dict(), base_dir / "embed_best.pt")
+        else:
+            patience_counter += save_every
+            
+        if patience_counter >= patience:
+            print(f"\n[Early Stopping] Triggered at Epoch {epoch}! Validation loss hasn't improved by {min_delta} for {patience} epochs.")
+            break
 
 torch.save(siren.state_dict(), base_dir / "siren_final.pt")
 torch.save(embed.state_dict(), base_dir / "embed_final.pt")
 np.save(base_dir / "loss_history.npy", np.array(loss_history))
+np.save(base_dir / "val_loss_history.npy", np.array(val_loss_history))
 print(f"Training complete. Best models saved to {base_dir}")

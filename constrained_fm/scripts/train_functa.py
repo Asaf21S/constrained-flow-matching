@@ -139,4 +139,5 @@ for epoch in tqdm(range(1, epochs + 1), desc="Training Auto-Decoder"):
 
 torch.save(siren.state_dict(), base_dir / "siren_final.pt")
 torch.save(embed.state_dict(), base_dir / "embed_final.pt")
+np.save(base_dir / "loss_history.npy", np.array(loss_history))
 print(f"Training complete. Best models saved to {base_dir}")

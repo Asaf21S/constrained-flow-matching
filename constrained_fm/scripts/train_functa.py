@@ -1,180 +1,165 @@
 import torch
-from torch.func import vmap
 import torch.nn as nn
-from torch.utils.data import TensorDataset, DataLoader
 from tqdm import tqdm
 from pathlib import Path
 import numpy as np
 
-from constrained_fm.functa_dataset.generate_dataset import generate_dataset
+from constrained_fm.src.datasets.constraints import sample_valid_polynomials
+from constrained_fm.src.geometry.polynomials import compute_poly_features_batched, evaluate_poly_batched
 from constrained_fm.src.models.functa_siren import build_modulated_siren
-from constrained_fm.src.inference.latent_extractor import extract_latents_batched
 
-# --- 1. Headless Device Setup ---
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Executing on: {device}")
 
-# --- 2. Project Paths ---
-# Pointing to your cluster home directory
 base_dir = Path("/workspace/constrained_fm/functa_dataset/")
 checkpoint_dir = base_dir / "checkpoints"
 checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
-# --- 3. Hyperparameters ---
 epochs = 3000
+steps_per_epoch = 400  # 400 steps * 256 batch size = ~102,400 shapes per epoch
 batch_size = 256
-lr = 1e-4
-lambda_z = 1e-4
+points_per_shape = 1500
+
+# Meta-Learning (CAVIA) Hyperparameters
+outer_lr = 1e-4
+inner_lr = 1e-2
+inner_steps = 3  # Fast adaptation steps
+lambda_z = 1e-4  # L2 penalty on the context vector
+
 latent_dim = 256
 hidden_dim = 256
 n_layers = 4
 w0 = 10.0
-num_samples = 1500
+poly_degree = 3
+plane_scale = 4.5
 
 save_every = 50
 patience = 250
 min_delta = 1e-4
 
-DOMAIN_MIN = -4.5
-DOMAIN_MAX = 4.5
-DOMAIN_SIZE = DOMAIN_MAX - DOMAIN_MIN
-EPSILON = 0.05
 
-train_data_path = base_dir / "train_spatial_dataset.pt"
-if not train_data_path.exists():
-    print("Dataset not found. Generating...")
-    generate_dataset(
-        num_shapes=100000,
-        points_per_shape=5000,
-        output_path=train_data_path
-    )
-else:
-    print(f"Loading existing dataset from {train_data_path}")
+def generate_batch(batch_size, num_points):
+    """Generates an on-the-fly batch of polynomial constraints entirely in VRAM."""
+    C = sample_valid_polynomials(batch_size=batch_size, degree=poly_degree, scale=plane_scale, device=device)
 
-train_data = torch.load(train_data_path, weights_only=True)
-X = train_data["X"]
-Y = train_data["Y"]
-N, M, _ = X.shape
+    # Sample points in [-4.5, 4.5]
+    X = (torch.rand(batch_size, num_points, 2, device=device) * 9.0) - 4.5
+    X_scaled = X / plane_scale
 
-val_data_path = base_dir / "val_spatial_dataset.pt"
-if not val_data_path.exists():
-    print("Validation dataset not found. Generating 100 shapes...")
-    generate_dataset(num_shapes=100, points_per_shape=5000, output_path=val_data_path)
-else:
-    print(f"Loading existing validation dataset from {val_data_path}")
+    x_pow, y_pow = compute_poly_features_batched(X_scaled, degree=poly_degree)
+    P_vals = evaluate_poly_batched(x_pow, y_pow, C)
 
-val_data = torch.load(val_data_path, weights_only=True)
-val_X = val_data["X"].to(device)
-val_Y = val_data["Y"].to(device, dtype=torch.float32)
+    # Binary mask: 1 if P(x, y) <= 0, else 0
+    Y = (P_vals <= 0).to(torch.float32)
+    return X, Y
 
-indices_tensor = torch.arange(N, dtype=torch.long)
-dataset = TensorDataset(indices_tensor, X, Y)
-loader = DataLoader(
-    dataset,
-    batch_size=batch_size,
-    shuffle=True,
-    num_workers=0,  # Keep at 0 to avoid shared memory crashes on the cluster
-    pin_memory=(device.type == "cuda"),
-)
+
+print("Generating fixed holdout set of 100 polynomials for validation...")
+val_X, val_Y = generate_batch(batch_size=100, num_points=points_per_shape)
 
 siren = build_modulated_siren(latent_dim=latent_dim, hidden_dim=hidden_dim, n_layers=n_layers, w0=w0).to(device)
-embed = nn.Embedding(N, latent_dim).to(device)
-nn.init.normal_(embed.weight, mean=0.0, std=0.01)
-
-optimizer = torch.optim.Adam(list(siren.parameters()) + list(embed.parameters()), lr=lr, weight_decay=1e-5)
+optimizer = torch.optim.Adam(siren.parameters(), lr=outer_lr, weight_decay=1e-5)
 scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=25)
 bce_loss = nn.BCELoss()
-
-siren.train()
-embed.train()
-
-# Optional: Comment this out if it throws compilation errors on the cluster's CUDA drivers
-# siren = torch.compile(siren)
 
 loss_history = []
 val_loss_history = []
 best_val_loss = float('inf')
 patience_counter = 0
 
-for epoch in tqdm(range(1, epochs + 1), desc="Training Auto-Decoder"):
+for epoch in tqdm(range(1, epochs + 1), desc="Training CAVIA Functa"):
     siren.train()
-    embed.train()
     epoch_loss = 0.0
-    
-    for idx_batch, X_batch, Y_batch in loader:
-        B = X_batch.shape[0]
-        perm = torch.randperm(X_batch.shape[1])[:num_samples]
-        
-        idx_batch = idx_batch.to(device)
-        X_batch = X_batch[:, perm, :].to(device)
-        Y_batch = Y_batch[:, perm].to(device, dtype=torch.float32)
 
-        z_batch = embed(idx_batch)
+    for step in range(steps_per_epoch):
+        X_batch, Y_batch = generate_batch(batch_size, points_per_shape)
 
-        preds = vmap(siren, in_dims=(0, 0))(X_batch, z_batch)
-        preds = preds.squeeze(-1)
+        # Initialize zeroed z vectors. Requires gradients for autograd tracking.
+        z = torch.zeros(batch_size, latent_dim, device=device, requires_grad=True)
 
-        loss = bce_loss(preds, Y_batch) + lambda_z * (z_batch ** 2).mean()
+        for _ in range(inner_steps):
+            preds = siren(X_batch, z).squeeze(-1)
+            loss_inner = bce_loss(preds, Y_batch)
+
+            # Compute gradients of z with create_graph=True to allow outer loop backprop
+            grad_z = torch.autograd.grad(loss_inner, z, create_graph=True)[0]
+
+            # Manual SGD step for z
+            z = z - inner_lr * grad_z
+
         optimizer.zero_grad(set_to_none=True)
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(list(siren.parameters()) + list(embed.parameters()), max_norm=1.0)
+
+        # Evaluate the adapted z on the task
+        preds_adapted = siren(X_batch, z).squeeze(-1)
+
+        # Compute final loss (BCE + L2 Regularization on z to prevent extreme modulation)
+        loss_outer = bce_loss(preds_adapted, Y_batch) + lambda_z * (z ** 2).mean()
+
+        # Backpropagate through the inner loop graph into the SIREN base weights
+        loss_outer.backward()
+        torch.nn.utils.clip_grad_norm_(siren.parameters(), max_norm=1.0)
         optimizer.step()
 
-        epoch_loss += loss.item() * B
+        epoch_loss += loss_outer.item()
 
-    avg_loss = epoch_loss / N
+    avg_loss = epoch_loss / steps_per_epoch
     loss_history.append(avg_loss)
     scheduler.step(avg_loss)
 
     if epoch % 10 == 0 or epoch == 1:
         current_lr = optimizer.param_groups[0]['lr']
-        print(f"Epoch {epoch:04d} - Train BCE+L2 loss: {avg_loss:.6f} | LR: {current_lr:.2e}")
+        print(f"Epoch {epoch:04d} - Outer BCE+L2 Loss: {avg_loss:.6f} | LR: {current_lr:.2e}")
 
     if epoch % save_every == 0:
-        print(f"\n--- Running Validation Extraction (Epoch {epoch}) ---")
+        print(f"\n--- Running Validation Inference (Epoch {epoch}) ---")
         siren.eval()
-        
-        val_perm = torch.randperm(val_X.shape[1])[:num_samples]
-        val_X_sub = val_X[:, val_perm, :]
-        val_Y_sub = val_Y[:, val_perm]
-        
-        _, val_losses = extract_latents_batched(
-            siren=siren,
-            X_batch=val_X_sub,
-            Y_batch=val_Y_sub,
-            embed=embed, 
-            latent_dim=latent_dim,
-            lr=0.01,
-            steps=300,
-            lambda_z=lambda_z
-        )
-        
-        for p in siren.parameters():
-            p.requires_grad = True
 
-        torch.cuda.empty_cache()
-            
-        avg_val_loss = val_losses.mean().item()
+        # Initialize validation z vectors
+        z_val = torch.zeros(val_X.shape[0], latent_dim, device=device, requires_grad=True)
+
+        # Rigorous inference optimization identical to test-time
+        val_opt = torch.optim.Adam([z_val], lr=0.01)
+        val_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(val_opt, T_max=300, eta_min=1e-5)
+
+        for _ in range(300):
+            val_opt.zero_grad(set_to_none=True)
+            preds_val = siren(val_X, z_val).squeeze(-1)
+
+            # Per-shape BCE loss + penalty
+            bce = nn.BCELoss(reduction='none')(preds_val, val_Y).mean(dim=1)
+            penalty = lambda_z * (z_val ** 2).mean(dim=1)
+            loss_val = (bce + penalty).mean()
+
+            loss_val.backward()
+            val_opt.step()
+            val_scheduler.step()
+
+        with torch.no_grad():
+            preds_final = siren(val_X, z_val).squeeze(-1)
+            avg_val_loss = bce_loss(preds_final, val_Y).item()
+
         val_loss_history.append((epoch, avg_val_loss))
         print(f"Validation Extraction Loss: {avg_val_loss:.6f}\n")
-        
+
+        torch.cuda.empty_cache()
+
+        # Save checkpoints
         torch.save(siren.state_dict(), checkpoint_dir / f"siren_ep{epoch:04d}.pt")
-        torch.save(embed.state_dict(), checkpoint_dir / f"embed_ep{epoch:04d}.pt")
-        
+
+        # Early Stopping
         if best_val_loss - avg_val_loss > min_delta:
             best_val_loss = avg_val_loss
             patience_counter = 0
             torch.save(siren.state_dict(), base_dir / "siren_best.pt")
-            torch.save(embed.state_dict(), base_dir / "embed_best.pt")
         else:
             patience_counter += save_every
-            
+
         if patience_counter >= patience:
-            print(f"\n[Early Stopping] Triggered at Epoch {epoch}! Validation loss hasn't improved by {min_delta} for {patience} epochs.")
+            print(f"\n[Early Stopping] Triggered at Epoch {epoch}!")
             break
 
 torch.save(siren.state_dict(), base_dir / "siren_final.pt")
-torch.save(embed.state_dict(), base_dir / "embed_final.pt")
 np.save(base_dir / "loss_history.npy", np.array(loss_history))
 np.save(base_dir / "val_loss_history.npy", np.array(val_loss_history))
-print(f"Training complete. Best models saved to {base_dir}")
+
+print(f"Training complete. Best model saved to {base_dir}")

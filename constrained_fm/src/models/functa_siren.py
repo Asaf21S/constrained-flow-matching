@@ -1,58 +1,35 @@
 # -*- coding: utf-8 -*-
-"""Modulated SIREN model for Functa.
-
-The model implements a SIREN (Sinusoidal Representation Network) whose
-layers are modulated by a 256‑dimensional latent vector ``z`` via FiLM
-(scale ``γ`` and shift ``β``). The modulation network is a small MLP that
-maps ``z`` to the per‑layer ``γ``/``β`` parameters.
-
-*Input*
-    - ``x``: tensor of shape ``(..., 2)`` – 2‑D coordinates.
-    - ``z``: tensor of shape ``(..., 256)`` – Functa latent vector.
-*Output*
-    - ``p``: probability inside the shape, ``(..., 1)`` after ``sigmoid``.
-"""
+"""Modulated SIREN model for CAVIA / Functa Meta-Learning."""
 
 from __future__ import annotations
 
 import math
-
 import torch
 import torch.nn as nn
 
 
 class FiLMModulation(nn.Module):
-    """Maps a latent vector ``z`` to FiLM parameters for each SIREN layer.
+    """Linear mapping from context vector z to layer-wise FiLM parameters.
 
-    Returns ``γ`` and ``β`` tensors of shape ``(n_layers, hidden)`` for a single
-    latent vector (vmap‑compatible). At initialization the modulation is the
-    identity (``γ = 0``, ``β = 0``) so the base SIREN functions unchanged.
+    Maps z of shape (..., 256) to gamma and beta of shape (..., n_layers, hidden_dim).
+    Initialized to zero so z = 0 corresponds to identity modulation.
     """
 
     def __init__(self, latent_dim: int = 256, hidden_dim: int = 256, n_layers: int = 4):
         super().__init__()
         self.n_layers = n_layers
         self.hidden_dim = hidden_dim
-        # Two‑layer MLP to produce FiLM parameters.
-        self.net = nn.Sequential(
-            nn.Linear(latent_dim, hidden_dim),
-            nn.ReLU(inplace=True),
-            nn.Linear(hidden_dim, n_layers * hidden_dim * 2),
-        )
-        # Initialise final linear layer to zero so modulation starts as identity.
-        nn.init.zeros_(self.net[-1].weight)
-        nn.init.zeros_(self.net[-1].bias)
+
+        # Single linear layer for smooth context projection
+        self.proj = nn.Linear(latent_dim, n_layers * hidden_dim * 2)
+
+        # Initialize to zero: at z=0, gamma=0 and beta=0 (identity transformation)
+        nn.init.zeros_(self.proj.weight)
+        nn.init.zeros_(self.proj.bias)
 
     def forward(self, z: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        """Compute FiLM parameters robustly.
-
-        Supports both a single latent vector ``z`` of shape ``(latent_dim,)`` and a
-        batched tensor ``z`` of shape ``(B, latent_dim)``. The final dimensions are
-        reshaped to ``(..., n_layers, hidden_dim * 2)`` while preserving any leading
-        batch dimensions.
-        """
-        out = self.net(z)  # (..., n_layers * hidden_dim * 2)
-        # Append ``n_layers`` and ``hidden_dim*2`` to the existing shape.
+        # out shape: (..., n_layers * hidden_dim * 2)
+        out = self.proj(z)
         new_shape = out.shape[:-1] + (self.n_layers, self.hidden_dim * 2)
         out = out.view(*new_shape)
         gamma, beta = out.chunk(2, dim=-1)  # each (..., n_layers, hidden_dim)
@@ -60,14 +37,13 @@ class FiLMModulation(nn.Module):
 
 
 class ModulatedSIREN(nn.Module):
-    """SIREN with FiLM modulation.
+    """SIREN with FiLM modulation supporting native 2D and 3D batched inputs.
 
-    The architecture is as follows:
-    * Input dimension: 2 (x, y)
-    * Latent dimension: 256 (z)
-    * Hidden dimension: configurable (default 256)
-    * Number of hidden sinusoidal layers: configurable (default 4)
-    * Final output: scalar passed through ``sigmoid``.
+    Input shapes:
+        - x: (M, 2) or (B, M, 2)
+        - z: (256,) or (B, 256)
+    Output shape:
+        - p: (M, 1) or (B, M, 1)
     """
 
     def __init__(self, latent_dim: int = 256, hidden_dim: int = 256, n_layers: int = 4, w0: float = 30.0):
@@ -77,74 +53,61 @@ class ModulatedSIREN(nn.Module):
         self.n_layers = n_layers
         self.w0 = w0
 
-        # First linear layer maps 2‑D coordinates to hidden.
         self.input_linear = nn.Linear(2, hidden_dim)
-        # Hidden sinusoidal layers (no bias – bias is handled by FiLM).
         self.hidden_linears = nn.ModuleList([
             nn.Linear(hidden_dim, hidden_dim, bias=False) for _ in range(n_layers)
         ])
-        # Final linear to scalar.
         self.output_linear = nn.Linear(hidden_dim, 1)
-        # Modulation network.
         self.film = FiLMModulation(latent_dim, hidden_dim, n_layers)
-        # Initialise weights as suggested for SIREN.
+
         self._init_weights()
 
     def _init_weights(self) -> None:
-        """Apply Sitzmann SIREN initialization.
-
-        * Input layer: Uniform[-1/in_features, 1/in_features] (in_features=2).
-        * Hidden layers: Uniform[-sqrt(6/hidden_dim)/w0, sqrt(6/hidden_dim)/w0].
-        The output layer uses a standard Xavier init.
-        """
-        # Input layer bound = 1 / in_features (2).
+        """Apply Sitzmann SIREN initialization."""
         bound_in = 1.0 / 2.0
         nn.init.uniform_(self.input_linear.weight, -bound_in, bound_in)
         nn.init.constant_(self.input_linear.bias, 0.0)
 
-        # Hidden layers bound = sqrt(6 / hidden_dim) / w0.
         bound_hidden = math.sqrt(6.0 / self.hidden_dim) / self.w0
         for lin in self.hidden_linears:
             nn.init.uniform_(lin.weight, -bound_hidden, bound_hidden)
 
-        # Output layer uses Xavier uniform.
         nn.init.xavier_uniform_(self.output_linear.weight)
         nn.init.constant_(self.output_linear.bias, 0.0)
 
     def forward(self, x: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
-        """Forward pass (vmap‑compatible).
+        """Forward pass supporting both unbatched (M, 2) and batched (B, M, 2) inputs.
 
         Args:
-            x: ``(M, 2)`` coordinate tensor for a single shape.
-            z: ``(latent_dim,)`` Functa latent vector.
-        Returns:
-            ``(M, 1)`` probability after ``sigmoid``.
-        """
-        # Compute FiLM parameters for the single latent vector.
-        gamma, beta = self.film(z)  # (n_layers, hidden)
+            x: (M, 2) or (B, M, 2) spatial coordinates.
+            z: (256,) or (B, 256) context vectors.
 
-        # Input linear + SIREN activation.
-        h = self.input_linear(x)  # (M, hidden)
+        Returns:
+            (M, 1) or (B, M, 1) predictions in [0, 1].
+        """
+        is_batched = x.dim() == 3  # True if (B, M, 2)
+
+        gamma, beta = self.film(z)  # (n_layers, hidden) or (B, n_layers, hidden)
+
+        h = self.input_linear(x)    # (M, hidden) or (B, M, hidden)
         h = torch.sin(self.w0 * h)
 
-        # Apply hidden layers with FiLM (identity at init).
         for i, lin in enumerate(self.hidden_linears):
-            g = gamma[i]  # (hidden,)
-            b = beta[i]   # (hidden,)
             h = lin(h)
-            # (1 + g) ensures identity scaling initially.
-            h = torch.sin(self.w0 * ((1 + g) * h + b))
+            if is_batched:
+                # gamma[:, i]: (B, hidden) -> unsqueeze to (B, 1, hidden) for broadcasting over M points
+                g = gamma[:, i].unsqueeze(1)
+                b = beta[:, i].unsqueeze(1)
+            else:
+                g = gamma[i]
+                b = beta[i]
 
-        # Output linear → sigmoid.
+            h = torch.sin(self.w0 * ((1.0 + g) * h + b))
+
         out = self.output_linear(h)
         out = torch.sigmoid(out)
         return out
 
 
-# Convenience factory used by training scripts.
 def build_modulated_siren(latent_dim: int = 256, hidden_dim: int = 256, n_layers: int = 4, w0: float = 30.0) -> ModulatedSIREN:
-    """Create a ``ModulatedSIREN`` with the default hyper‑parameters.
-    The function mirrors the description in the plan and makes model
-    creation explicit for downstream code.
-    """
     return ModulatedSIREN(latent_dim=latent_dim, hidden_dim=hidden_dim, n_layers=n_layers, w0=w0)

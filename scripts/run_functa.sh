@@ -9,9 +9,8 @@
 #SBATCH --mem=32G
 #SBATCH --mail-user=asafucho@gmail.com
 #SBATCH --mail-type=BEGIN,END,FAIL
-#SBATCH --exclude=dgx04
 
-echo "Starting Functa Auto-Decoder training..."
+echo "Starting Functa meta-learning training..."
 
 export ENROOT_CACHE_PATH=/users/rosenbaum/asolomiak/.enroot_cache
 mkdir -p $ENROOT_CACHE_PATH

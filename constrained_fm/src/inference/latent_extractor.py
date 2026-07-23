@@ -121,31 +121,15 @@ def extract_latent(
 
 
 def extract_latents_batched(
-    siren: ModulatedSIREN,
-    X_batch: torch.Tensor,
-    Y_batch: torch.Tensor,
-    embed: Optional[nn.Embedding] = None,
-    latent_dim: int = 256,
-    lr: float = 1e-2,
-    steps: int = 500,
-    lambda_z: float = 1e-4,
+        siren: nn.Module,
+        X_batch: torch.Tensor,
+        Y_batch: torch.Tensor,
+        embed: Optional[nn.Module] = None,
+        latent_dim: int = 256,
+        lr: float = 0.01,
+        steps: int = 1500,
+        lambda_z: float = 1e-4,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    """Optimise a batch of latent vectors simultaneously using vmap.
-
-    Args:
-        siren: Trained ``ModulatedSIREN`` (weights frozen).
-        X_batch: Tensor of shape ``(B, M, 2)`` – sampled points for each shape.
-        Y_batch: Tensor of shape ``(B, M)`` – binary labels for each shape.
-        embed: Optional embedding table for initializing latents.
-        latent_dim: Dimensionality of the latent space.
-        lr: Learning rate for Adam.
-        steps: Number of optimisation iterations.
-        lambda_z: L2 regularisation coefficient (must match training).
-
-    Returns:
-        A tuple ``(z_opt, final_losses)`` where ``z_opt`` has shape ``(B, latent_dim)``
-        and ``final_losses`` is a tensor ``(B,)`` of the final BCE+L2 loss per shape.
-    """
     device = X_batch.device
     B = X_batch.shape[0]
 
@@ -159,22 +143,26 @@ def extract_latents_batched(
     z_batch.requires_grad_(True)
 
     optimizer = torch.optim.Adam([z_batch], lr=lr)
-    loss_fn = nn.BCELoss(reduction='none')  # per-element loss
+
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=steps, eta_min=1e-5)
+
+    loss_fn = nn.BCELoss(reduction='none')
 
     for _ in range(steps):
         optimizer.zero_grad(set_to_none=True)
-        # Vectorized forward pass over batch using vmap
-        preds = vmap(siren, in_dims=(0, 0))(X_batch, z_batch).squeeze(-1)  # (B, M)
-        # Compute BCE loss per shape (mean over points)
-        bce_losses = loss_fn(preds, Y_batch).mean(dim=1)  # (B,)
-        # L2 regularisation per shape
-        l2_penalties = lambda_z * (z_batch ** 2).mean(dim=1)  # (B,)
+
+        preds = vmap(siren, in_dims=(0, 0))(X_batch, z_batch).squeeze(-1)
+        bce_losses = loss_fn(preds, Y_batch).mean(dim=1)
+        l2_penalties = lambda_z * (z_batch ** 2).mean(dim=1)
+
         total_losses = bce_losses + l2_penalties
         loss = total_losses.mean()
+
         loss.backward()
         optimizer.step()
 
-    # After final step, compute final per-shape losses for return
+        scheduler.step()
+
     with torch.no_grad():
         preds = vmap(siren, in_dims=(0, 0))(X_batch, z_batch).squeeze(-1)
         bce_losses = loss_fn(preds, Y_batch).mean(dim=1)

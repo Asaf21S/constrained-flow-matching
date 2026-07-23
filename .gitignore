@@ -14,5 +14,7 @@ dummy_script.py
 logs/
 __pycache__/
 
-!constrained_fm/functa_dataset/embed_final.pt
-!constrained_fm/functa_dataset/siren_final.pt
+!constrained_fm/functa_dataset/embed_best.pt
+!constrained_fm/functa_dataset/siren_best.pt
+!constrained_fm/functa_dataset/loss_history.npy
+!constrained_fm/functa_dataset/val_loss_history.npy

@@ -25,13 +25,13 @@ points_per_shape = 1500
 # Meta-Learning (CAVIA) Hyperparameters
 outer_lr = 1e-4
 inner_lr = 1e-2
-inner_steps = 3  # Fast adaptation steps
+inner_steps = 5  # Fast adaptation steps
 lambda_z = 1e-4  # L2 penalty on the context vector
 
-latent_dim = 256
-hidden_dim = 256
+latent_dim = 512
+hidden_dim = 512
 n_layers = 4
-w0 = 10.0
+w0 = 30.0
 poly_degree = 3
 plane_scale = 4.5
 

@@ -23,8 +23,7 @@ class FiLMModulation(nn.Module):
         # Single linear layer for smooth context projection
         self.proj = nn.Linear(latent_dim, n_layers * hidden_dim * 2)
 
-        # Initialize to zero: at z=0, gamma=0 and beta=0 (identity transformation)
-        nn.init.zeros_(self.proj.weight)
+        nn.init.xavier_uniform_(self.proj.weight)
         nn.init.zeros_(self.proj.bias)
 
     def forward(self, z: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:

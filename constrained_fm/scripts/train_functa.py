@@ -5,8 +5,10 @@ from pathlib import Path
 import numpy as np
 
 from constrained_fm.src.datasets.constraints import sample_valid_polynomials
-from constrained_fm.src.geometry.polynomials import compute_poly_features_batched, evaluate_poly_batched
+from constrained_fm.src.geometry.polynomials import compute_poly_features, compute_poly_features_batched, evaluate_poly_batched
 from constrained_fm.src.models.functa_siren import build_modulated_siren
+from constrained_fm.src.datasets.gmm_target import get_points
+
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Executing on: {device}")
@@ -17,7 +19,7 @@ checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
 epochs = 3000
 steps_per_epoch = 400  # 400 steps * 256 batch size = ~102,400 shapes per epoch
-batch_size = 256
+batch_size = 32
 points_per_shape = 1500
 
 # Meta-Learning (CAVIA) Hyperparameters
@@ -38,9 +40,23 @@ patience = 250
 min_delta = 1e-4
 
 
+print("Precomputing proxy features for rejection sampling...")
+proxy_x, _ = get_points(batch_size=10000, device=device)
+proxy_x = proxy_x.to(device)
+global_proxy_x_pow, global_proxy_y_pow = compute_poly_features(proxy_x, degree=poly_degree, scale=plane_scale)
+global_proxy_x_pow = global_proxy_x_pow.to(device)
+global_proxy_y_pow = global_proxy_y_pow.to(device)
+
 def generate_batch(batch_size, num_points):
     """Generates an on-the-fly batch of polynomial constraints entirely in VRAM."""
-    C = sample_valid_polynomials(batch_size=batch_size, degree=poly_degree, scale=plane_scale, device=device)
+    C = sample_valid_polynomials(
+        batch_size=batch_size,
+        degree=poly_degree,
+        scale=plane_scale,
+        proxy_x_pow=global_proxy_x_pow,
+        proxy_y_pow=global_proxy_y_pow,
+        device=device
+    )
 
     # Sample points in [-4.5, 4.5]
     X = (torch.rand(batch_size, num_points, 2, device=device) * 9.0) - 4.5

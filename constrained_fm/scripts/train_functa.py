@@ -58,11 +58,9 @@ def generate_batch(batch_size, num_points):
         device=device
     )
 
-    # Sample points in [-4.5, 4.5]
-    X = (torch.rand(batch_size, num_points, 2, device=device) * 9.0) - 4.5
-    X_scaled = X / plane_scale
+    X = (torch.rand(batch_size, num_points, 2, device=device) * 2) - 1
 
-    x_pow, y_pow = compute_poly_features_batched(X_scaled, degree=poly_degree)
+    x_pow, y_pow = compute_poly_features_batched(X, degree=poly_degree)
     P_vals = evaluate_poly_batched(x_pow, y_pow, C)
 
     # Binary mask: 1 if P(x, y) <= 0, else 0

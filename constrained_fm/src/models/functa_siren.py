@@ -104,7 +104,6 @@ class ModulatedSIREN(nn.Module):
             h = torch.sin(self.w0 * ((1.0 + g) * h + b))
 
         out = self.output_linear(h)
-        out = torch.sigmoid(out)
         return out
 
 

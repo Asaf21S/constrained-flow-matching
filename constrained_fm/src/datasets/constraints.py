@@ -1,13 +1,17 @@
+from __future__ import annotations
+
 import torch
 from tqdm import tqdm
 
-from constrained_fm.src.consts import POLYNOMIAL_DEGREE, PLANE_SCALE
+from constrained_fm.src.consts import POLYNOMIAL_DEGREE, PLANE_SCALE, POLY_MIN_AREA_RATIO, POLY_MAX_AREA_RATIO
 from constrained_fm.src.datasets.gmm_target import get_points
 from constrained_fm.src.geometry.polynomials import compute_poly_features
 
 
-def sample_valid_polynomials(batch_size, degree=POLYNOMIAL_DEGREE, scale=PLANE_SCALE, proxy_x_pow=None, proxy_y_pow=None,
-                             min_area=0.05, max_area=0.95, device=None):
+def sample_valid_polynomials(batch_size: int, degree: int = POLYNOMIAL_DEGREE, scale: float = PLANE_SCALE,
+                              proxy_x_pow: torch.Tensor | None = None, proxy_y_pow: torch.Tensor | None = None,
+                              min_area: float = POLY_MIN_AREA_RATIO, max_area: float = POLY_MAX_AREA_RATIO,
+                              device: torch.device | str | None = None) -> torch.Tensor:
     """
     Sample polynomial coefficients that yield a valid region (area ratio between min_area and max_area).
     Args:
@@ -54,7 +58,8 @@ def sample_valid_polynomials(batch_size, degree=POLYNOMIAL_DEGREE, scale=PLANE_S
     return valid_C / (C_norm + 1e-8)
 
 
-def sample_bbox_around_points(x_1: torch.Tensor, width_range, device=None):
+def sample_bbox_around_points(x_1: torch.Tensor, width_range: tuple[float, float],
+                               device: torch.device | str | None = None) -> torch.Tensor:
     """Sample axis‑aligned bounding boxes around each point in ``x_1``."""
     if device is None:
         device = x_1.device
@@ -66,7 +71,9 @@ def sample_bbox_around_points(x_1: torch.Tensor, width_range, device=None):
     return torch.cat([a, b], dim=-1)
 
 
-def generate_mass_dataset_anchored(gmm_true_pool: torch.Tensor, num_boxes=50000, width_range=(0.1, 7.0), device=None):
+def generate_mass_dataset_anchored(gmm_true_pool: torch.Tensor, num_boxes: int = 50000,
+                                    width_range: tuple[float, float] = (0.1, 7.0),
+                                    device: torch.device | str | None = None) -> tuple[torch.Tensor, torch.Tensor]:
     """Create a dataset of anchored boxes with their true probability mass.
 
     The function samples random points from ``gmm_true_pool`` to act as box anchors,

@@ -10,7 +10,7 @@ The main directory currently in use is the constrained_fm/ folder. Ignore constr
 ## The Thesis Core Ideas
 * **The Goal:** Generating data strictly inside mathematically defined constraints using generative models without relying on slow, traditional rejection-sampling simulations.
 * Extracting continuous functional embeddings (Functas) of complex geometric constraints (cubic polynomials). We meta-learn a SIREN (Sinusoidal Representation Network) using CAVIA (Context-dependent Upper-bound Integrated Neural Architectures).
-* Multi-Agent Flow Matching. We will feed the extracted Functa embedding $z$ into a multi-agent Flow Matching network to dictate constraint boundaries, effectively guiding the generative generation of points strictly inside the valid target regions, while preserving the underlying distribution in this region.
+* Functa-Conditioned Flow Matching. We will feed the extracted Functa embedding $z$ into a conditional Flow Matching network to dictate constraint boundaries, effectively guiding the generative generation of points strictly inside the valid target regions, while preserving the underlying distribution in this region.
 
 ## Motivation & Particle Physics Context
 * **The Bottleneck:** In particle physics (e.g., at CERN), scientists use "kinematic cuts" (like evaluating Invariant Mass: $M=\sqrt{E^{2}-{p_{x}}^{2}-{p_{y}}^{2}-{p_{z}}^{2}}$) to isolate rare collision events. Generating valid samples inside these cuts currently requires running full, computationally expensive Geant4 simulations, which can take up to 10 minutes per event.
@@ -25,6 +25,14 @@ The main directory currently in use is the constrained_fm/ folder. Ignore constr
 * Include detailed type hints for all function signatures.
 * Write rich docstrings explaining the mathematical intent behind tensor manipulations.
 * Avoid magic numbers; extract spatial scales, network frequencies, and optimization steps into clear variables or hyperparameter dictionaries.
+
+## Strict Commenting & Verbosity Rules
+* **NEVER write narrative comments.** Do not explain the history of a variable, why it was changed, or what bugs it fixes.
+* **Comments must describe current behavior only, never past behavior, decisions, or reasoning for changes.**
+* **Keep inline comments and docstrings aggressively concise.** Limit explanations of constants and variables to 1-2 lines maximum.
+* **Hard cap: max 1 line per comment, no exceptions.**
+* **Do not cross-reference files unnecessarily.** Do not list out every module that imports or uses a constant or a function.
+* **Assume developer competence.** You do not need to over-explain standard Python practices or basic variable assignments, keeping the actual code artifacts clean and minimal.
 
 ## Debugging Guidelines
 * **Tensor Alignment:** Always verify batch dimensions, tensor shapes, and device placement (`.to(device)`).

@@ -4,6 +4,7 @@ from tqdm import tqdm
 from pathlib import Path
 import numpy as np
 
+from constrained_fm.src.consts import POLYNOMIAL_DEGREE, PLANE_SCALE
 from constrained_fm.src.datasets.constraints import sample_valid_polynomials
 from constrained_fm.src.geometry.polynomials import compute_poly_features, compute_poly_features_batched, evaluate_poly_batched
 from constrained_fm.src.models.functa_siren import build_modulated_siren
@@ -13,12 +14,13 @@ from constrained_fm.src.datasets.gmm_target import get_points
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Executing on: {device}")
 
-base_dir = Path("/workspace/constrained_fm/functa_dataset/")
+repo_root = Path(__file__).resolve().parents[1]
+base_dir = repo_root / "functa_dataset"
 checkpoint_dir = base_dir / "checkpoints"
 checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
 epochs = 3000
-steps_per_epoch = 400  # 400 steps * 256 batch size = ~102,400 shapes per epoch
+steps_per_epoch = 400  # 400 steps * 32 batch size = 12,800 shapes per epoch
 batch_size = 32
 points_per_shape = 1500
 
@@ -32,8 +34,8 @@ latent_dim = 512
 hidden_dim = 512
 n_layers = 4
 w0 = 30.0
-poly_degree = 3
-plane_scale = 4.5
+poly_degree = POLYNOMIAL_DEGREE
+plane_scale = PLANE_SCALE
 
 save_every = 50
 patience = 250
@@ -47,8 +49,18 @@ global_proxy_x_pow, global_proxy_y_pow = compute_poly_features(proxy_x, degree=p
 global_proxy_x_pow = global_proxy_x_pow.to(device)
 global_proxy_y_pow = global_proxy_y_pow.to(device)
 
-def generate_batch(batch_size, num_points):
-    """Generates an on-the-fly batch of polynomial constraints entirely in VRAM."""
+def generate_batch(batch_size: int, num_points: int) -> tuple[torch.Tensor, torch.Tensor]:
+    """Generates an on-the-fly batch of polynomial constraints entirely in VRAM.
+
+    Args:
+        batch_size: number of independent polynomial constraint "shapes" (tasks).
+        num_points: number of query points sampled per shape.
+
+    Returns:
+        X: (batch_size, num_points, 2) query coordinates in the canonical
+            SIREN input domain [-1, 1]^2.
+        Y: (batch_size, num_points) regression targets tanh(P(x, y)) in (-1, 1).
+    """
     C = sample_valid_polynomials(
         batch_size=batch_size,
         degree=poly_degree,
@@ -60,7 +72,7 @@ def generate_batch(batch_size, num_points):
 
     X = (torch.rand(batch_size, num_points, 2, device=device) * 2) - 1
 
-    x_pow, y_pow = compute_poly_features_batched(X, degree=poly_degree, scale=plane_scale)
+    x_pow, y_pow = compute_poly_features_batched(X, degree=poly_degree, scale=1.0)
     P_vals = evaluate_poly_batched(x_pow, y_pow, C)
 
     Y = torch.tanh(P_vals)
@@ -130,20 +142,14 @@ for epoch in tqdm(range(1, epochs + 1), desc="Training CAVIA Functa"):
         # Initialize validation z vectors
         z_val = torch.zeros(val_X.shape[0], latent_dim, device=device, requires_grad=True)
 
-        # Rigorous inference optimization identical to test-time (15 SGD steps)
-        val_mse_none = nn.MSELoss(reduction='none')
-        
+        # 15 SGD steps on z, mean-reduced loss to match training's inner_lr scale.
         for _ in range(15):
             preds_val = siren(val_X, z_val).squeeze(-1)
-            
-            # Per-shape MSE loss 
-            mse_per_shape = val_mse_none(preds_val, val_Y).mean(dim=1)
-            loss_val = mse_per_shape.sum()
-            
+            loss_val = mse_loss(preds_val, val_Y)
+
             # Pure SGD step
             grad_z = torch.autograd.grad(loss_val, z_val)[0]
-            # True meta-learned learning rate relative to validation batch size
-            z_val = z_val - (inner_lr / val_X.shape[0]) * grad_z
+            z_val = z_val - inner_lr * grad_z
 
         with torch.no_grad():
             preds_final = siren(val_X, z_val).squeeze(-1)
@@ -152,10 +158,26 @@ for epoch in tqdm(range(1, epochs + 1), desc="Training CAVIA Functa"):
         val_loss_history.append((epoch, avg_val_loss))
         print(f"Validation Extraction Loss (MSE): {avg_val_loss:.6f}\n")
 
+        if avg_val_loss < best_val_loss - min_delta:
+            best_val_loss = avg_val_loss
+            patience_counter = 0
+            torch.save(siren.state_dict(), base_dir / "siren_best.pt")
+            print(f"New best validation loss {best_val_loss:.6f} -> saved siren_best.pt\n")
+        else:
+            patience_counter += save_every
+            if patience_counter >= patience:
+                print(
+                    f"Early stopping at epoch {epoch}: no improvement > {min_delta} "
+                    f"in validation loss for {patience_counter} epochs."
+                )
+                torch.cuda.empty_cache()
+                break
+
         torch.cuda.empty_cache()
 
 torch.save(siren.state_dict(), base_dir / "siren_final.pt")
 np.save(base_dir / "loss_history.npy", np.array(loss_history))
 np.save(base_dir / "val_loss_history.npy", np.array(val_loss_history))
 
-print(f"Training complete. Best model saved to {base_dir}")
+print(f"Training complete. Final model saved to {base_dir / 'siren_final.pt'}, "
+      f"best model (val MSE={best_val_loss:.6f}) saved to {base_dir / 'siren_best.pt'}")

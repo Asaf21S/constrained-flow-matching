@@ -1,10 +1,14 @@
+from __future__ import annotations
+
 import torch
 from torch.distributions import MultivariateNormal, Categorical, MixtureSameFamily
 
-from constrained_fm.src.consts import GMM_MEANS, GMM_COVS, GMM_WEIGHTS
+from constrained_fm.src.consts import GMM_MEANS, GMM_COVS, GMM_WEIGHTS, PLANE_SCALE
 
 
-def get_points(batch_size, means=GMM_MEANS, covs=GMM_COVS, weights=GMM_WEIGHTS, device=None):
+def get_points(batch_size: int, means: list | torch.Tensor = GMM_MEANS, covs: list | torch.Tensor = GMM_COVS,
+                weights: list | torch.Tensor = GMM_WEIGHTS,
+                device: torch.device | str | None = None) -> tuple[torch.Tensor, torch.Tensor]:
     means = torch.tensor(means, device=device)
     covs = torch.tensor(covs, device=device)
     weights = torch.tensor(weights, device=device)
@@ -27,7 +31,9 @@ def get_points(batch_size, means=GMM_MEANS, covs=GMM_COVS, weights=GMM_WEIGHTS, 
     return data.float(), labels
 
 
-def compute_gmm_density(means=GMM_MEANS, covs=GMM_COVS, weights=GMM_WEIGHTS, grid_size=200, device=None):
+def compute_gmm_density(means: list | torch.Tensor = GMM_MEANS, covs: list | torch.Tensor = GMM_COVS,
+                         weights: list | torch.Tensor = GMM_WEIGHTS, grid_size: int = 200,
+                         device: torch.device | str | None = None) -> torch.Tensor:
     means = torch.as_tensor(means, device=device)
     covs = torch.as_tensor(covs, device=device)
     weights = torch.as_tensor(weights, device=device)
@@ -36,8 +42,8 @@ def compute_gmm_density(means=GMM_MEANS, covs=GMM_COVS, weights=GMM_WEIGHTS, gri
     comp = MultivariateNormal(means, covs)
     gmm = MixtureSameFamily(mix, comp)
 
-    x_grid = torch.meshgrid(torch.linspace(-4.5, 4.5, grid_size, device=device),
-                            torch.linspace(-4.5, 4.5, grid_size, device=device),
+    x_grid = torch.meshgrid(torch.linspace(-PLANE_SCALE, PLANE_SCALE, grid_size, device=device),
+                            torch.linspace(-PLANE_SCALE, PLANE_SCALE, grid_size, device=device),
                             indexing='ij')
 
     grid_points = torch.stack([x_grid[0].flatten(), x_grid[1].flatten()], dim=1)
@@ -49,7 +55,9 @@ def compute_gmm_density(means=GMM_MEANS, covs=GMM_COVS, weights=GMM_WEIGHTS, gri
     return density
 
 
-def compute_gmm_log_likelihood(x, means=GMM_MEANS, covs=GMM_COVS, weights=GMM_WEIGHTS, device=None):
+def compute_gmm_log_likelihood(x: torch.Tensor, means: list | torch.Tensor = GMM_MEANS,
+                                covs: list | torch.Tensor = GMM_COVS, weights: list | torch.Tensor = GMM_WEIGHTS,
+                                device: torch.device | str | None = None) -> torch.Tensor:
     """
     Computes log p(x) for the target GMM.
     x: [N, 2]

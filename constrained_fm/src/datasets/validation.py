@@ -1,7 +1,14 @@
 import torch
 import os
 
-from constrained_fm.src.consts import POLYNOMIAL_DEGREE, PLANE_SCALE, VALIDATION_SET_PATH
+from constrained_fm.src.consts import (
+    POLYNOMIAL_DEGREE,
+    PLANE_SCALE,
+    VALIDATION_SET_PATH,
+    VALIDATION_BBOX_WIDTH_RANGE,
+    VALIDATION_POLY_MIN_AREA_RATIO,
+    VALIDATION_POLY_MAX_AREA_RATIO,
+)
 from constrained_fm.src.datasets.constraints import sample_valid_polynomials
 from constrained_fm.src.datasets.gmm_target import get_points
 
@@ -29,11 +36,12 @@ def generate_validation_set(
     # 1. Bounding‑box constraints
     # ------------------------------------------------------------
     print(f"Generating {num_bboxes} Random Bounding Boxes...")
+    min_width, max_width = VALIDATION_BBOX_WIDTH_RANGE
     while len(val_set["bboxes"]) < num_bboxes:
-        xs = torch.sort(torch.rand(2) * 8.0 - 4.0)[0]
-        ys = torch.sort(torch.rand(2) * 8.0 - 4.0)[0]
+        xs = torch.sort(torch.rand(2) * (2 * scale) - scale)[0]
+        ys = torch.sort(torch.rand(2) * (2 * scale) - scale)[0]
 
-        if (1.0 <= xs[1] - xs[0] <= 6.5) and (1.0 <= ys[1] - ys[0] <= 6.5):
+        if (min_width <= xs[1] - xs[0] <= max_width) and (min_width <= ys[1] - ys[0] <= max_width):
             val_set["bboxes"].append(
                 [xs[0].item(), ys[0].item(), xs[1].item(), ys[1].item()]
             )
@@ -44,7 +52,9 @@ def generate_validation_set(
     # ------------------------------------------------------------
     print(f"Generating {num_polys} Valid Polynomials via Proxy-Grid...")
     C_batch = sample_valid_polynomials(
-        num_polys, degree=degree, scale=scale, min_area=0.1, max_area=0.9, device=device
+        num_polys, degree=degree, scale=scale,
+        min_area=VALIDATION_POLY_MIN_AREA_RATIO, max_area=VALIDATION_POLY_MAX_AREA_RATIO,
+        device=device
     )
     val_set["polynomials"] = C_batch
 

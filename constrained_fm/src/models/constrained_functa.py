@@ -72,9 +72,11 @@ class AdaGNBlock(nn.Module):
 class ConstrainedFlowMatcher(nn.Module):
     """
     The full vector field predictor: v_t(x) = f(x_t, t, z)
+
+    latent_dim must match the upstream ModulatedSIREN's latent_dim (512).
     """
 
-    def __init__(self, spatial_dim: int = 2, latent_dim: int = 256,
+    def __init__(self, spatial_dim: int = 2, latent_dim: int = 512,
                  time_emb_dim: int = 128, hidden_dim: int = 256,
                  num_blocks: int = 4):
         super().__init__()
@@ -105,9 +107,9 @@ class ConstrainedFlowMatcher(nn.Module):
 
     def forward(self, x: torch.Tensor, t: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
         """
-        x: (B, 2)   - 2D point cloud
-        t: (B,)     - ODE time steps
-        z: (B, 256) - Functa latent constraints
+        x: (B, 2)          - 2D point cloud
+        t: (B,)            - ODE time steps
+        z: (B, latent_dim) - Functa latent constraints
         Returns predicted vector field (B, 2)
         """
         # 1. Embed time and combine with Functa constraint

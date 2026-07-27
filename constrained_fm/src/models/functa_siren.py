@@ -40,9 +40,11 @@ class ModulatedSIREN(nn.Module):
 
     Input shapes:
         - x: (M, 2) or (B, M, 2)
-        - z: (256,) or (B, 256)
+        - z: (latent_dim,) or (B, latent_dim)
     Output shape:
-        - p: (M, 1) or (B, M, 1)
+        - p: (M, 1) or (B, M, 1), bounded in (-1, 1) via a final tanh to match the
+          tanh(P(x, y)) regression targets used during CAVIA meta-training
+          (see scripts/train_functa.py).
     """
 
     def __init__(self, latent_dim: int = 256, hidden_dim: int = 256, n_layers: int = 4, w0: float = 30.0):
@@ -78,13 +80,21 @@ class ModulatedSIREN(nn.Module):
         """Forward pass supporting both unbatched (M, 2) and batched (B, M, 2) inputs.
 
         Args:
-            x: (M, 2) or (B, M, 2) spatial coordinates.
-            z: (256,) or (B, 256) context vectors.
+            x: (M, 2) or (B, M, 2) spatial coordinates, expected in the canonical
+                SIREN domain (roughly [-1, 1]).
+            z: (latent_dim,) or (B, latent_dim) context vectors. Must be batched
+                (i.e. have a leading batch dimension matching x's) whenever x is batched.
 
         Returns:
-            (M, 1) or (B, M, 1) predictions in [0, 1].
+            (M, 1) or (B, M, 1) predictions in (-1, 1).
         """
         is_batched = x.dim() == 3  # True if (B, M, 2)
+
+        if is_batched:
+            assert z.dim() == 2 and z.shape[0] == x.shape[0], (
+                f"Batched x of shape {tuple(x.shape)} requires a batched z of shape "
+                f"({x.shape[0]}, {self.latent_dim}), got z of shape {tuple(z.shape)}."
+            )
 
         gamma, beta = self.film(z)  # (n_layers, hidden) or (B, n_layers, hidden)
 
@@ -103,7 +113,7 @@ class ModulatedSIREN(nn.Module):
 
             h = torch.sin(self.w0 * ((1.0 + g) * h + b))
 
-        out = self.output_linear(h)
+        out = torch.tanh(self.output_linear(h))
         return out
 
 

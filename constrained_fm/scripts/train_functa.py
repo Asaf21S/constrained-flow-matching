@@ -1,3 +1,4 @@
+import json
 import torch
 import torch.nn as nn
 from tqdm import tqdm
@@ -162,6 +163,8 @@ for epoch in tqdm(range(1, epochs + 1), desc="Training CAVIA Functa"):
             best_val_loss = avg_val_loss
             patience_counter = 0
             torch.save(siren.state_dict(), base_dir / "siren_best.pt")
+            with open(base_dir / "siren_best_meta.json", "w") as f:
+                json.dump({"epoch": epoch, "val_mse": best_val_loss}, f)
             print(f"New best validation loss {best_val_loss:.6f} -> saved siren_best.pt\n")
         else:
             patience_counter += save_every
@@ -176,6 +179,8 @@ for epoch in tqdm(range(1, epochs + 1), desc="Training CAVIA Functa"):
         torch.cuda.empty_cache()
 
 torch.save(siren.state_dict(), base_dir / "siren_final.pt")
+with open(base_dir / "siren_final_meta.json", "w") as f:
+    json.dump({"epoch": epoch, "val_mse": best_val_loss}, f)
 np.save(base_dir / "loss_history.npy", np.array(loss_history))
 np.save(base_dir / "val_loss_history.npy", np.array(val_loss_history))
 

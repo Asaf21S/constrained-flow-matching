@@ -21,9 +21,9 @@ checkpoint_dir = base_dir / "checkpoints"
 checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
 epochs = 3000
-steps_per_epoch = 400  # 400 steps * 32 batch size = 12,800 shapes per epoch
-batch_size = 32
-points_per_shape = 1500
+steps_per_epoch = 400  # 400 steps * 16 batch size = 6,400 shapes per epoch
+batch_size = 16
+points_per_shape = 1000
 
 # Meta-Learning (CAVIA) Hyperparameters
 outer_lr = 1e-4

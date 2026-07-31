@@ -17,6 +17,6 @@ mkdir -p $ENROOT_CACHE_PATH
 
 srun --container-image=/users/rosenbaum/asolomiak/nvidia+pytorch+24.03-py3.sqsh \
      --container-mounts=/users/rosenbaum/asolomiak/constrained-flow-matching:/workspace \
-     bash -c "cd /workspace/ && pip install --user -r requirements.txt && python -m constrained_fm.scripts.train_functa"
+     bash -c "export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True && cd /workspace/ && pip install --user -r requirements.txt && python -m constrained_fm.scripts.train_functa"
 
 echo "Job finished."

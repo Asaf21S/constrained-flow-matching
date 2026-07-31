@@ -28,7 +28,7 @@ points_per_shape = 1500
 # Meta-Learning (CAVIA) Hyperparameters
 outer_lr = 1e-4
 inner_lr = 1e-2
-inner_steps = 5  # Fast adaptation steps
+inner_steps = 15  # matches the test-time extraction budget so the outer loop optimizes for it
 lambda_z = 1e-4  # L2 penalty on the context vector
 
 latent_dim = 512
@@ -143,8 +143,8 @@ for epoch in tqdm(range(1, epochs + 1), desc="Training CAVIA Functa"):
         # Initialize validation z vectors
         z_val = torch.zeros(val_X.shape[0], latent_dim, device=device, requires_grad=True)
 
-        # 15 SGD steps on z, mean-reduced loss to match training's inner_lr scale.
-        for _ in range(15):
+        # SGD steps on z (inner_steps, matching training), mean-reduced loss to match inner_lr scale.
+        for _ in range(inner_steps):
             preds_val = siren(val_X, z_val).squeeze(-1)
             loss_val = mse_loss(preds_val, val_Y)
 

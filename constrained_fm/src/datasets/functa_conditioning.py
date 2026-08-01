@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import torch
 import torch.nn as nn
+from tqdm.auto import tqdm
 
 from constrained_fm.src.consts import POLYNOMIAL_DEGREE, PLANE_SCALE
 from constrained_fm.src.datasets.constraints import sample_valid_polynomials
@@ -96,4 +97,105 @@ def generate_functa_conditioned_batch(
     return C, z
 
 
-__all__ = ["generate_functa_conditioned_batch"]
+def build_functa_pool(
+        siren: nn.Module,
+        proxy_x_pow: torch.Tensor,
+        proxy_y_pow: torch.Tensor,
+        pool_size: int = 20000,
+        degree: int = POLYNOMIAL_DEGREE,
+        scale: float = PLANE_SCALE,
+        points_per_shape: int = 1000,
+        extraction_steps: int = 15,
+        extraction_lr: float = 1e-2,
+        min_area: float = 0.05,
+        max_area: float = 0.95,
+        chunk_size: int = 128,
+        device: torch.device | str | None = None,
+) -> dict[str, torch.Tensor]:
+    """Precomputes a large, reusable pool of Functa latents for both orientations
+    of each sampled polynomial, so training-time conditioning needs no further
+    SIREN extraction at all (see sample_from_functa_pool).
+
+    Exploits tanh(-P) = -tanh(P): the flipped orientation's regression target is
+    simply the negation of the original, so a single extraction pass over the
+    pool yields both z_pos (for C) and z_neg (for -C) at roughly double the cost
+    of a one-orientation pool -- still a one-time cost, versus paying full
+    extraction on every training iteration.
+
+    Returns a dict with keys "C" (pool_size, degree+1, degree+1), "z_pos", "z_neg"
+    (each (pool_size, latent_dim)), all on CPU, ready to torch.save to disk.
+    """
+    if device is None:
+        device = next(siren.parameters()).device
+
+    C_pool = sample_valid_polynomials(
+        batch_size=pool_size, degree=degree, scale=scale,
+        proxy_x_pow=proxy_x_pow, proxy_y_pow=proxy_y_pow,
+        min_area=min_area, max_area=max_area, device=device,
+    )
+
+    z_pos_chunks, z_neg_chunks = [], []
+    for start in tqdm(range(0, pool_size, chunk_size), desc="Building Functa pool"):
+        end = min(start + chunk_size, pool_size)
+        C_chunk = C_pool[start:end]
+
+        X_raw = (torch.rand(end - start, points_per_shape, 2, device=device) * (scale * 2)) - scale
+        x_pow, y_pow = compute_poly_features_batched(X_raw, degree=degree, scale=scale)
+        P_vals = evaluate_poly_batched(x_pow, y_pow, C_chunk)
+        Y_pos = torch.tanh(P_vals)
+        X_scaled = X_raw / scale
+
+        z_pos_chunk, _ = extract_latents_batched(siren, X_scaled, Y_pos, lr=extraction_lr, steps=extraction_steps)
+        z_neg_chunk, _ = extract_latents_batched(siren, X_scaled, -Y_pos, lr=extraction_lr, steps=extraction_steps)
+
+        z_pos_chunks.append(z_pos_chunk.cpu())
+        z_neg_chunks.append(z_neg_chunk.cpu())
+
+    return {
+        "C": C_pool.cpu(),
+        "z_pos": torch.cat(z_pos_chunks, dim=0),
+        "z_neg": torch.cat(z_neg_chunks, dim=0),
+    }
+
+
+def sample_from_functa_pool(
+        x_1: torch.Tensor,
+        pool: dict[str, torch.Tensor],
+        degree: int = POLYNOMIAL_DEGREE,
+        scale: float = PLANE_SCALE,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Samples a Functa-conditioned batch from a precomputed pool with no SIREN calls.
+
+    For each x_1, picks a random pool entry and selects whichever precomputed
+    orientation (z_pos for C, z_neg for -C) actually contains x_1, exactly
+    preserving the "flip trick" invariant P(x_1) <= 0 at effectively zero cost.
+
+    Args:
+        x_1: (B, 2) raw-scale target samples to condition on.
+        pool: dict as returned by build_functa_pool (moved to x_1's device beforehand).
+        degree, scale: must match the values used to build the pool.
+
+    Returns:
+        C: (B, degree + 1, degree + 1) oriented coefficients, satisfying P(x_1) <= 0.
+        z: (B, latent_dim) Functa latents.
+    """
+    device = x_1.device
+    batch_size = x_1.shape[0]
+    pool_size = pool["C"].shape[0]
+
+    idx = torch.randint(0, pool_size, (batch_size,), device=device)
+    C_batch = pool["C"][idx]
+    z_pos_batch = pool["z_pos"][idx]
+    z_neg_batch = pool["z_neg"][idx]
+
+    x1_pow, y1_pow = compute_poly_features_batched(x_1.unsqueeze(1), degree=degree, scale=scale)
+    P_x1 = evaluate_poly_batched(x1_pow, y1_pow, C_batch).squeeze(-1)
+    use_flipped = P_x1 > 0  # x_1 violates the pool's original orientation -> use the flipped one
+
+    z = torch.where(use_flipped.unsqueeze(-1), z_neg_batch, z_pos_batch)
+    C = torch.where(use_flipped.view(-1, 1, 1), -C_batch, C_batch)
+
+    return C, z
+
+
+__all__ = ["generate_functa_conditioned_batch", "build_functa_pool", "sample_from_functa_pool"]

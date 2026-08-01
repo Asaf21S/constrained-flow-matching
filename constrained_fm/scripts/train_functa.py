@@ -118,7 +118,7 @@ for epoch in tqdm(range(1, epochs + 1), desc="Training CAVIA Functa"):
         # Evaluate the adapted z on the task
         preds_adapted = siren(X_batch, z).squeeze(-1)
 
-        # Compute final loss (BCE + L2 Regularization on z to prevent extreme modulation)
+        # Compute final loss (MSE + L2 Regularization on z to prevent extreme modulation)
         loss_outer = mse_loss(preds_adapted, Y_batch) + lambda_z * (z ** 2).mean()
 
         # Backpropagate through the inner loop graph into the SIREN base weights
@@ -134,7 +134,7 @@ for epoch in tqdm(range(1, epochs + 1), desc="Training CAVIA Functa"):
 
     if epoch % 10 == 0 or epoch == 1:
         current_lr = optimizer.param_groups[0]['lr']
-        print(f"Epoch {epoch:04d} - Outer BCE+L2 Loss: {avg_loss:.6f} | LR: {current_lr:.2e}")
+        print(f"Epoch {epoch:04d} - Outer MSE+L2 Loss: {avg_loss:.6f} | LR: {current_lr:.2e}")
 
     if epoch % save_every == 0:
         print(f"\n--- Running Validation Inference (Epoch {epoch}) ---")

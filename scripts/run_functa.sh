@@ -9,6 +9,7 @@
 #SBATCH --mem=32G
 #SBATCH --mail-user=asafucho@gmail.com
 #SBATCH --mail-type=BEGIN,END,FAIL
+#SBATCH --exclude=dgx04
 
 echo "Starting Functa meta-learning training..."
 

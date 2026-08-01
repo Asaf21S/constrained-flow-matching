@@ -122,24 +122,28 @@ def build_functa_pool(
     of a one-orientation pool -- still a one-time cost, versus paying full
     extraction on every training iteration.
 
+    Polynomial sampling and extraction are both chunked by chunk_size: sample_valid_polynomials'
+    internal proxy-grid einsum scales as O(batch_size * num_proxy_points), so generating the
+    whole pool_size in one call can itself OOM at large pool sizes, independent of extraction.
+
     Returns a dict with keys "C" (pool_size, degree+1, degree+1), "z_pos", "z_neg"
     (each (pool_size, latent_dim)), all on CPU, ready to torch.save to disk.
     """
     if device is None:
         device = next(siren.parameters()).device
 
-    C_pool = sample_valid_polynomials(
-        batch_size=pool_size, degree=degree, scale=scale,
-        proxy_x_pow=proxy_x_pow, proxy_y_pow=proxy_y_pow,
-        min_area=min_area, max_area=max_area, device=device,
-    )
-
-    z_pos_chunks, z_neg_chunks = [], []
+    C_chunks, z_pos_chunks, z_neg_chunks = [], [], []
     for start in tqdm(range(0, pool_size, chunk_size), desc="Building Functa pool"):
         end = min(start + chunk_size, pool_size)
-        C_chunk = C_pool[start:end]
+        current_chunk_size = end - start
 
-        X_raw = (torch.rand(end - start, points_per_shape, 2, device=device) * (scale * 2)) - scale
+        C_chunk = sample_valid_polynomials(
+            batch_size=current_chunk_size, degree=degree, scale=scale,
+            proxy_x_pow=proxy_x_pow, proxy_y_pow=proxy_y_pow,
+            min_area=min_area, max_area=max_area, device=device,
+        )
+
+        X_raw = (torch.rand(current_chunk_size, points_per_shape, 2, device=device) * (scale * 2)) - scale
         x_pow, y_pow = compute_poly_features_batched(X_raw, degree=degree, scale=scale)
         P_vals = evaluate_poly_batched(x_pow, y_pow, C_chunk)
         Y_pos = torch.tanh(P_vals)
@@ -148,11 +152,12 @@ def build_functa_pool(
         z_pos_chunk, _ = extract_latents_batched(siren, X_scaled, Y_pos, lr=extraction_lr, steps=extraction_steps)
         z_neg_chunk, _ = extract_latents_batched(siren, X_scaled, -Y_pos, lr=extraction_lr, steps=extraction_steps)
 
+        C_chunks.append(C_chunk.cpu())
         z_pos_chunks.append(z_pos_chunk.cpu())
         z_neg_chunks.append(z_neg_chunk.cpu())
 
     return {
-        "C": C_pool.cpu(),
+        "C": torch.cat(C_chunks, dim=0),
         "z_pos": torch.cat(z_pos_chunks, dim=0),
         "z_neg": torch.cat(z_neg_chunks, dim=0),
     }

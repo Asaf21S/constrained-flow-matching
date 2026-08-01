@@ -15,7 +15,7 @@ class BaseFM(nn.Module):
     def forward(self, t, x, **kwargs):
         raise NotImplementedError("Child classes must implement the forward() method!")
 
-    def sample(self, num_points: int, bounds=None, coeffs=None, step_size: float = 0.05, return_intermediates: bool = False, device=None):
+    def sample(self, num_points: int, bounds=None, coeffs=None, z=None, step_size: float = 0.05, return_intermediates: bool = False, device=None):
         self.eval()
 
         wrapped_vf = WrappedModel(self)
@@ -31,6 +31,8 @@ class BaseFM(nn.Module):
         elif coeffs is not None:
             coeffs_flat = coeffs.view(1, -1)
             kwargs['coeffs'] = coeffs_flat.expand(num_points, -1)
+        elif z is not None:
+            kwargs['z'] = z.view(1, -1).expand(num_points, -1)
 
         with torch.no_grad():
             samples = solver.sample(
@@ -47,7 +49,7 @@ class BaseFM(nn.Module):
         else:
             return samples
 
-    def compute_likelihood_grid(self, bounds=None, coeffs=None, degree=3, scale=4.0, grid_size=200, step_size=0.05,
+    def compute_likelihood_grid(self, bounds=None, coeffs=None, z=None, siren=None, degree=3, scale=4.0, grid_size=200, step_size=0.05,
                                 eval_batch_size=4000, device=None):
         self.eval()
 
@@ -66,12 +68,15 @@ class BaseFM(nn.Module):
 
         full_bounds_tensor = None
         full_coeffs_tensor = None
+        full_z_tensor = None
 
         if bounds is not None:
             absolute_bounds = torch.tensor([bounds], dtype=torch.float32, device=device)
             full_bounds_tensor = absolute_bounds.expand(num_points, 4)
         elif coeffs is not None:
             full_coeffs_tensor = coeffs.view(1, -1).expand(num_points, -1)
+        elif z is not None:
+            full_z_tensor = z.view(1, -1).expand(num_points, -1)
 
         exact_log_p_full = torch.full((num_points,), float('-inf'), device=device)
         valid_mask = torch.ones(num_points, dtype=torch.bool, device=device)
@@ -85,6 +90,11 @@ class BaseFM(nn.Module):
             C_batch = coeffs.unsqueeze(0).expand(num_points, -1, -1)
             p_vals = evaluate_poly(x_pow, y_pow, C_batch).squeeze()
             valid_mask = p_vals <= 0
+        elif z is not None and siren is not None:
+            with torch.no_grad():
+                x_scaled = (x_1 / scale).unsqueeze(1)
+                siren_val = siren(x_scaled, z.view(1, -1).expand(num_points, -1)).squeeze()
+            valid_mask = siren_val <= 0
 
         valid_indices = torch.nonzero(valid_mask).squeeze()
         x_1_valid = x_1[valid_mask]
@@ -94,6 +104,8 @@ class BaseFM(nn.Module):
             full_bounds_tensor = full_bounds_tensor[valid_mask]
         if full_coeffs_tensor is not None:
             full_coeffs_tensor = full_coeffs_tensor[valid_mask]
+        if full_z_tensor is not None:
+            full_z_tensor = full_z_tensor[valid_mask]
 
         exact_log_p_list = []
         print(f"Computing exact divergence for {num_valid_points} valid points in chunks of {eval_batch_size}...")
@@ -107,6 +119,8 @@ class BaseFM(nn.Module):
                     chunk_kwargs['bounds'] = full_bounds_tensor[i:i + eval_batch_size]
                 if full_coeffs_tensor is not None:
                     chunk_kwargs['coeffs'] = full_coeffs_tensor[i:i + eval_batch_size]
+                if full_z_tensor is not None:
+                    chunk_kwargs['z'] = full_z_tensor[i:i + eval_batch_size]
 
                 _, chunk_log_p = solver.compute_likelihood(
                     x_1=x_1_chunk,

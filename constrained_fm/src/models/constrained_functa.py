@@ -1,6 +1,19 @@
 import math
+from typing import Optional
+
 import torch
 import torch.nn as nn
+
+from constrained_fm.src.consts import PLANE_SCALE
+from constrained_fm.src.models.base_fm import BaseFM
+
+
+def _safe_num_groups(num_channels: int, max_groups: int = 32) -> int:
+    """Largest group count <= max_groups that evenly divides num_channels."""
+    for g in range(min(max_groups, num_channels), 0, -1):
+        if num_channels % g == 0:
+            return g
+    return 1
 
 
 class SinusoidalTimeEmbedding(nn.Module):
@@ -30,13 +43,12 @@ class AdaGNBlock(nn.Module):
 
     def __init__(self, hidden_dim: int, cond_dim: int):
         super().__init__()
-        # GroupNorm requires the number of groups to divide the hidden_dim
-        # 32 is standard, but if hidden_dim is small (e.g. 128), 8 or 16 is safer
-        self.norm1 = nn.GroupNorm(min(32, hidden_dim // 4), hidden_dim)
+        num_groups = _safe_num_groups(hidden_dim)
+        self.norm1 = nn.GroupNorm(num_groups, hidden_dim)
         self.act1 = nn.SiLU()
         self.linear1 = nn.Linear(hidden_dim, hidden_dim)
 
-        self.norm2 = nn.GroupNorm(min(32, hidden_dim // 4), hidden_dim)
+        self.norm2 = nn.GroupNorm(num_groups, hidden_dim)
         self.act2 = nn.SiLU()
         self.linear2 = nn.Linear(hidden_dim, hidden_dim)
 
@@ -69,17 +81,29 @@ class AdaGNBlock(nn.Module):
         return x + h
 
 
-class ConstrainedFlowMatcher(nn.Module):
+class ConstrainedFlowMatcher(BaseFM):
     """
     The full vector field predictor: v_t(x) = f(x_t, t, z)
 
     latent_dim must match the upstream ModulatedSIREN's latent_dim (512).
+    If a frozen `siren` is provided, its pointwise prediction SIREN(x, z) is fed in
+    as an extra conditioning feature, giving the network direct boundary-aware
+    information per query point instead of relying solely on the global z.
     """
 
-    def __init__(self, spatial_dim: int = 2, latent_dim: int = 512,
-                 time_emb_dim: int = 128, hidden_dim: int = 256,
-                 num_blocks: int = 4):
+    def __init__(self, siren: Optional[nn.Module] = None, spatial_dim: int = 2, latent_dim: int = 512,
+                 time_emb_dim: int = 128, hidden_dim: int = 512, num_blocks: int = 4,
+                 plane_scale: float = PLANE_SCALE):
         super().__init__()
+
+        self.plane_scale = plane_scale
+        self.use_siren_feature = siren is not None
+
+        if self.use_siren_feature:
+            self.siren = siren
+            for p in self.siren.parameters():
+                p.requires_grad_(False)
+            self.siren.eval()
 
         # Time Embedding
         self.time_embed = SinusoidalTimeEmbedding(time_emb_dim)
@@ -92,8 +116,9 @@ class ConstrainedFlowMatcher(nn.Module):
             nn.Linear(cond_dim, cond_dim)
         )
 
-        # Spatial input projection
-        self.input_proj = nn.Linear(spatial_dim, hidden_dim)
+        # Spatial input projection; +1 extra channel for the SIREN's pointwise feature
+        input_dim = spatial_dim + 1 if self.use_siren_feature else spatial_dim
+        self.input_proj = nn.Linear(input_dim, hidden_dim)
 
         # ResNet AdaGN Blocks
         self.blocks = nn.ModuleList([
@@ -101,9 +126,20 @@ class ConstrainedFlowMatcher(nn.Module):
         ])
 
         # Final output projection back to spatial dimensions (v_t)
-        self.final_norm = nn.GroupNorm(min(32, hidden_dim // 4), hidden_dim)
+        num_groups = _safe_num_groups(hidden_dim)
+        self.final_norm = nn.GroupNorm(num_groups, hidden_dim)
         self.final_act = nn.SiLU()
         self.final_proj = nn.Linear(hidden_dim, spatial_dim)
+
+    def train(self, mode: bool = True) -> "ConstrainedFlowMatcher":
+        super().train(mode)
+        if self.use_siren_feature:
+            self.siren.eval()  # frozen dependency always stays in eval mode
+        return self
+
+    def trainable_parameters(self):
+        """Yields parameters excluding the frozen SIREN, for constructing the optimizer."""
+        return (p for p in self.parameters() if p.requires_grad)
 
     def forward(self, x: torch.Tensor, t: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
         """
@@ -116,14 +152,21 @@ class ConstrainedFlowMatcher(nn.Module):
         t_emb = self.time_embed(t)
         c = self.cond_mlp(torch.cat([t_emb, z], dim=-1))
 
-        # 2. Lift spatial coordinates into hidden dimension
+        # 2. Optionally query the frozen SIREN at each point for a direct boundary feature
+        if self.use_siren_feature:
+            with torch.no_grad():
+                x_normalized = (x / self.plane_scale).unsqueeze(1)  # (B, 1, 2) for per-example z
+                siren_val = self.siren(x_normalized, z).squeeze(1)  # (B, 1)
+            x = torch.cat([x, siren_val], dim=-1)
+
+        # 3. Lift spatial coordinates into hidden dimension
         h = self.input_proj(x)
 
-        # 3. Apply AdaGN ResNet blocks
+        # 4. Apply AdaGN ResNet blocks
         for block in self.blocks:
             h = block(h, c)
 
-        # 4. Final projection to output vector field
+        # 5. Final projection to output vector field
         h = self.final_act(self.final_norm(h))
         v_pred = self.final_proj(h)
 

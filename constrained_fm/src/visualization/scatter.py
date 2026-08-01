@@ -106,7 +106,7 @@ def plot_loss_curve(losses):
     plt.show()
 
 
-def generate_and_visualize_samples(model, x_true_pool=None, num_samples=50000, step_size=0.05, bounds=None, coeffs=None,
+def generate_and_visualize_samples(model, x_true_pool=None, num_samples=50000, step_size=0.05, bounds=None, coeffs=None, z=None,
                                    degree=POLYNOMIAL_DEGREE, scale=PLANE_SCALE, cluster_points=True):
     """Generate samples from ``model`` and visualise intermediate steps.
 
@@ -123,15 +123,26 @@ def generate_and_visualize_samples(model, x_true_pool=None, num_samples=50000, s
     bounds: list | None
         Optional rectangular constraint ``[x_min, y_min, x_max, y_max]``.
     coeffs: torch.Tensor | None
-        Optional polynomial constraint.
+        Optional polynomial constraint. Used to draw the GT boundary overlay and
+        compute the success rate even when ``z`` drives the actual model conditioning.
+    z: torch.Tensor | None
+        Optional Functa latent constraint; takes precedence over ``coeffs`` for
+        conditioning the model itself (``bounds`` still takes overall precedence).
     degree, scale: int, float
         Polynomial hyper‑parameters used for visualisation.
     cluster_points: bool
         Whether to colour points by their most likely Gaussian component.
     """
     device = next(model.parameters()).device
-    kwargs = {"bounds": bounds} if bounds is not None else {"coeffs": coeffs} if coeffs is not None else {}
-    samples, T = model.sample(num_points=num_samples, **kwargs, step_size=step_size,
+    if bounds is not None:
+        model_kwargs = {"bounds": bounds}
+    elif z is not None:
+        model_kwargs = {"z": z}
+    elif coeffs is not None:
+        model_kwargs = {"coeffs": coeffs}
+    else:
+        model_kwargs = {}
+    samples, T = model.sample(num_points=num_samples, **model_kwargs, step_size=step_size,
                               return_intermediates=True, device=device)
 
     samples_np = samples.cpu().numpy()

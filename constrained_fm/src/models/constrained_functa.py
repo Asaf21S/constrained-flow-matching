@@ -144,11 +144,12 @@ class ConstrainedFlowMatcher(BaseFM):
     def forward(self, x: torch.Tensor, t: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
         """
         x: (B, 2)          - 2D point cloud
-        t: (B,)            - ODE time steps
+        t: (B,) or scalar   - ODE time steps (the ODE solver passes a 0-dim tensor)
         z: (B, latent_dim) - Functa latent constraints
         Returns predicted vector field (B, 2)
         """
-        # 1. Embed time and combine with Functa constraint
+        # 1. Broadcast t to match x's batch size, then embed and combine with z
+        t = t.reshape(-1, 1).float().expand(x.shape[0], 1)
         t_emb = self.time_embed(t)
         c = self.cond_mlp(torch.cat([t_emb, z], dim=-1))
 

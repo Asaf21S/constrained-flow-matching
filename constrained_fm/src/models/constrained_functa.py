@@ -89,10 +89,16 @@ class ConstrainedFlowMatcher(BaseFM):
     If a frozen `siren` is provided, its pointwise prediction SIREN(x, z) is fed in
     as an extra conditioning feature, giving the network direct boundary-aware
     information per query point instead of relying solely on the global z.
+
+    z is both concatenated directly into the input (mirroring PolynomialConstrainedFM's
+    direct-concatenation conditioning, which empirically converges to a much better
+    solution than routing a rich latent through AdaGN modulation alone) and used to
+    modulate the AdaGN blocks, giving the network both a direct and a modulated route
+    to the same conditioning signal.
     """
 
     def __init__(self, siren: Optional[nn.Module] = None, spatial_dim: int = 2, latent_dim: int = 512,
-                 time_emb_dim: int = 128, hidden_dim: int = 512, num_blocks: int = 4,
+                 time_emb_dim: int = 128, hidden_dim: int = 1024, num_blocks: int = 4,
                  plane_scale: float = PLANE_SCALE):
         super().__init__()
 
@@ -108,7 +114,7 @@ class ConstrainedFlowMatcher(BaseFM):
         # Time Embedding
         self.time_embed = SinusoidalTimeEmbedding(time_emb_dim)
 
-        # Master Condition Combiner: projects (t_emb + z) -> cond_dim
+        # Master Condition Combiner: projects (t_emb + z) -> cond_dim, for AdaGN modulation
         cond_dim = hidden_dim
         self.cond_mlp = nn.Sequential(
             nn.Linear(time_emb_dim + latent_dim, cond_dim),
@@ -116,8 +122,10 @@ class ConstrainedFlowMatcher(BaseFM):
             nn.Linear(cond_dim, cond_dim)
         )
 
-        # Spatial input projection; +1 extra channel for the SIREN's pointwise feature
-        input_dim = spatial_dim + 1 if self.use_siren_feature else spatial_dim
+        # Spatial input projection: x [+ SIREN feature] + z, concatenated directly
+        input_dim = spatial_dim + latent_dim
+        if self.use_siren_feature:
+            input_dim += 1
         self.input_proj = nn.Linear(input_dim, hidden_dim)
 
         # ResNet AdaGN Blocks
@@ -148,7 +156,7 @@ class ConstrainedFlowMatcher(BaseFM):
         z: (B, latent_dim) - Functa latent constraints
         Returns predicted vector field (B, 2)
         """
-        # 1. Broadcast t to match x's batch size, then embed and combine with z
+        # 1. Broadcast t to match x's batch size, then embed and combine with z for AdaGN
         t = t.reshape(-1, 1).float().expand(x.shape[0], 1)
         t_emb = self.time_embed(t)
         c = self.cond_mlp(torch.cat([t_emb, z], dim=-1))
@@ -160,8 +168,8 @@ class ConstrainedFlowMatcher(BaseFM):
                 siren_val = self.siren(x_normalized, z).squeeze(1)  # (B, 1)
             x = torch.cat([x, siren_val], dim=-1)
 
-        # 3. Lift spatial coordinates into hidden dimension
-        h = self.input_proj(x)
+        # 3. Lift spatial coordinates + directly-concatenated z into hidden dimension
+        h = self.input_proj(torch.cat([x, z], dim=-1))
 
         # 4. Apply AdaGN ResNet blocks
         for block in self.blocks:

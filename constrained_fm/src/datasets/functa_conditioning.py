@@ -24,6 +24,7 @@ def generate_functa_conditioned_batch(
         extraction_lr: float = 1e-2,
         min_area: float = 0.05,
         max_area: float = 0.95,
+        extraction_chunk_size: int = 128,
         device: torch.device | str | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Generates a batch of Functa latents, each guaranteed to represent a valid
@@ -35,6 +36,12 @@ def generate_functa_conditioned_batch(
     sampling. The oriented polynomial is then converted into a Functa context
     vector via frozen-SIREN CAVIA extraction.
 
+    The extraction itself is chunked along the batch dimension so peak SIREN-forward
+    memory is bounded by extraction_chunk_size * points_per_shape, independent of the
+    caller's (potentially much larger) batch_size -- this is the main memory driver
+    of the whole pipeline (a full-batch SIREN forward over batch_size * points_per_shape
+    points, run extraction_steps times) and is what OOMs on smaller GPUs otherwise.
+
     Args:
         siren: trained, frozen ModulatedSIREN.
         x_1: (B, 2) raw-scale target samples (e.g. from the GMM) to condition on.
@@ -44,6 +51,8 @@ def generate_functa_conditioned_batch(
         points_per_shape: number of query points used for the CAVIA extraction.
         extraction_steps, extraction_lr: CAVIA inner-loop SGD budget.
         min_area, max_area: accepted area-ratio range for the sampled polynomials.
+        extraction_chunk_size: number of shapes processed per SIREN forward pass;
+            lower this first if you hit CUDA OOM.
         device: torch device; defaults to x_1's device.
 
     Returns:
@@ -66,14 +75,23 @@ def generate_functa_conditioned_batch(
     flip_mask = (P_x1 > 0).float().view(batch_size, 1, 1)
     C = C * (1.0 - 2.0 * flip_mask)
 
-    # Fresh random query points for CAVIA extraction, evaluated on the oriented C.
-    X_raw = (torch.rand(batch_size, points_per_shape, 2, device=device) * (scale * 2)) - scale
-    x_pow, y_pow = compute_poly_features_batched(X_raw, degree=degree, scale=scale)
-    P_vals = evaluate_poly_batched(x_pow, y_pow, C)
-    Y = torch.tanh(P_vals)
-    X_scaled = X_raw / scale
+    # Chunked CAVIA extraction: fresh random query points per chunk, evaluated on
+    # the oriented C, converted to a Functa latent via the frozen SIREN.
+    z_chunks = []
+    for start in range(0, batch_size, extraction_chunk_size):
+        end = min(start + extraction_chunk_size, batch_size)
+        C_chunk = C[start:end]
 
-    z, _ = extract_latents_batched(siren, X_scaled, Y, lr=extraction_lr, steps=extraction_steps)
+        X_raw = (torch.rand(end - start, points_per_shape, 2, device=device) * (scale * 2)) - scale
+        x_pow, y_pow = compute_poly_features_batched(X_raw, degree=degree, scale=scale)
+        P_vals = evaluate_poly_batched(x_pow, y_pow, C_chunk)
+        Y = torch.tanh(P_vals)
+        X_scaled = X_raw / scale
+
+        z_chunk, _ = extract_latents_batched(siren, X_scaled, Y, lr=extraction_lr, steps=extraction_steps)
+        z_chunks.append(z_chunk)
+
+    z = torch.cat(z_chunks, dim=0)
 
     return C, z
 

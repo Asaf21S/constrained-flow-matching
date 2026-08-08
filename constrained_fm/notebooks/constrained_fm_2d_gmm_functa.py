@@ -533,12 +533,7 @@ visualize_latent_interpolation(siren, (C[0], C[1]), (z_opt[0], z_opt[1]))
 proxy_x_pow = global_proxy_x_pow.squeeze(0)
 proxy_y_pow = global_proxy_y_pow.squeeze(0)
 
-# In-pool vs. out-of-pool evaluation showed a large generalization gap (in-pool
-# MMD/JSD near baseline-good, out-of-pool an order of magnitude worse) despite a
-# flat training loss across 15k iterations -- a signature of the flow matcher
-# memorizing this discrete pool rather than learning a smooth function of z.
-# Increasing pool_size directly reduces how often any single z gets resampled
-# (avg resamples per entry ~= iterations * batch_size / pool_size).
+# Average resamples per pool entry ~= iterations * batch_size / pool_size.
 pool_size = 100000
 pool_chunk_size = 128
 
@@ -573,21 +568,8 @@ functa_pool = {k: v.to(device) for k, v in functa_pool.items()}
 lr = 1e-3
 batch_size = 1024
 
-# Functa conditioning is a harder regression target than raw polynomial coefficients
-# (the model only sees an approximate learned z + the SIREN's own approximate
-# per-point prediction, not an exact analytic P(x)), so it needs a substantially
-# longer schedule to converge. Each iteration is cheap now (pool-based, no SIREN
-# calls), so a much larger budget is still fast.
 iterations = 15001
 print_every = 500
-
-# Gaussian noise injected into each sampled z, scaled to the pool's own per-dimension
-# std. Regularizes the flow matcher to be locally smooth around each pool latent,
-# instead of overfitting to the exact stored z (which is itself a noisy CAVIA
-# extraction, not the shape's true identity), so it generalizes to the slightly
-# different z produced by a fresh out-of-pool extraction of the same shape.
-z_noise_frac = 0.1
-z_std = functa_pool["z_pos"].std()
 
 vf_functa = ConstrainedFlowMatcher(siren=siren, latent_dim=latent_dim).to(device)
 path = AffineProbPath(scheduler=CondOTScheduler())
@@ -607,7 +589,6 @@ for i in tqdm(range(iterations)):
 
     # Free (no SIREN calls): sampled from the precomputed pool built above.
     C, z = sample_from_functa_pool(path_sample.x_1, functa_pool, degree=poly_degree, scale=plane_scale)
-    z = z + torch.randn_like(z) * (z_noise_frac * z_std)
 
     pred_v = vf_functa(path_sample.x_t, path_sample.t, z)
 
@@ -673,6 +654,89 @@ generate_and_visualize_samples(
     degree=poly_degree,
     scale=plane_scale,
 )
+
+
+# %% [markdown]
+# #### Diagnostic: Same Constraint, Pool z vs. Freshly Extracted z
+#
+# The out-of-pool and in-pool cells above condition on *different* polynomials, so
+# their metrics are not comparable -- SWD/MMD/JSD depend strongly on which region is
+# truncated. This cell holds C fixed and varies only the source of z (the stored pool
+# latent vs. a fresh CAVIA extraction of the same C), isolating pool memorization.
+#
+# It also reports the level-set IoU between the SIREN's implicit region
+# {SIREN(x, z) <= 0} and the true region {P(x) <= 0}. The flow matcher only ever sees
+# z, so a low IoU bounds the achievable metrics by Functa reconstruction error rather
+# than by the flow matcher itself.
+
+# %%
+diag_num_shapes = 8
+diag_num_samples = 20000
+diag_points_per_shape = 1000
+diag_extraction_steps = 15
+diag_extraction_lr = 1e-2
+diag_grid_size = 200
+
+diag_idx = torch.randperm(functa_pool["C"].shape[0], device=device)[:diag_num_shapes]
+C_diag = functa_pool["C"][diag_idx]
+z_diag_pool = functa_pool["z_pos"][diag_idx]
+
+# Identical coefficients and tanh(P) target as the pool entry, new random query points.
+X_diag = (torch.rand(diag_num_shapes, diag_points_per_shape, 2, device=device) * (plane_scale * 2)) - plane_scale
+x_pow_diag, y_pow_diag = compute_poly_features_batched(X_diag, degree=poly_degree, scale=plane_scale)
+Y_diag = torch.tanh(evaluate_poly_batched(x_pow_diag, y_pow_diag, C_diag))
+z_diag_fresh, _ = extract_latents_batched(siren, X_diag / plane_scale, Y_diag,
+                                          lr=diag_extraction_lr, steps=diag_extraction_steps)
+
+z_drift = (z_diag_fresh - z_diag_pool).norm(dim=-1) / z_diag_pool.norm(dim=-1)
+print("relative z drift ||z_fresh - z_pool|| / ||z_pool||: "
+      f"mean {z_drift.mean():.4f} | max {z_drift.max():.4f}")
+
+
+# %%
+def levelset_iou(z_vec: torch.Tensor, C_mat: torch.Tensor, grid_size: int = diag_grid_size) -> float:
+    """IoU between the SIREN's implicit valid region and the true polynomial region."""
+    axis = torch.linspace(-plane_scale, plane_scale, grid_size, device=device)
+    gx, gy = torch.meshgrid(axis, axis, indexing="ij")
+    pts = torch.stack([gx.flatten(), gy.flatten()], dim=1)
+    num_pts = pts.shape[0]
+
+    x_pow, y_pow = compute_poly_features(pts, degree=poly_degree, scale=plane_scale)
+    C_expanded = C_mat.unsqueeze(0).expand(num_pts, -1, -1)
+    true_in = evaluate_poly(x_pow, y_pow, C_expanded).squeeze() <= 0
+
+    with torch.no_grad():
+        siren_val = siren((pts / plane_scale).unsqueeze(1), z_vec.view(1, -1).expand(num_pts, -1)).squeeze()
+    pred_in = siren_val <= 0
+
+    intersection = (true_in & pred_in).sum().float()
+    union = (true_in | pred_in).sum().float()
+    return float(intersection / union.clamp(min=1.0))
+
+
+diag_results = {"pool": [], "fresh": []}
+
+for k in range(diag_num_shapes):
+    C_k = C_diag[k]
+    line = f"shape {k}"
+    for tag, z_k in (("pool", z_diag_pool[k]), ("fresh", z_diag_fresh[k])):
+        samples_k, _ = vf_functa.sample(num_points=diag_num_samples, z=z_k, step_size=0.05,
+                                        return_intermediates=True, device=device)
+        metrics_k = evaluate_single_configuration(
+            samples=samples_k[-1], x_true_pool=gmm_true_pool, coeffs=C_k,
+            degree=poly_degree, scale=plane_scale, device=device,
+        )
+        metrics_k["iou"] = levelset_iou(z_k, C_k)
+        diag_results[tag].append(metrics_k)
+        line += (f" | {tag:>5} SR {metrics_k['success_rate']:6.2f} SWD {metrics_k['swd']:.4f}"
+                 f" MMD {metrics_k['mmd']:.4f} JSD {metrics_k['jsd']:.4f} IoU {metrics_k['iou']:.3f}")
+    print(line)
+
+print("-" * 110)
+for key in ("success_rate", "swd", "mmd", "jsd", "iou"):
+    pool_mean = sum(m[key] for m in diag_results["pool"]) / diag_num_shapes
+    fresh_mean = sum(m[key] for m in diag_results["fresh"]) / diag_num_shapes
+    print(f"{key:>13}: pool {pool_mean:9.4f} | fresh {fresh_mean:9.4f} | delta {fresh_mean - pool_mean:+9.4f}")
 
 
 # %% [markdown]

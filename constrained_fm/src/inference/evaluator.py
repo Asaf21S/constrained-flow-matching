@@ -11,7 +11,7 @@ from constrained_fm.src.metrics.distributional import filter_true_samples
 from constrained_fm.src.geometry.polynomials import compute_poly_features
 
 
-def run_evaluation_inference(model, x0, bounds=None, coeffs=None, step_size=0.05, batch_size=100000, device=None):
+def run_evaluation_inference(model, x0, bounds=None, coeffs=None, z=None, step_size=0.05, batch_size=100000, device=None):
     model.eval()
 
     wrapped_vf = WrappedModel(model)
@@ -28,6 +28,17 @@ def run_evaluation_inference(model, x0, bounds=None, coeffs=None, step_size=0.05
         # Shape: [B, 4] -> [B, N, 4] -> [B * N, 4]
         cond_expanded = cond_t.unsqueeze(1).expand(num_conditions, num_samples, 4).reshape(-1, 4)
         kwarg_name = 'bounds'
+
+    elif z is not None:
+        cond_t = torch.as_tensor(z, dtype=torch.float32, device=device)
+        if cond_t.ndim == 1:
+            cond_t = cond_t.unsqueeze(0)
+
+        num_conditions = cond_t.shape[0]
+        # Shape: [C, latent_dim] -> [C, N, latent_dim] -> [C * N, latent_dim]
+        cond_expanded = cond_t.unsqueeze(1).expand(num_conditions, num_samples, cond_t.shape[-1]).reshape(
+            -1, cond_t.shape[-1])
+        kwarg_name = 'z'
 
     elif coeffs is not None:
         cond_t = torch.tensor(coeffs, dtype=torch.float32, device=device)

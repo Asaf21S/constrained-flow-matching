@@ -740,6 +740,75 @@ for key in ("success_rate", "swd", "mmd", "jsd", "iou"):
 
 
 # %% [markdown]
+# ### Validation-Set Evaluation
+#
+# Scores vf_functa on the same static validation polynomials as the coefficient-conditioned
+# baseline, reporting median / mean / worst-5% instead of single-shape anecdotes. Per-shape
+# valid GMM mass and level-set IoU are logged alongside, so tail failures can be attributed
+# to a small valid region (low training exposure) versus poor Functa reconstruction.
+
+# %%
+val_extraction_points = 1000
+val_extraction_steps = 15
+val_extraction_lr = 1e-2
+
+val_set = get_validation_set(device=device)
+val_polys = val_set["polynomials"].to(device)
+val_x0 = val_set["x0"].to(device)
+num_val_polys = val_polys.shape[0]
+
+# Valid GMM mass per constraint. sample_from_functa_pool pairs an x_1 with a constraint
+# exactly in proportion to this, so it is also the constraint's training exposure weight.
+val_pool_x_pow, val_pool_y_pow = compute_poly_features(gmm_true_pool, degree=poly_degree, scale=plane_scale)
+val_mass = torch.stack([
+    (evaluate_poly(val_pool_x_pow, val_pool_y_pow,
+                   C_i.unsqueeze(0).expand(gmm_true_pool.shape[0], -1, -1)).squeeze() <= 0).float().mean()
+    for C_i in val_polys
+])
+
+val_X_query = (torch.rand(num_val_polys, val_extraction_points, 2, device=device) * (plane_scale * 2)) - plane_scale
+val_query_x_pow, val_query_y_pow = compute_poly_features_batched(val_X_query, degree=poly_degree, scale=plane_scale)
+val_Y_query = torch.tanh(evaluate_poly_batched(val_query_x_pow, val_query_y_pow, val_polys))
+z_val, val_mse = extract_latents_batched(siren, val_X_query / plane_scale, val_Y_query,
+                                         lr=val_extraction_lr, steps=val_extraction_steps)
+
+val_iou = torch.tensor([levelset_iou(z_val[i], val_polys[i]) for i in range(num_val_polys)])
+print(f"valid GMM mass : min {val_mass.min():.3f} | median {val_mass.median():.3f}")
+print(f"extraction MSE : mean {val_mse.mean():.5f} | max {val_mse.max():.5f}")
+print(f"level-set IoU  : mean {val_iou.mean():.4f} | min {val_iou.min():.4f}")
+
+
+# %%
+val_samples_functa = run_evaluation_inference(vf_functa, val_x0, z=z_val, step_size=0.05, device=device)
+
+metrics_functa = evaluate_validation_set_metrics(
+    val_samples_functa, x_true_pool=gmm_true_pool, coeffs=val_polys,
+    degree=poly_degree, scale=plane_scale, device=device,
+)
+
+print_readme_metrics_table(metrics_functa)
+
+
+# %%
+val_sr = torch.tensor(metrics_functa["success_rate"])
+worst_order = torch.argsort(val_sr)[:10].tolist()
+
+print(f"{'rank':>4} {'SR':>7} {'mass':>7} {'IoU':>7} {'ext_mse':>9} {'swd':>8} {'jsd':>8}")
+for rank, i in enumerate(worst_order):
+    print(f"{rank:>4} {val_sr[i]:7.2f} {val_mass[i]:7.3f} {val_iou[i]:7.3f} "
+          f"{val_mse[i]:9.5f} {metrics_functa['swd'][i]:8.4f} {metrics_functa['jsd'][i]:8.4f}")
+
+for name, series in (("mass", val_mass), ("IoU", val_iou), ("extraction_mse", val_mse)):
+    stacked = torch.stack([val_sr.cpu().float(), series.cpu().float()])
+    print(f"corr(success_rate, {name}) = {torch.corrcoef(stacked)[0, 1]:+.3f}")
+
+
+# %%
+log_evaluation_metrics(metrics_functa, note="functa-conditioned FM, fresh CAVIA extraction",
+                       eval_type="functa_polynomial")
+
+
+# %% [markdown]
 # ### Compute Likelihood
 
 # %%

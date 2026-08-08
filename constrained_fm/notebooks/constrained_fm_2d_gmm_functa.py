@@ -1,7 +1,6 @@
 # ---
 # jupyter:
 #   jupytext:
-#     formats: ipynb,py:percent
 #     text_representation:
 #       extension: .py
 #       format_name: percent
@@ -12,13 +11,13 @@
 #     name: python3
 # ---
 
-# %% [markdown] colab_type="text" id="view-in-github"
+# %% [markdown] id="view-in-github" colab_type="text"
 # <a href="https://colab.research.google.com/github/Asaf21S/constrained-flow-matching/blob/main/constrained_fm/notebooks/constrained_fm_2d_gmm_functa.ipynb" target="_parent"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>
 
 # %% [markdown] id="2JPbxNq2MVMG"
 # # Imports
 
-# %% colab={"base_uri": "https://localhost:8080/"} id="HNMO_aoSscgv" outputId="d30891ca-2b58-46ce-848e-cd54a48e11d4"
+# %% id="HNMO_aoSscgv" colab={"base_uri": "https://localhost:8080/"} outputId="d30891ca-2b58-46ce-848e-cd54a48e11d4"
 # !pip install -q flow_matching POT
 
 # %% id="94ZWJSSnSagz"
@@ -48,7 +47,7 @@ from flow_matching.solver import ODESolver, Solver
 from flow_matching.utils import ModelWrapper
 from torch.func import vmap
 
-# %% colab={"base_uri": "https://localhost:8080/"} id="CUSJhhRTmWoJ" outputId="0646a837-c5b5-4761-87ff-29f166b7d1d1"
+# %% id="CUSJhhRTmWoJ" colab={"base_uri": "https://localhost:8080/"} outputId="0646a837-c5b5-4761-87ff-29f166b7d1d1"
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 device
 

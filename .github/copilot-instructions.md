@@ -45,3 +45,10 @@ The main directory currently in use is the constrained_fm/ folder. Ignore constr
 * When asked to modify a notebook, you must exclusively read and edit the corresponding paired `.py` file. 
 * Preserve all `# %%` cell boundary markers exactly as they appear.
 * Once edits are complete, run `jupytext --sync <notebook>.ipynb` to update the notebook file.
+
+### Lessons from a corrupted-notebook incident
+* **Never use string-replace/insert edit tools on `.py`/`.ipynb` files repeatedly in a row** — re-running or stacking edits on content that may already be (partially) patched silently duplicates cell markers/lines. Read the current file state fresh before every edit attempt.
+* **Prefer a one-shot Python script with an explicit line-anchor** (find exact anchor line, insert at that index, write back) over fuzzy find/replace tools when precision matters — it's the only method that stayed reliable across this incident.
+* **`jupytext --sync` is unsafe once `.py` and `.ipynb` have diverged** (e.g. after a manual `git checkout` touches one file's mtime): it silently picks a side based on timestamps and can drop content. Prefer a direct one-way `jupytext --to notebook --output <nb>.ipynb <nb>.py` conversion instead.
+* **Always re-verify after every conversion step**, before moving on: cell count matches expectation, no duplicate consecutive `# %%` markers, `.py` passes `py_compile`, and the specific edited content is present in both files.
+* **If the notebook is ever corrupted**, recover from git history (`git log -- <path>`, `git checkout <good-commit> -- <path>`) rather than trying to hand-patch a broken JSON/`.py` file.

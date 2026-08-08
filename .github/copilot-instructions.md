@@ -38,3 +38,10 @@ The main directory currently in use is the constrained_fm/ folder. Ignore constr
 * **Tensor Alignment:** Always verify batch dimensions, tensor shapes, and device placement (`.to(device)`).
 * **Gradient Flow:** Ensure `requires_grad=True` is properly set on latent vectors during inference extraction, and `create_graph=True` is used during meta-learning inner loops.
 * **Isolation Tests:** When encountering capacity limits or failure to converge, default to generating small isolation tests (e.g., forcefully overfitting a single shape with 1000 steps of Adam) rather than immediately rewriting the training loop.
+
+## Notebook Editing Rules
+* **NEVER edit `.ipynb` files directly.** 
+* All Jupyter notebooks in this repository should be paired with Jupytext `.py` files using the percent format.
+* When asked to modify a notebook, you must exclusively read and edit the corresponding paired `.py` file. 
+* Preserve all `# %%` cell boundary markers exactly as they appear.
+* Once edits are complete, run `jupytext --sync <notebook>.ipynb` to update the notebook file.

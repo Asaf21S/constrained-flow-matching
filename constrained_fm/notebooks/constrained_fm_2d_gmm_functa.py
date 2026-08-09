@@ -694,24 +694,33 @@ print("relative z drift ||z_fresh - z_pool|| / ||z_pool||: "
 
 
 # %%
-def levelset_iou(z_vec: torch.Tensor, C_mat: torch.Tensor, grid_size: int = diag_grid_size) -> float:
-    """IoU between the SIREN's implicit valid region and the true polynomial region."""
+def uniform_grid_points(grid_size: int = diag_grid_size) -> torch.Tensor:
+    """Uniform lattice over the plane, weighting every region of space equally."""
     axis = torch.linspace(-plane_scale, plane_scale, grid_size, device=device)
     gx, gy = torch.meshgrid(axis, axis, indexing="ij")
-    pts = torch.stack([gx.flatten(), gy.flatten()], dim=1)
-    num_pts = pts.shape[0]
+    return torch.stack([gx.flatten(), gy.flatten()], dim=1)
 
-    x_pow, y_pow = compute_poly_features(pts, degree=poly_degree, scale=plane_scale)
+
+def region_iou(z_vec: torch.Tensor, C_mat: torch.Tensor, points: torch.Tensor) -> float:
+    """IoU between {SIREN(x, z) <= 0} and {P(x) <= 0}, measured over the given points."""
+    num_pts = points.shape[0]
+
+    x_pow, y_pow = compute_poly_features(points, degree=poly_degree, scale=plane_scale)
     C_expanded = C_mat.unsqueeze(0).expand(num_pts, -1, -1)
     true_in = evaluate_poly(x_pow, y_pow, C_expanded).squeeze() <= 0
 
     with torch.no_grad():
-        siren_val = siren((pts / plane_scale).unsqueeze(1), z_vec.view(1, -1).expand(num_pts, -1)).squeeze()
+        siren_val = siren((points / plane_scale).unsqueeze(1), z_vec.view(1, -1).expand(num_pts, -1)).squeeze()
     pred_in = siren_val <= 0
 
     intersection = (true_in & pred_in).sum().float()
     union = (true_in | pred_in).sum().float()
     return float(intersection / union.clamp(min=1.0))
+
+
+def levelset_iou(z_vec: torch.Tensor, C_mat: torch.Tensor) -> float:
+    """Area IoU: uniform lattice, so disagreement far from the data counts fully."""
+    return region_iou(z_vec, C_mat, uniform_grid_points())
 
 
 diag_results = {"pool": [], "fresh": []}
@@ -772,10 +781,16 @@ val_Y_query = torch.tanh(evaluate_poly_batched(val_query_x_pow, val_query_y_pow,
 z_val, val_mse = extract_latents_batched(siren, val_X_query / plane_scale, val_Y_query,
                                          lr=val_extraction_lr, steps=val_extraction_steps)
 
+# Area IoU weights every region of the plane equally; mass IoU weights disagreement by
+# GMM density, which is the only place the reported metrics can actually see it.
+iou_mass_points = gmm_true_pool[torch.randperm(gmm_true_pool.shape[0], device=device)[:20000]]
 val_iou = torch.tensor([levelset_iou(z_val[i], val_polys[i]) for i in range(num_val_polys)])
+val_iou_mass = torch.tensor([region_iou(z_val[i], val_polys[i], iou_mass_points) for i in range(num_val_polys)])
+
 print(f"valid GMM mass : min {val_mass.min():.3f} | median {val_mass.median():.3f}")
 print(f"extraction MSE : mean {val_mse.mean():.5f} | max {val_mse.max():.5f}")
-print(f"level-set IoU  : mean {val_iou.mean():.4f} | min {val_iou.min():.4f}")
+print(f"area IoU       : mean {val_iou.mean():.4f} | min {val_iou.min():.4f}")
+print(f"mass IoU       : mean {val_iou_mass.mean():.4f} | min {val_iou_mass.min():.4f}")
 
 
 # %%
@@ -793,12 +808,13 @@ print_readme_metrics_table(metrics_functa)
 val_sr = torch.tensor(metrics_functa["success_rate"])
 worst_order = torch.argsort(val_sr)[:10].tolist()
 
-print(f"{'rank':>4} {'SR':>7} {'mass':>7} {'IoU':>7} {'ext_mse':>9} {'swd':>8} {'jsd':>8}")
+print(f"{'rank':>4} {'SR':>7} {'mass':>7} {'areaIoU':>8} {'massIoU':>8} {'ext_mse':>9} {'swd':>8} {'jsd':>8}")
 for rank, i in enumerate(worst_order):
-    print(f"{rank:>4} {val_sr[i]:7.2f} {val_mass[i]:7.3f} {val_iou[i]:7.3f} "
+    print(f"{rank:>4} {val_sr[i]:7.2f} {val_mass[i]:7.3f} {val_iou[i]:8.3f} {val_iou_mass[i]:8.3f} "
           f"{val_mse[i]:9.5f} {metrics_functa['swd'][i]:8.4f} {metrics_functa['jsd'][i]:8.4f}")
 
-for name, series in (("mass", val_mass), ("IoU", val_iou), ("extraction_mse", val_mse)):
+for name, series in (("mass", val_mass), ("area_IoU", val_iou), ("mass_IoU", val_iou_mass),
+                     ("extraction_mse", val_mse)):
     stacked = torch.stack([val_sr.cpu().float(), series.cpu().float()])
     print(f"corr(success_rate, {name}) = {torch.corrcoef(stacked)[0, 1]:+.3f}")
 
@@ -806,6 +822,84 @@ for name, series in (("mass", val_mass), ("IoU", val_iou), ("extraction_mse", va
 # %%
 log_evaluation_metrics(metrics_functa, note="functa-conditioned FM, fresh CAVIA extraction",
                        eval_type="functa_polynomial")
+
+
+# %% [markdown]
+# #### Believed Region vs. True Region on the Failure Tail
+#
+# The flow matcher only ever sees z, so it can at best fill the region the SIREN decodes
+# from z. Plotting that decoded boundary (blue) against the true P(x) = 0 curve (red)
+# separates "the flow matcher fails to respect its conditioning" from "the conditioning
+# describes the wrong region".
+
+# %%
+num_worst_plots = 4
+worst_plot_ids = torch.argsort(val_sr)[:num_worst_plots].tolist()
+
+overlay_points = uniform_grid_points()
+overlay_axis = torch.linspace(-plane_scale, plane_scale, diag_grid_size).numpy()
+overlay_xx, overlay_yy = np.meshgrid(overlay_axis, overlay_axis, indexing="ij")
+
+fig, axs = plt.subplots(1, num_worst_plots, figsize=(5 * num_worst_plots, 5))
+for ax, i in zip(axs, worst_plot_ids):
+    visualize_single_step(val_samples_functa[i], title="", ax=ax, cmap="Oranges",
+                          coeffs=val_polys[i], degree=poly_degree, scale=plane_scale)
+
+    with torch.no_grad():
+        believed = siren((overlay_points / plane_scale).unsqueeze(1),
+                         z_val[i].view(1, -1).expand(overlay_points.shape[0], -1)).squeeze()
+    believed = believed.reshape(diag_grid_size, diag_grid_size).cpu().numpy()
+    ax.contour(overlay_xx, overlay_yy, believed, levels=[0.0], colors="blue", linewidths=2.0)
+
+    ax.set_xlim(-plane_scale, plane_scale)
+    ax.set_ylim(-plane_scale, plane_scale)
+    ax.set_title(f"shape {i} | SR {val_sr[i]:.1f}%\n"
+                 f"area IoU {val_iou[i]:.2f} | mass IoU {val_iou_mass[i]:.2f} | mass {val_mass[i]:.2f}")
+
+axs[0].plot([], [], color="red", linewidth=2.5, linestyle="dashed", label="true P(x) = 0")
+axs[0].plot([], [], color="blue", linewidth=2.0, label="SIREN(x, z) = 0")
+axs[0].legend(loc="upper right")
+plt.tight_layout()
+plt.show()
+
+
+# %% [markdown]
+# #### Probe: SDF-Normalized Extraction Target
+#
+# P and any positive multiple of P describe the same region, yet tanh(P) and tanh(2P) are
+# different functions, so the current target encodes an arbitrary scale carrying no geometric
+# information. It is also ill-conditioned: a field error eps displaces the zero set by roughly
+# eps / ||grad P||, which is large wherever the polynomial is flat near its boundary.
+# Dividing by ||grad P|| yields an approximate signed distance with ||grad|| ~ 1, making
+# boundary error proportional to field error.
+#
+# The SIREN was meta-trained on tanh(P), so this only measures whether the normalized target
+# already extracts better latents off-distribution -- a cheap check before committing to
+# re-running train_functa.py and rebuilding the pool.
+
+# %%
+sdf_grad_eps = 1e-3
+
+probe_X = (torch.rand(num_val_polys, val_extraction_points, 2, device=device) * (plane_scale * 2)) - plane_scale
+probe_X = probe_X.requires_grad_(True)
+
+probe_x_pow, probe_y_pow = compute_poly_features_batched(probe_X, degree=poly_degree, scale=plane_scale)
+probe_P = evaluate_poly_batched(probe_x_pow, probe_y_pow, val_polys)
+probe_grad = torch.autograd.grad(probe_P.sum(), probe_X)[0]
+
+probe_grad_norm = probe_grad.norm(dim=-1).clamp(min=sdf_grad_eps)
+probe_Y_sdf = torch.tanh(probe_P.detach() / probe_grad_norm.detach())
+
+z_sdf, mse_sdf = extract_latents_batched(siren, probe_X.detach() / plane_scale, probe_Y_sdf,
+                                         lr=val_extraction_lr, steps=val_extraction_steps)
+
+iou_sdf = torch.tensor([levelset_iou(z_sdf[i], val_polys[i]) for i in range(num_val_polys)])
+iou_sdf_mass = torch.tensor([region_iou(z_sdf[i], val_polys[i], iou_mass_points) for i in range(num_val_polys)])
+
+print(f"||grad P|| : median {probe_grad_norm.median():.4f} | 5th pct {probe_grad_norm.flatten().quantile(0.05):.4f}")
+print(f"area IoU   : tanh(P) {val_iou.mean():.4f} -> tanh(P/|grad P|) {iou_sdf.mean():.4f}")
+print(f"mass IoU   : tanh(P) {val_iou_mass.mean():.4f} -> tanh(P/|grad P|) {iou_sdf_mass.mean():.4f}")
+print(f"worst-5% area IoU : {val_iou.quantile(0.05):.4f} -> {iou_sdf.quantile(0.05):.4f}")
 
 
 # %% [markdown]

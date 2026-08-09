@@ -5,8 +5,9 @@ from tqdm import tqdm
 from pathlib import Path
 import numpy as np
 
-from constrained_fm.src.consts import POLYNOMIAL_DEGREE, PLANE_SCALE
+from constrained_fm.src.consts import POLYNOMIAL_DEGREE, PLANE_SCALE, FUNCTA_QUERY_GMM_FRACTION
 from constrained_fm.src.datasets.constraints import sample_valid_polynomials
+from constrained_fm.src.datasets.functa_conditioning import sample_query_points
 from constrained_fm.src.geometry.polynomials import compute_poly_features, compute_poly_features_batched, evaluate_poly_batched
 from constrained_fm.src.models.functa_siren import build_modulated_siren
 from constrained_fm.src.datasets.gmm_target import get_points
@@ -37,6 +38,7 @@ n_layers = 4
 w0 = 30.0
 poly_degree = POLYNOMIAL_DEGREE
 plane_scale = PLANE_SCALE
+query_gmm_fraction = FUNCTA_QUERY_GMM_FRACTION  # must match every extraction call site
 
 save_every = 50
 patience = 250
@@ -71,13 +73,14 @@ def generate_batch(batch_size: int, num_points: int) -> tuple[torch.Tensor, torc
         device=device
     )
 
-    X = (torch.rand(batch_size, num_points, 2, device=device) * 2) - 1
+    X_raw = sample_query_points(batch_size, num_points, scale=plane_scale,
+                                gmm_fraction=query_gmm_fraction, device=device)
 
-    x_pow, y_pow = compute_poly_features_batched(X, degree=poly_degree, scale=1.0)
+    x_pow, y_pow = compute_poly_features_batched(X_raw, degree=poly_degree, scale=plane_scale)
     P_vals = evaluate_poly_batched(x_pow, y_pow, C)
 
     Y = torch.tanh(P_vals)
-    return X, Y
+    return X_raw / plane_scale, Y
 
 
 print("Generating fixed holdout set of 100 polynomials for validation...")

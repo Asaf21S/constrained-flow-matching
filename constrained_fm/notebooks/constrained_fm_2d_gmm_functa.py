@@ -181,7 +181,9 @@ from constrained_fm.src.models.constrained_functa import ConstrainedFlowMatcher
 from constrained_fm.src.datasets.functa_conditioning import (generate_functa_conditioned_batch,
                                                             build_functa_pool,
                                                             sample_from_functa_pool,
-                                                            compute_pool_masses)
+                                                            compute_pool_masses,
+                                                            sample_query_points)
+from constrained_fm.src.consts import FUNCTA_QUERY_GMM_FRACTION
 
 
 # %% [markdown] id="NhwH76zZvp87"
@@ -544,7 +546,7 @@ pool_chunk_size = 128
 # silently loading a smaller/stale cached pool.
 drive_pool_dir = Path('/content/drive/MyDrive/constrained-flow-matching/functa_dataset')
 drive_pool_dir.mkdir(parents=True, exist_ok=True)
-pool_path = drive_pool_dir / f"functa_conditioning_pool_{pool_size}.pt"
+pool_path = drive_pool_dir / f"functa_conditioning_pool_{pool_size}_gmmq{FUNCTA_QUERY_GMM_FRACTION}.pt"
 
 if pool_path.exists():
     print(f"Loading cached Functa pool from {pool_path}...")
@@ -576,10 +578,9 @@ batch_size = 1024
 iterations = 15001
 print_every = 500
 
-# Constraint exposure is proportional to valid mass, so small regions -- exactly the ones
-# that fail -- are the least trained. Weighting by mass^(-power) equalizes exposure while
-# leaving p(x_1 | C) untouched. 0.0 restores the previous mass-proportional behaviour.
-mass_weight_power = 1.0
+# Weights constraint exposure by mass^(-power), equalizing it across constraints at
+# power 1.0. 0.0 leaves exposure proportional to each constraint's valid mass.
+mass_weight_power = 0.0
 
 vf_functa = ConstrainedFlowMatcher(siren=siren, latent_dim=latent_dim).to(device)
 path = AffineProbPath(scheduler=CondOTScheduler())
@@ -721,7 +722,7 @@ val_mass = torch.stack([
     for C_i in val_polys
 ])
 
-val_X_query = (torch.rand(num_val_polys, val_extraction_points, 2, device=device) * (plane_scale * 2)) - plane_scale
+val_X_query = sample_query_points(num_val_polys, val_extraction_points, scale=plane_scale, device=device)
 val_query_x_pow, val_query_y_pow = compute_poly_features_batched(val_X_query, degree=poly_degree, scale=plane_scale)
 val_Y_query = torch.tanh(evaluate_poly_batched(val_query_x_pow, val_query_y_pow, val_polys))
 z_val, val_mse = extract_latents_batched(siren, val_X_query / plane_scale, val_Y_query,

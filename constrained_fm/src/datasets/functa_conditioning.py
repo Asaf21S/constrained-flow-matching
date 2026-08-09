@@ -7,10 +7,52 @@ import torch
 import torch.nn as nn
 from tqdm.auto import tqdm
 
-from constrained_fm.src.consts import POLYNOMIAL_DEGREE, PLANE_SCALE
+from constrained_fm.src.consts import POLYNOMIAL_DEGREE, PLANE_SCALE, FUNCTA_QUERY_GMM_FRACTION
 from constrained_fm.src.datasets.constraints import sample_valid_polynomials
+from constrained_fm.src.datasets.gmm_target import get_points
 from constrained_fm.src.geometry.polynomials import compute_poly_features_batched, evaluate_poly_batched
 from constrained_fm.src.inference.latent_extractor import extract_latents_batched
+
+
+def sample_query_points(
+        batch_size: int,
+        num_points: int,
+        scale: float = PLANE_SCALE,
+        gmm_fraction: float = FUNCTA_QUERY_GMM_FRACTION,
+        device: torch.device | str | None = None,
+) -> torch.Tensor:
+    """Query coordinates for CAVIA extraction, mixing GMM-distributed and uniform points.
+
+    The 15-step inner loop has a fixed information budget, so where the query points land
+    decides what the latent encodes. Uniform points spread it evenly over the plane, but
+    constraints are accepted by GMM *mass* ratio, so their boundaries concentrate inside the
+    GMM support -- and that is also the only region the reported metrics can see. Drawing a
+    fraction from the GMM reallocates the budget onto the boundary without spending more.
+
+    The uniform remainder keeps the level set from drifting far from the data, where nothing
+    would otherwise constrain it.
+
+    Args:
+        batch_size: number of independent shapes.
+        num_points: query points per shape.
+        scale: domain half-width; GMM draws are clamped into [-scale, scale].
+        gmm_fraction: portion drawn from the GMM; 0.0 reproduces pure uniform sampling.
+        device: torch device.
+
+    Returns:
+        X: (batch_size, num_points, 2) raw-scale coordinates.
+    """
+    num_gmm = int(round(num_points * gmm_fraction))
+    num_uniform = num_points - num_gmm
+
+    parts = []
+    if num_gmm > 0:
+        gmm_points, _ = get_points(batch_size * num_gmm, device=device)
+        parts.append(gmm_points.view(batch_size, num_gmm, 2).clamp(-scale, scale))
+    if num_uniform > 0:
+        parts.append((torch.rand(batch_size, num_uniform, 2, device=device) * (scale * 2)) - scale)
+
+    return torch.cat(parts, dim=1)
 
 
 def generate_functa_conditioned_batch(
@@ -83,7 +125,7 @@ def generate_functa_conditioned_batch(
         end = min(start + extraction_chunk_size, batch_size)
         C_chunk = C[start:end]
 
-        X_raw = (torch.rand(end - start, points_per_shape, 2, device=device) * (scale * 2)) - scale
+        X_raw = sample_query_points(end - start, points_per_shape, scale=scale, device=device)
         x_pow, y_pow = compute_poly_features_batched(X_raw, degree=degree, scale=scale)
         P_vals = evaluate_poly_batched(x_pow, y_pow, C_chunk)
         Y = torch.tanh(P_vals)
@@ -143,7 +185,7 @@ def build_functa_pool(
             min_area=min_area, max_area=max_area, device=device,
         )
 
-        X_raw = (torch.rand(current_chunk_size, points_per_shape, 2, device=device) * (scale * 2)) - scale
+        X_raw = sample_query_points(current_chunk_size, points_per_shape, scale=scale, device=device)
         x_pow, y_pow = compute_poly_features_batched(X_raw, degree=degree, scale=scale)
         P_vals = evaluate_poly_batched(x_pow, y_pow, C_chunk)
         Y_pos = torch.tanh(P_vals)
@@ -258,4 +300,4 @@ def sample_from_functa_pool(
 
 
 __all__ = ["generate_functa_conditioned_batch", "build_functa_pool", "sample_from_functa_pool",
-           "compute_pool_masses"]
+           "compute_pool_masses", "sample_query_points"]

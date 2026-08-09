@@ -21,6 +21,10 @@ POLYNOMIAL_DEGREE = 3
 PLANE_SCALE = 4.5
 POLY_MIN_AREA_RATIO = 0.05
 POLY_MAX_AREA_RATIO = 0.95
+
+# Fraction of CAVIA query points drawn from the GMM rather than uniformly over the plane.
+# Must be identical in meta-training and at extraction time.
+FUNCTA_QUERY_GMM_FRACTION = 0.5
 VALIDATION_POLY_MIN_AREA_RATIO = 0.1
 VALIDATION_POLY_MAX_AREA_RATIO = 0.9
 VALIDATION_BBOX_WIDTH_RANGE = (1.0, 6.5)

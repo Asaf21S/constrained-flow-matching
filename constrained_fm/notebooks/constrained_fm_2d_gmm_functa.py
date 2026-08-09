@@ -180,7 +180,8 @@ from constrained_fm.src.inference.latent_extractor import extract_latent, extrac
 from constrained_fm.src.models.constrained_functa import ConstrainedFlowMatcher
 from constrained_fm.src.datasets.functa_conditioning import (generate_functa_conditioned_batch,
                                                             build_functa_pool,
-                                                            sample_from_functa_pool)
+                                                            sample_from_functa_pool,
+                                                            compute_pool_masses)
 
 
 # %% [markdown] id="NhwH76zZvp87"
@@ -560,6 +561,10 @@ else:
 
 functa_pool = {k: v.to(device) for k, v in functa_pool.items()}
 
+# Recomputed on load rather than stored, so changing it never invalidates the cached pool.
+functa_pool_mass = compute_pool_masses(functa_pool, proxy_x_pow, proxy_y_pow)
+print(f"pool valid mass: min {functa_pool_mass.min():.3f} | median {functa_pool_mass.median():.3f}")
+
 
 # %% [markdown]
 # ### Training
@@ -570,6 +575,11 @@ batch_size = 1024
 
 iterations = 15001
 print_every = 500
+
+# Constraint exposure is proportional to valid mass, so small regions -- exactly the ones
+# that fail -- are the least trained. Weighting by mass^(-power) equalizes exposure while
+# leaving p(x_1 | C) untouched. 0.0 restores the previous mass-proportional behaviour.
+mass_weight_power = 1.0
 
 vf_functa = ConstrainedFlowMatcher(siren=siren, latent_dim=latent_dim).to(device)
 path = AffineProbPath(scheduler=CondOTScheduler())
@@ -588,11 +598,12 @@ for i in tqdm(range(iterations)):
     path_sample = path.sample(t=t, x_0=x_0, x_1=x_1)
 
     # Free (no SIREN calls): sampled from the precomputed pool built above.
-    C, z = sample_from_functa_pool(path_sample.x_1, functa_pool, degree=poly_degree, scale=plane_scale)
+    C, z, w = sample_from_functa_pool(path_sample.x_1, functa_pool, degree=poly_degree, scale=plane_scale,
+                                      mass_pos=functa_pool_mass, weight_power=mass_weight_power)
 
     pred_v = vf_functa(path_sample.x_t, path_sample.t, z)
 
-    loss = torch.pow(pred_v - path_sample.dx_t, 2).mean()
+    loss = (w * torch.pow(pred_v - path_sample.dx_t, 2).mean(dim=-1)).mean()
     loss.backward()
     optim_functa.step()
     scheduler_functa.step()
@@ -657,45 +668,23 @@ generate_and_visualize_samples(
 
 
 # %% [markdown]
-# #### Diagnostic: Same Constraint, Pool z vs. Freshly Extracted z
+# ### Validation-Set Evaluation
 #
-# The out-of-pool and in-pool cells above condition on *different* polynomials, so
-# their metrics are not comparable -- SWD/MMD/JSD depend strongly on which region is
-# truncated. This cell holds C fixed and varies only the source of z (the stored pool
-# latent vs. a fresh CAVIA extraction of the same C), isolating pool memorization.
-#
-# It also reports the level-set IoU between the SIREN's implicit region
-# {SIREN(x, z) <= 0} and the true region {P(x) <= 0}. The flow matcher only ever sees
-# z, so a low IoU bounds the achievable metrics by Functa reconstruction error rather
-# than by the flow matcher itself.
+# Scores vf_functa on the same static validation polynomials as the coefficient-conditioned
+# baseline, reporting median / mean / worst-5% instead of single-shape anecdotes. Per-shape
+# valid GMM mass and level-set IoU are logged alongside, so tail failures can be attributed
+# to a small valid region (low training exposure) versus poor Functa reconstruction.
 
 # %%
-diag_num_shapes = 8
-diag_num_samples = 20000
-diag_points_per_shape = 1000
-diag_extraction_steps = 15
-diag_extraction_lr = 1e-2
-diag_grid_size = 200
-
-diag_idx = torch.randperm(functa_pool["C"].shape[0], device=device)[:diag_num_shapes]
-C_diag = functa_pool["C"][diag_idx]
-z_diag_pool = functa_pool["z_pos"][diag_idx]
-
-# Identical coefficients and tanh(P) target as the pool entry, new random query points.
-X_diag = (torch.rand(diag_num_shapes, diag_points_per_shape, 2, device=device) * (plane_scale * 2)) - plane_scale
-x_pow_diag, y_pow_diag = compute_poly_features_batched(X_diag, degree=poly_degree, scale=plane_scale)
-Y_diag = torch.tanh(evaluate_poly_batched(x_pow_diag, y_pow_diag, C_diag))
-z_diag_fresh, _ = extract_latents_batched(siren, X_diag / plane_scale, Y_diag,
-                                          lr=diag_extraction_lr, steps=diag_extraction_steps)
-
-z_drift = (z_diag_fresh - z_diag_pool).norm(dim=-1) / z_diag_pool.norm(dim=-1)
-print("relative z drift ||z_fresh - z_pool|| / ||z_pool||: "
-      f"mean {z_drift.mean():.4f} | max {z_drift.max():.4f}")
+val_extraction_points = 1000
+val_extraction_steps = 15
+val_extraction_lr = 1e-2
+iou_grid_size = 200
+iou_mass_samples = 20000
 
 
-# %%
-def uniform_grid_points(grid_size: int = diag_grid_size) -> torch.Tensor:
-    """Uniform lattice over the plane, weighting every region of space equally."""
+def uniform_grid_points(grid_size: int = iou_grid_size) -> torch.Tensor:
+    """Uniform lattice over the plane."""
     axis = torch.linspace(-plane_scale, plane_scale, grid_size, device=device)
     gx, gy = torch.meshgrid(axis, axis, indexing="ij")
     return torch.stack([gx.flatten(), gy.flatten()], dim=1)
@@ -718,49 +707,6 @@ def region_iou(z_vec: torch.Tensor, C_mat: torch.Tensor, points: torch.Tensor) -
     return float(intersection / union.clamp(min=1.0))
 
 
-def levelset_iou(z_vec: torch.Tensor, C_mat: torch.Tensor) -> float:
-    """Area IoU: uniform lattice, so disagreement far from the data counts fully."""
-    return region_iou(z_vec, C_mat, uniform_grid_points())
-
-
-diag_results = {"pool": [], "fresh": []}
-
-for k in range(diag_num_shapes):
-    C_k = C_diag[k]
-    line = f"shape {k}"
-    for tag, z_k in (("pool", z_diag_pool[k]), ("fresh", z_diag_fresh[k])):
-        samples_k, _ = vf_functa.sample(num_points=diag_num_samples, z=z_k, step_size=0.05,
-                                        return_intermediates=True, device=device)
-        metrics_k = evaluate_single_configuration(
-            samples=samples_k[-1], x_true_pool=gmm_true_pool, coeffs=C_k,
-            degree=poly_degree, scale=plane_scale, device=device,
-        )
-        metrics_k["iou"] = levelset_iou(z_k, C_k)
-        diag_results[tag].append(metrics_k)
-        line += (f" | {tag:>5} SR {metrics_k['success_rate']:6.2f} SWD {metrics_k['swd']:.4f}"
-                 f" MMD {metrics_k['mmd']:.4f} JSD {metrics_k['jsd']:.4f} IoU {metrics_k['iou']:.3f}")
-    print(line)
-
-print("-" * 110)
-for key in ("success_rate", "swd", "mmd", "jsd", "iou"):
-    pool_mean = sum(m[key] for m in diag_results["pool"]) / diag_num_shapes
-    fresh_mean = sum(m[key] for m in diag_results["fresh"]) / diag_num_shapes
-    print(f"{key:>13}: pool {pool_mean:9.4f} | fresh {fresh_mean:9.4f} | delta {fresh_mean - pool_mean:+9.4f}")
-
-
-# %% [markdown]
-# ### Validation-Set Evaluation
-#
-# Scores vf_functa on the same static validation polynomials as the coefficient-conditioned
-# baseline, reporting median / mean / worst-5% instead of single-shape anecdotes. Per-shape
-# valid GMM mass and level-set IoU are logged alongside, so tail failures can be attributed
-# to a small valid region (low training exposure) versus poor Functa reconstruction.
-
-# %%
-val_extraction_points = 1000
-val_extraction_steps = 15
-val_extraction_lr = 1e-2
-
 val_set = get_validation_set(device=device)
 val_polys = val_set["polynomials"].to(device)
 val_x0 = val_set["x0"].to(device)
@@ -781,15 +727,11 @@ val_Y_query = torch.tanh(evaluate_poly_batched(val_query_x_pow, val_query_y_pow,
 z_val, val_mse = extract_latents_batched(siren, val_X_query / plane_scale, val_Y_query,
                                          lr=val_extraction_lr, steps=val_extraction_steps)
 
-# Area IoU weights every region of the plane equally; mass IoU weights disagreement by
-# GMM density, which is the only place the reported metrics can actually see it.
-iou_mass_points = gmm_true_pool[torch.randperm(gmm_true_pool.shape[0], device=device)[:20000]]
-val_iou = torch.tensor([levelset_iou(z_val[i], val_polys[i]) for i in range(num_val_polys)])
+# Weighted by GMM density: level-set disagreement away from the data cannot move the metrics.
+iou_mass_points = gmm_true_pool[torch.randperm(gmm_true_pool.shape[0], device=device)[:iou_mass_samples]]
 val_iou_mass = torch.tensor([region_iou(z_val[i], val_polys[i], iou_mass_points) for i in range(num_val_polys)])
 
 print(f"valid GMM mass : min {val_mass.min():.3f} | median {val_mass.median():.3f}")
-print(f"extraction MSE : mean {val_mse.mean():.5f} | max {val_mse.max():.5f}")
-print(f"area IoU       : mean {val_iou.mean():.4f} | min {val_iou.min():.4f}")
 print(f"mass IoU       : mean {val_iou_mass.mean():.4f} | min {val_iou_mass.min():.4f}")
 
 
@@ -808,13 +750,12 @@ print_readme_metrics_table(metrics_functa)
 val_sr = torch.tensor(metrics_functa["success_rate"])
 worst_order = torch.argsort(val_sr)[:10].tolist()
 
-print(f"{'rank':>4} {'SR':>7} {'mass':>7} {'areaIoU':>8} {'massIoU':>8} {'ext_mse':>9} {'swd':>8} {'jsd':>8}")
+print(f"{'rank':>4} {'SR':>7} {'mass':>7} {'massIoU':>8} {'swd':>8} {'jsd':>8}")
 for rank, i in enumerate(worst_order):
-    print(f"{rank:>4} {val_sr[i]:7.2f} {val_mass[i]:7.3f} {val_iou[i]:8.3f} {val_iou_mass[i]:8.3f} "
-          f"{val_mse[i]:9.5f} {metrics_functa['swd'][i]:8.4f} {metrics_functa['jsd'][i]:8.4f}")
+    print(f"{rank:>4} {val_sr[i]:7.2f} {val_mass[i]:7.3f} {val_iou_mass[i]:8.3f} "
+          f"{metrics_functa['swd'][i]:8.4f} {metrics_functa['jsd'][i]:8.4f}")
 
-for name, series in (("mass", val_mass), ("area_IoU", val_iou), ("mass_IoU", val_iou_mass),
-                     ("extraction_mse", val_mse)):
+for name, series in (("mass", val_mass), ("mass_IoU", val_iou_mass)):
     stacked = torch.stack([val_sr.cpu().float(), series.cpu().float()])
     print(f"corr(success_rate, {name}) = {torch.corrcoef(stacked)[0, 1]:+.3f}")
 
@@ -837,7 +778,7 @@ num_worst_plots = 4
 worst_plot_ids = torch.argsort(val_sr)[:num_worst_plots].tolist()
 
 overlay_points = uniform_grid_points()
-overlay_axis = torch.linspace(-plane_scale, plane_scale, diag_grid_size).numpy()
+overlay_axis = torch.linspace(-plane_scale, plane_scale, iou_grid_size).numpy()
 overlay_xx, overlay_yy = np.meshgrid(overlay_axis, overlay_axis, indexing="ij")
 
 fig, axs = plt.subplots(1, num_worst_plots, figsize=(5 * num_worst_plots, 5))
@@ -848,58 +789,19 @@ for ax, i in zip(axs, worst_plot_ids):
     with torch.no_grad():
         believed = siren((overlay_points / plane_scale).unsqueeze(1),
                          z_val[i].view(1, -1).expand(overlay_points.shape[0], -1)).squeeze()
-    believed = believed.reshape(diag_grid_size, diag_grid_size).cpu().numpy()
+    believed = believed.reshape(iou_grid_size, iou_grid_size).cpu().numpy()
     ax.contour(overlay_xx, overlay_yy, believed, levels=[0.0], colors="blue", linewidths=2.0)
 
     ax.set_xlim(-plane_scale, plane_scale)
     ax.set_ylim(-plane_scale, plane_scale)
     ax.set_title(f"shape {i} | SR {val_sr[i]:.1f}%\n"
-                 f"area IoU {val_iou[i]:.2f} | mass IoU {val_iou_mass[i]:.2f} | mass {val_mass[i]:.2f}")
+                 f"mass IoU {val_iou_mass[i]:.2f} | mass {val_mass[i]:.2f}")
 
 axs[0].plot([], [], color="red", linewidth=2.5, linestyle="dashed", label="true P(x) = 0")
 axs[0].plot([], [], color="blue", linewidth=2.0, label="SIREN(x, z) = 0")
 axs[0].legend(loc="upper right")
 plt.tight_layout()
 plt.show()
-
-
-# %% [markdown]
-# #### Probe: SDF-Normalized Extraction Target
-#
-# P and any positive multiple of P describe the same region, yet tanh(P) and tanh(2P) are
-# different functions, so the current target encodes an arbitrary scale carrying no geometric
-# information. It is also ill-conditioned: a field error eps displaces the zero set by roughly
-# eps / ||grad P||, which is large wherever the polynomial is flat near its boundary.
-# Dividing by ||grad P|| yields an approximate signed distance with ||grad|| ~ 1, making
-# boundary error proportional to field error.
-#
-# The SIREN was meta-trained on tanh(P), so this only measures whether the normalized target
-# already extracts better latents off-distribution -- a cheap check before committing to
-# re-running train_functa.py and rebuilding the pool.
-
-# %%
-sdf_grad_eps = 1e-3
-
-probe_X = (torch.rand(num_val_polys, val_extraction_points, 2, device=device) * (plane_scale * 2)) - plane_scale
-probe_X = probe_X.requires_grad_(True)
-
-probe_x_pow, probe_y_pow = compute_poly_features_batched(probe_X, degree=poly_degree, scale=plane_scale)
-probe_P = evaluate_poly_batched(probe_x_pow, probe_y_pow, val_polys)
-probe_grad = torch.autograd.grad(probe_P.sum(), probe_X)[0]
-
-probe_grad_norm = probe_grad.norm(dim=-1).clamp(min=sdf_grad_eps)
-probe_Y_sdf = torch.tanh(probe_P.detach() / probe_grad_norm.detach())
-
-z_sdf, mse_sdf = extract_latents_batched(siren, probe_X.detach() / plane_scale, probe_Y_sdf,
-                                         lr=val_extraction_lr, steps=val_extraction_steps)
-
-iou_sdf = torch.tensor([levelset_iou(z_sdf[i], val_polys[i]) for i in range(num_val_polys)])
-iou_sdf_mass = torch.tensor([region_iou(z_sdf[i], val_polys[i], iou_mass_points) for i in range(num_val_polys)])
-
-print(f"||grad P|| : median {probe_grad_norm.median():.4f} | 5th pct {probe_grad_norm.flatten().quantile(0.05):.4f}")
-print(f"area IoU   : tanh(P) {val_iou.mean():.4f} -> tanh(P/|grad P|) {iou_sdf.mean():.4f}")
-print(f"mass IoU   : tanh(P) {val_iou_mass.mean():.4f} -> tanh(P/|grad P|) {iou_sdf_mass.mean():.4f}")
-print(f"worst-5% area IoU : {val_iou.quantile(0.05):.4f} -> {iou_sdf.quantile(0.05):.4f}")
 
 
 # %% [markdown]

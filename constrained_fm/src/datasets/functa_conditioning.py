@@ -163,26 +163,71 @@ def build_functa_pool(
     }
 
 
+def compute_pool_masses(
+        pool: dict[str, torch.Tensor],
+        proxy_x_pow: torch.Tensor,
+        proxy_y_pow: torch.Tensor,
+        chunk_size: int = 4096,
+) -> torch.Tensor:
+    """Valid GMM mass of each pool polynomial's unflipped orientation.
+
+    sample_from_functa_pool pairs an x_1 with a constraint only when x_1 falls inside it,
+    so this mass is exactly the constraint's relative training exposure: a 0.05-mass region
+    receives ~19x fewer gradient updates than a 0.95-mass one.
+
+    proxy_x_pow/proxy_y_pow must be the GMM-sampled proxy features (see
+    sample_valid_polynomials), so "mass" means probability mass and not geometric area.
+
+    Returns:
+        mass_pos: (pool_size,) valid mass in [0, 1]; the flipped orientation's is 1 - mass_pos.
+    """
+    C_all = pool["C"]
+    device = proxy_x_pow.device
+
+    masses = []
+    for start in range(0, C_all.shape[0], chunk_size):
+        C_chunk = C_all[start:start + chunk_size].to(device)
+        # B = batch, N = proxy points, I/J = polynomial degrees
+        P_vals = torch.einsum('ni, bij, nj -> bn', proxy_x_pow, C_chunk, proxy_y_pow)
+        masses.append((P_vals <= 0).float().mean(dim=1))
+
+    return torch.cat(masses, dim=0)
+
+
 def sample_from_functa_pool(
         x_1: torch.Tensor,
         pool: dict[str, torch.Tensor],
         degree: int = POLYNOMIAL_DEGREE,
         scale: float = PLANE_SCALE,
-) -> tuple[torch.Tensor, torch.Tensor]:
+        mass_pos: torch.Tensor | None = None,
+        weight_power: float = 1.0,
+        max_weight: float = 20.0,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Samples a Functa-conditioned batch from a precomputed pool with no SIREN calls.
 
     For each x_1, picks a random pool entry and selects whichever precomputed
     orientation (z_pos for C, z_neg for -C) actually contains x_1, exactly
     preserving the "flip trick" invariant P(x_1) <= 0 at effectively zero cost.
 
+    Because that selection conditions on x_1 lying inside the region, an oriented
+    constraint appears in the batch with probability proportional to its valid mass.
+    Passing mass_pos returns importance weights mass^(-weight_power) that undo this,
+    equalizing exposure across constraints. Reweighting alters only the marginal over
+    constraints; p(x_1 | C) remains exactly the truncated target, so the objective stays
+    unbiased for the per-constraint conditional.
+
     Args:
         x_1: (B, 2) raw-scale target samples to condition on.
         pool: dict as returned by build_functa_pool (moved to x_1's device beforehand).
         degree, scale: must match the values used to build the pool.
+        mass_pos: (pool_size,) valid masses from compute_pool_masses; None disables weighting.
+        weight_power: 0.0 reproduces mass-proportional exposure, 1.0 fully equalizes it.
+        max_weight: cap applied before normalization, bounding gradient variance.
 
     Returns:
         C: (B, degree + 1, degree + 1) oriented coefficients, satisfying P(x_1) <= 0.
         z: (B, latent_dim) Functa latents.
+        w: (B,) per-example loss weights, normalized to mean 1.
     """
     device = x_1.device
     batch_size = x_1.shape[0]
@@ -200,7 +245,17 @@ def sample_from_functa_pool(
     z = torch.where(use_flipped.unsqueeze(-1), z_neg_batch, z_pos_batch)
     C = torch.where(use_flipped.view(-1, 1, 1), -C_batch, C_batch)
 
-    return C, z
+    if mass_pos is None or weight_power == 0.0:
+        w = torch.ones(batch_size, device=device)
+    else:
+        mass_batch = mass_pos.to(device)[idx]
+        oriented_mass = torch.where(use_flipped, 1.0 - mass_batch, mass_batch)
+        w = oriented_mass.clamp(min=1.0 / max_weight) ** (-weight_power)
+        w = w.clamp(max=max_weight)
+        w = w / w.mean()
+
+    return C, z, w
 
 
-__all__ = ["generate_functa_conditioned_batch", "build_functa_pool", "sample_from_functa_pool"]
+__all__ = ["generate_functa_conditioned_batch", "build_functa_pool", "sample_from_functa_pool",
+           "compute_pool_masses"]

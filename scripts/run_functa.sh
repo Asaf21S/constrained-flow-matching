@@ -4,7 +4,7 @@
 #SBATCH --error=/users/rosenbaum/asolomiak/constrained-flow-matching/logs/functa_train_%j.err
 #SBATCH --time=120:00:00
 #SBATCH --partition=dlc
-#SBATCH --gpus=1
+#SBATCH --gpus-per-node=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32G
 #SBATCH --mail-user=asafucho@gmail.com

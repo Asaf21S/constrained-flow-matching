@@ -11,6 +11,9 @@
 #SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --exclude=dgx04
 
+# The notebook selects the inline matplotlib backend itself; MPLBACKEND must not be set
+# here, since forcing Agg makes plt.show() a silent no-op and drops every figure.
+#
 # Executes the paired .py as a notebook, then writes two artifacts to outputs/:
 #   .ipynb - the notebook with every cell's stdout and figures stored inline
 #   .html  - a standalone render, viewable in a browser with no Jupyter install
@@ -39,7 +42,6 @@ srun --container-image=/users/rosenbaum/asolomiak/nvidia+pytorch+24.03-py3.sqsh 
      --container-mounts=/users/rosenbaum/asolomiak/constrained-flow-matching:/workspace \
      bash -c "set -eo pipefail && \
               export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True && \
-              export MPLBACKEND=Agg && \
               export SMOKE_TEST=${SMOKE_TEST} && \
               export PATH=\"\$HOME/.local/bin:\$PATH\" && \
               cd /workspace && \

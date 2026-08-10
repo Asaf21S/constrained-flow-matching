@@ -21,9 +21,12 @@
 # !pip install -q flow_matching POT
 
 # %% id="94ZWJSSnSagz"
+# %matplotlib inline
+
 import sys
 import os
 import copy
+import functools
 import math
 import random
 from pathlib import Path
@@ -106,6 +109,18 @@ else:
 print(f"SMOKE_TEST = {SMOKE_TEST}")
 for _k, _v in cfg.items():
     print(f"  {_k:18s} {_v}")
+
+# Batch execution records every tqdm refresh as its own output line, which bloats the
+# executed notebook. Throttling refresh interval keeps progress visible but compact.
+tqdm_min_interval = float(os.environ.get("TQDM_MININTERVAL", "0.1" if IN_COLAB else "30"))
+try:
+    import tqdm as _tqdm_module
+
+    _tqdm_module.std.tqdm.__init__ = functools.partialmethod(
+        _tqdm_module.std.tqdm.__init__, mininterval=tqdm_min_interval)
+    print(f"tqdm mininterval  {tqdm_min_interval}s")
+except Exception as _exc:
+    print(f"tqdm throttling unavailable: {_exc}")
 
 # %% id="emnn_i2iKHJx"
 import importlib

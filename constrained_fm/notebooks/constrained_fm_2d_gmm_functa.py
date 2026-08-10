@@ -51,23 +51,61 @@ from torch.func import vmap
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 device
 
-# %% colab={"base_uri": "https://localhost:8080/"} id="f8ezljz3v0Pa" outputId="f8b79fb9-4d54-4876-827d-037198612be9"
-# !git clone https://github.com/Asaf21S/constrained-flow-matching.git
+# %%
+import subprocess
 
-repo_path = '/content/constrained-flow-matching'
-if repo_path not in sys.path:
-    sys.path.append(repo_path)
+IN_COLAB = "google.colab" in sys.modules
+
+if IN_COLAB:
+    from google.colab import drive
+
+    drive.mount("/content/drive")
+
+    repo_path = Path("/content/constrained-flow-matching")
+    if not repo_path.exists():
+        subprocess.run(["git", "clone", "https://github.com/Asaf21S/constrained-flow-matching.git",
+                        str(repo_path)], check=True)
+
+    # Survives runtime restarts, unlike the ephemeral /content clone.
+    artifact_dir = Path("/content/drive/MyDrive/constrained-flow-matching/functa_dataset")
+else:
+    # Nearest ancestor of the working directory that contains the package.
+    repo_path = next(p for p in [Path.cwd(), *Path.cwd().parents] if (p / "constrained_fm").is_dir())
+    # FUNCTA_ARTIFACT_DIR redirects the multi-hundred-MB pool off a quota-limited home.
+    artifact_dir = Path(os.environ.get("FUNCTA_ARTIFACT_DIR",
+                                       repo_path / "constrained_fm" / "functa_dataset"))
+
+artifact_dir.mkdir(parents=True, exist_ok=True)
+if str(repo_path) not in sys.path:
+    sys.path.insert(0, str(repo_path))
+
+print(f"colab     : {IN_COLAB}")
+print(f"repo      : {repo_path}")
+print(f"artifacts : {artifact_dir}")
+
 
 # %%
-from google.colab import drive
-drive.mount('/content/drive')
+# Picks up changes pushed from the IDE; elsewhere the working tree is already the repo.
+if IN_COLAB:
+    subprocess.run(["git", "-C", str(repo_path), "pull", "origin", "main"], check=True)
 
 
-# %% colab={"base_uri": "https://localhost:8080/"} id="ftL_SQ24wPOz" outputId="5e8d45ee-20bf-44f0-a29a-308463be9b32"
-# update the cloned repo after pushing changes in pycharm
-# %cd /content/constrained-flow-matching
-# !git pull origin main
-# %cd /content
+# %%
+# SMOKE_TEST=1 shrinks every expensive knob so a full pass exercises the whole pipeline --
+# pool build and cache round-trip, training, evaluation, plotting -- in minutes rather than
+# hours. The pool filename encodes pool_size, so a smoke run never clobbers the real cache.
+SMOKE_TEST = os.environ.get("SMOKE_TEST", "0") == "1"
+
+if SMOKE_TEST:
+    cfg = dict(pool_size=2048, pool_chunk_size=128, iterations=201, print_every=50,
+               num_val_polys=8, num_val_x0=2000, num_vis_samples=5000, likelihood_grid=50)
+else:
+    cfg = dict(pool_size=100000, pool_chunk_size=128, iterations=15001, print_every=500,
+               num_val_polys=100, num_val_x0=10000, num_vis_samples=50000, likelihood_grid=200)
+
+print(f"SMOKE_TEST = {SMOKE_TEST}")
+for _k, _v in cfg.items():
+    print(f"  {_k:18s} {_v}")
 
 # %% id="emnn_i2iKHJx"
 import importlib
@@ -537,16 +575,12 @@ proxy_x_pow = global_proxy_x_pow.squeeze(0)
 proxy_y_pow = global_proxy_y_pow.squeeze(0)
 
 # Average resamples per pool entry ~= iterations * batch_size / pool_size.
-pool_size = 100000
-pool_chunk_size = 128
+pool_size = cfg["pool_size"]
+pool_chunk_size = cfg["pool_chunk_size"]
 
-# Cached on Google Drive (not the ephemeral /content clone) so it survives
-# runtime restarts instead of being rebuilt from scratch every session.
-# Filename includes pool_size so changing it triggers a rebuild instead of
-# silently loading a smaller/stale cached pool.
-drive_pool_dir = Path('/content/drive/MyDrive/constrained-flow-matching/functa_dataset')
-drive_pool_dir.mkdir(parents=True, exist_ok=True)
-pool_path = drive_pool_dir / f"functa_conditioning_pool_{pool_size}_gmmq{FUNCTA_QUERY_GMM_FRACTION}.pt"
+# Filename encodes pool_size and the query distribution, so changing either triggers a
+# rebuild instead of silently loading a stale cached pool.
+pool_path = artifact_dir / f"functa_conditioning_pool_{pool_size}_gmmq{FUNCTA_QUERY_GMM_FRACTION}.pt"
 
 if pool_path.exists():
     print(f"Loading cached Functa pool from {pool_path}...")
@@ -575,8 +609,8 @@ print(f"pool valid mass: min {functa_pool_mass.min():.3f} | median {functa_pool_
 lr = 1e-3
 batch_size = 1024
 
-iterations = 15001
-print_every = 500
+iterations = cfg["iterations"]
+print_every = cfg["print_every"]
 
 # Weights constraint exposure by mass^(-power), equalizing it across constraints at
 # power 1.0. 0.0 leaves exposure proportional to each constraint's valid mass.
@@ -640,6 +674,7 @@ generate_and_visualize_samples(
     x_true_pool=gmm_true_pool,
     coeffs=C_test,
     z=z_test,
+    num_samples=cfg["num_vis_samples"],
     degree=poly_degree,
     scale=plane_scale,
 )
@@ -663,6 +698,7 @@ generate_and_visualize_samples(
     x_true_pool=gmm_true_pool,
     coeffs=C_pool_test,
     z=z_pool_test,
+    num_samples=cfg["num_vis_samples"],
     degree=poly_degree,
     scale=plane_scale,
 )
@@ -709,8 +745,8 @@ def region_iou(z_vec: torch.Tensor, C_mat: torch.Tensor, points: torch.Tensor) -
 
 
 val_set = get_validation_set(device=device)
-val_polys = val_set["polynomials"].to(device)
-val_x0 = val_set["x0"].to(device)
+val_polys = val_set["polynomials"][:cfg["num_val_polys"]].to(device)
+val_x0 = val_set["x0"][:cfg["num_val_x0"]].to(device)
 num_val_polys = val_polys.shape[0]
 
 # Valid GMM mass per constraint. sample_from_functa_pool pairs an x_1 with a constraint
@@ -812,6 +848,7 @@ plt.show()
 likelihood_functa = vf_functa.compute_likelihood_grid(
     z=z_test, siren=siren,
     degree=poly_degree, scale=plane_scale,
+    grid_size=cfg["likelihood_grid"],
     device=device,
 )
 

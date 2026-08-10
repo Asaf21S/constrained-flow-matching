@@ -10,8 +10,20 @@ from constrained_fm.src.consts import POLYNOMIAL_DEGREE, PLANE_SCALE, GMM_MEANS,
 from constrained_fm.src.inference.evaluator import evaluate_single_configuration
 
 
+def _to_numpy(data) -> np.ndarray:
+    """Detaches torch input to a host array; passes array-likes through unchanged."""
+    if torch.is_tensor(data):
+        return data.detach().cpu().numpy()
+    return np.asarray(data)
+
+
 def visualize_single_step(data_slice, title, ax=None, cmap='Blues',
                           bbox=None, coeffs=None, degree=POLYNOMIAL_DEGREE, scale=PLANE_SCALE, labels=None):
+    # numpy will not coerce a list of torch tensors, which histogram2d builds internally.
+    data_slice = _to_numpy(data_slice)
+    if labels is not None:
+        labels = _to_numpy(labels)
+
     if ax is None:
         with_legend = True
         fig, ax = plt.subplots(figsize=(6, 6))
@@ -78,7 +90,7 @@ def assign_gaussian_to_points(points, means=GMM_MEANS, covs=GMM_COVS, weights=GM
     covs = torch.tensor(covs, device=device)
     weights = torch.tensor(weights, device=device)
 
-    pts_tensor = torch.tensor(points, dtype=torch.float32, device=device)
+    pts_tensor = torch.as_tensor(_to_numpy(points), dtype=torch.float32, device=device)
     num_components = means.shape[0]
 
     log_probs = torch.zeros(pts_tensor.shape[0], num_components, device=device)

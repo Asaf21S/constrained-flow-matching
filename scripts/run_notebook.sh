@@ -11,8 +11,9 @@
 #SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --exclude=dgx04
 
-# Executes the paired .py as a notebook and writes an executed copy with every figure and
-# metric inline, so no interactive session has to stay alive for the whole run.
+# Executes the paired .py as a notebook, then writes two artifacts to outputs/:
+#   .ipynb - the notebook with every cell's stdout and figures stored inline
+#   .html  - a standalone render, viewable in a browser with no Jupyter install
 #
 #   smoke test : sbatch --export=ALL,SMOKE_TEST=1 --time=00:40:00 scripts/run_notebook.sh
 #   full run   : sbatch scripts/run_notebook.sh
@@ -50,6 +51,13 @@ srun --container-image=/users/rosenbaum/asolomiak/nvidia+pytorch+24.03-py3.sqsh 
               python -m nbconvert --to notebook --execute --inplace \
                      --ExecutePreprocessor.timeout=-1 \
                      --ExecutePreprocessor.kernel_name=python3 \
-                     ${OUT_NB}"
+                     ${OUT_NB} && \
+              python -m nbconvert --to html ${OUT_NB}"
 
-echo "Job finished. Executed notebook: ${OUT_NB}"
+STATUS=$?
+if [ $STATUS -ne 0 ]; then
+    echo "FAILED (exit ${STATUS}). Partial notebook: ${OUT_NB}"
+    exit $STATUS
+fi
+
+echo "Job finished. Artifacts: ${OUT_NB} and ${OUT_NB%.ipynb}.html"

@@ -2,6 +2,12 @@
 
 The main directory currently in use is the constrained_fm/ folder. Ignore constraints_distillation/ and eci_vs_hardflow/ folders for now.
 
+## Execution Environment (read first)
+* This repo is developed on a shared SLURM login node. **Never run training, evaluation, or heavy data processing in the terminal** — write an `sbatch` script under `scripts/` (or wrap in `srun`) and submit it.
+* Required flags on every job: `-p dlc`, `--gpus-per-node=1` (never `--gpus`), `--mem=32G` (explicit), `--cpus-per-task=4`.
+* Always use the local container image `/users/rosenbaum/asolomiak/nvidia+pytorch+24.03-py3.sqsh` mounted at `/workspace`; never pull from NGC. All artifacts must be written under `/workspace/...`.
+* Full rules and the canonical job template: [../../.github/copilot-instructions.md](../../.github/copilot-instructions.md).
+
 ## Role and Tone
 * Act as an expert Machine Learning researcher and a senior pair programmer assisting with a Master's thesis in Computer Science.
 * Maintain a pragmatic, mathematically rigorous, and straightforward academic tone. 

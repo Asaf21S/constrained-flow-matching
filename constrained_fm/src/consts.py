@@ -24,7 +24,10 @@ POLY_MAX_AREA_RATIO = 0.95
 
 # Fraction of CAVIA query points drawn from the GMM rather than uniformly over the plane.
 # Must be identical in meta-training and at extraction time.
-FUNCTA_QUERY_GMM_FRACTION = 0.5
+# 0.5 measurably degraded reconstruction: a degree-3 zero set is a global object, so
+# clustering query points makes the fit ill-conditioned and starves low-mass constraints,
+# whose valid regions lie in the GMM tail.
+FUNCTA_QUERY_GMM_FRACTION = 0.0
 VALIDATION_POLY_MIN_AREA_RATIO = 0.1
 VALIDATION_POLY_MAX_AREA_RATIO = 0.9
 VALIDATION_BBOX_WIDTH_RANGE = (1.0, 6.5)

@@ -7,7 +7,6 @@
 #SBATCH --gpus-per-node=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32G
-#SBATCH --exclude=dgx04
 
 # Separates extraction budget / optimizer / query-sample size / SIREN capacity as causes
 # of poor boundary fidelity. Frozen SIREN, no retraining. Runs in a couple of minutes.

@@ -45,12 +45,31 @@ The main directory currently in use is the constrained_fm/ folder. Ignore constr
 * **Gradient Flow:** Ensure `requires_grad=True` is properly set on latent vectors during inference extraction, and `create_graph=True` is used during meta-learning inner loops.
 * **Isolation Tests:** When encountering capacity limits or failure to converge, default to generating small isolation tests (e.g., forcefully overfitting a single shape with 1000 steps of Adam) rather than immediately rewriting the training loop.
 
+## Experiment Workflow (script-first)
+The pipeline is four decoupled stages driven by one YAML config per experiment. Never train from a notebook.
+
+| stage | entry point | submit with |
+| --- | --- | --- |
+| validate a config (login node, no torch) | `constrained_fm.scripts.check_config` | `python3 -m constrained_fm.scripts.check_config <config.yaml>` |
+| build the conditioning pool | `constrained_fm.scripts.build_pool` | `sbatch scripts/run_pool.sh <config.yaml>` |
+| train | `constrained_fm.scripts.train_fm` | `sbatch scripts/run_train.sh <config.yaml>` (evaluates too) |
+| evaluate an existing checkpoint | `constrained_fm.scripts.eval_fm` | `sbatch scripts/run_eval.sh <run_id>` |
+
+* Configs live in `constrained_fm/configs/`; every non-baseline config uses `extends: constrained_fm/configs/baseline.yaml` and overrides only what it changes.
+* `run_id` is `<name>-<fingerprint>`, where the fingerprint covers the SIREN weights digest, extraction settings, pool, architecture, and training hyperparameters. The `evaluation` block is deliberately excluded, so re-scoring never forks a run.
+* Artifacts land in `runs/<run_id>/`: `config.yaml`, `provenance.json`, `state.json`, `ckpt.pt`, `losses.npy`, `metrics.json`, `figures/`.
+* **Iterating on metrics or plots must not retrain.** Add the diagnostic to `eval_fm.py` / `src/visualization/diagnostics.py` and re-run stage 3 against the frozen checkpoint.
+* Sweeps run concurrently: `scripts/run_sweep.sh constrained_fm/configs/*.yaml` submits one job per config and chains any missing pool build with `--dependency=afterok`.
+* Interactive debugging: `scripts/run_dev.sh` opens a shell on a compute node inside the container. Use it instead of submitting a job to answer a tensor-shape question.
+* Add `--smoke` (or `SMOKE=1` for the sweep) to shrink every knob for a few-minute end-to-end test before committing to a full run.
+
 ## Notebook Editing Rules
-* **NEVER edit `.ipynb` files directly.** 
+* **The notebook is a report, not an experiment driver.** `constrained_fm/notebooks/constrained_fm_2d_gmm_functa.py` only reads `runs/*/{config.yaml,metrics.json,losses.npy,figures/*.png}`; it must never build a model, sample, or train.
+* **NEVER edit `.ipynb` files directly.**
 * All Jupyter notebooks in this repository should be paired with Jupytext `.py` files using the percent format.
-* When asked to modify a notebook, you must exclusively read and edit the corresponding paired `.py` file. 
+* When asked to modify a notebook, you must exclusively read and edit the corresponding paired `.py` file.
 * Preserve all `# %%` cell boundary markers exactly as they appear.
-* Once edits are complete, run `jupytext --sync <notebook>.ipynb` to update the notebook file.
+* Render with `sbatch scripts/run_report.sh`, which regenerates the paired `.ipynb` and writes an executed `.ipynb` plus standalone `.html` into `outputs/`.
 
 ### Lessons from a corrupted-notebook incident
 * **Never use string-replace/insert edit tools on `.py`/`.ipynb` files repeatedly in a row** — re-running or stacking edits on content that may already be (partially) patched silently duplicates cell markers/lines. Read the current file state fresh before every edit attempt.

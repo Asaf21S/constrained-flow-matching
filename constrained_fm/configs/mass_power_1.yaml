@@ -1,0 +1,10 @@
+extends: constrained_fm/configs/baseline.yaml
+
+name: mass-power-1
+description: >
+  Fully equalizes constraint exposure via mass^(-1) loss weights. Targets the observed
+  corr(success_rate, mass) = +0.61: low-mass constraints receive far fewer gradient
+  updates than high-mass ones under proportional pairing.
+
+train:
+  mass_weight_power: 1.0

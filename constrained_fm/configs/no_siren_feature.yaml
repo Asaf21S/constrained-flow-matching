@@ -1,0 +1,12 @@
+extends: constrained_fm/configs/baseline.yaml
+
+name: no-siren-feature
+description: >
+  Ablation of the auxiliary pointwise input SIREN(x_t, z), NOT of the conditioning itself:
+  z is still concatenated into the input and still drives the AdaGN modulation, so the
+  model stays fully Functa-conditioned. With mass IoU averaging 0.85 and collapsing on the
+  tail, that extra per-point boundary feature may be actively misleading the vector field
+  exactly where the decoded region is wrong.
+
+fm:
+  use_siren_feature: false

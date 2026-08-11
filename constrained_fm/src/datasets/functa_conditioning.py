@@ -68,6 +68,7 @@ def generate_functa_conditioned_batch(
         min_area: float = 0.05,
         max_area: float = 0.95,
         extraction_chunk_size: int = 128,
+        query_gmm_fraction: float = FUNCTA_QUERY_GMM_FRACTION,
         device: torch.device | str | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Generates a batch of Functa latents, each guaranteed to represent a valid
@@ -96,6 +97,8 @@ def generate_functa_conditioned_batch(
         min_area, max_area: accepted area-ratio range for the sampled polynomials.
         extraction_chunk_size: number of shapes processed per SIREN forward pass;
             lower this first if you hit CUDA OOM.
+        query_gmm_fraction: portion of CAVIA query points drawn from the GMM; must match
+            the value the SIREN was meta-trained with.
         device: torch device; defaults to x_1's device.
 
     Returns:
@@ -125,7 +128,8 @@ def generate_functa_conditioned_batch(
         end = min(start + extraction_chunk_size, batch_size)
         C_chunk = C[start:end]
 
-        X_raw = sample_query_points(end - start, points_per_shape, scale=scale, device=device)
+        X_raw = sample_query_points(end - start, points_per_shape, scale=scale,
+                                    gmm_fraction=query_gmm_fraction, device=device)
         x_pow, y_pow = compute_poly_features_batched(X_raw, degree=degree, scale=scale)
         P_vals = evaluate_poly_batched(x_pow, y_pow, C_chunk)
         Y = torch.tanh(P_vals)
@@ -152,6 +156,7 @@ def build_functa_pool(
         min_area: float = 0.05,
         max_area: float = 0.95,
         chunk_size: int = 128,
+        query_gmm_fraction: float = FUNCTA_QUERY_GMM_FRACTION,
         device: torch.device | str | None = None,
 ) -> dict[str, torch.Tensor]:
     """Precomputes a large, reusable pool of Functa latents for both orientations
@@ -185,7 +190,8 @@ def build_functa_pool(
             min_area=min_area, max_area=max_area, device=device,
         )
 
-        X_raw = sample_query_points(current_chunk_size, points_per_shape, scale=scale, device=device)
+        X_raw = sample_query_points(current_chunk_size, points_per_shape, scale=scale,
+                                    gmm_fraction=query_gmm_fraction, device=device)
         x_pow, y_pow = compute_poly_features_batched(X_raw, degree=degree, scale=scale)
         P_vals = evaluate_poly_batched(x_pow, y_pow, C_chunk)
         Y_pos = torch.tanh(P_vals)

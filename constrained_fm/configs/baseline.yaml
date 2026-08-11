@@ -1,0 +1,62 @@
+# Reference configuration: reproduces the last full notebook run.
+# Every other config should `extends: constrained_fm/configs/baseline.yaml` and override
+# only what it changes, so a sweep diff is readable at a glance.
+name: baseline
+description: >
+  Functa-conditioned flow matcher on the 4-peak GMM, mass-proportional constraint
+  exposure, pointwise SIREN feature enabled.
+
+degree: 3
+scale: 4.5
+
+siren:
+  checkpoint: constrained_fm/functa_dataset/siren_best.pt
+  latent_dim: 512
+  hidden_dim: 512
+  n_layers: 4
+  w0: 30.0
+
+extraction:
+  points_per_shape: 1000
+  steps: 15
+  lr: 0.01
+  # Where CAVIA query points are drawn from. 0.0 = uniform over the plane, which beat 0.5.
+  # Must match the fraction the SIREN was meta-trained with.
+  query_gmm_fraction: 0.0
+
+pool:
+  size: 100000
+  chunk_size: 128
+  min_area: 0.05
+  max_area: 0.95
+
+fm:
+  hidden_dim: 1024
+  num_blocks: 4
+  time_emb_dim: 128
+  use_siren_feature: true
+
+train:
+  iterations: 15001
+  batch_size: 1024
+  lr: 0.001
+  lr_min: 0.00001
+  # Per-example loss weight mass^(-power), rebalancing how often each constraint is
+  # trained on. 0.0 = no reweighting.
+  mass_weight_power: 0.0
+  max_weight: 20.0
+  seed: 0
+  log_every: 500
+  checkpoint_every: 2500
+
+evaluation:
+  num_polys: 100
+  num_x0: 10000
+  step_size: 0.05
+  gmm_pool_size: 100000
+  iou_grid_size: 200
+  iou_mass_samples: 20000
+  likelihood_grid: 200
+  num_vis_samples: 50000
+  num_worst_plots: 4
+  seed: 0

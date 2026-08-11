@@ -1,0 +1,9 @@
+extends: constrained_fm/configs/baseline.yaml
+
+name: mass-power-half
+description: >
+  Half-strength exposure equalization; a middle point between proportional pairing and
+  mass^(-1), which inflates gradient variance on the smallest regions.
+
+train:
+  mass_weight_power: 0.5

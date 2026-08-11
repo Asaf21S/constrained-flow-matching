@@ -6,3 +6,4 @@ tqdm
 seaborn
 scikit-learn
 POT
+PyYAML

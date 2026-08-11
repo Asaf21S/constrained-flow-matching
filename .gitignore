@@ -15,6 +15,10 @@ logs/
 outputs/
 __pycache__/
 
+# Run artifacts: config/provenance/metrics stay under version control, figures do not.
+# Checkpoints and loss histories are already covered by the *.pt / *.npy rules above.
+runs/*/figures/
+
 !constrained_fm/functa_dataset/embed_best.pt
 !constrained_fm/functa_dataset/siren_best.pt
 !constrained_fm/functa_dataset/loss_history.npy

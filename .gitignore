@@ -12,6 +12,7 @@
 
 dummy_script.py
 logs/
+outputs/
 __pycache__/
 
 !constrained_fm/functa_dataset/embed_best.pt

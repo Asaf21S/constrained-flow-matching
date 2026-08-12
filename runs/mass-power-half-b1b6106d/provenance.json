@@ -1,0 +1,11 @@
+{
+  "run_id": "mass-power-half-b1b6106d",
+  "name": "mass-power-half",
+  "description": "Half-strength exposure equalization; a middle point between proportional pairing and mass^(-1), which inflates gradient variance on the smallest regions.\n",
+  "fingerprint": "b1b6106d22263b4a10a4fda989c2137daa0a91f1ffe6b601fd00d5d5085a8c21",
+  "siren_checkpoint": "/workspace/constrained_fm/functa_dataset/siren_best.pt",
+  "siren_digest": "8bbebcce7bf496f587c890da3f1fa5ed66f5637a4941c02c84fd9550a2fd03f7",
+  "pool_path": "/workspace/constrained_fm/functa_dataset/pools/pool_100000_8cc007c469.pt",
+  "pool_fingerprint": "8cc007c46906535a98947883cca38dc78bfe21644c5d51344f4edf878cf9f9bc",
+  "git_commit": "613ac7424f99147a7d24287d45632314ce87e0bb"
+}

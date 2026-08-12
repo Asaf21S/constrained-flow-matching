@@ -1,0 +1,11 @@
+{
+  "run_id": "no-siren-feature-e19cc06d",
+  "name": "no-siren-feature",
+  "description": "Ablation of the auxiliary pointwise input SIREN(x_t, z), NOT of the conditioning itself: z is still concatenated into the input and still drives the AdaGN modulation, so the model stays fully Functa-conditioned. With mass IoU averaging 0.85 and collapsing on the tail, that extra per-point boundary feature may be actively misleading the vector field exactly where the decoded region is wrong.\n",
+  "fingerprint": "e19cc06d894598098f38a85e3b629c5c31226bd29d8b82372307e7f95070b9ce",
+  "siren_checkpoint": "/workspace/constrained_fm/functa_dataset/siren_best.pt",
+  "siren_digest": "8bbebcce7bf496f587c890da3f1fa5ed66f5637a4941c02c84fd9550a2fd03f7",
+  "pool_path": "/workspace/constrained_fm/functa_dataset/pools/pool_100000_8cc007c469.pt",
+  "pool_fingerprint": "8cc007c46906535a98947883cca38dc78bfe21644c5d51344f4edf878cf9f9bc",
+  "git_commit": "613ac7424f99147a7d24287d45632314ce87e0bb"
+}

@@ -1,0 +1,11 @@
+{
+  "run_id": "baseline-129f59a4",
+  "name": "baseline",
+  "description": "Functa-conditioned flow matcher on the 4-peak GMM, mass-proportional constraint exposure, pointwise SIREN feature enabled.\n",
+  "fingerprint": "129f59a431c515e1706ced0fec2eb77bb41452dc445bc5a16eba880ebcf5a2d9",
+  "siren_checkpoint": "/workspace/constrained_fm/functa_dataset/siren_best.pt",
+  "siren_digest": "8bbebcce7bf496f587c890da3f1fa5ed66f5637a4941c02c84fd9550a2fd03f7",
+  "pool_path": "/workspace/constrained_fm/functa_dataset/pools/pool_100000_8cc007c469.pt",
+  "pool_fingerprint": "8cc007c46906535a98947883cca38dc78bfe21644c5d51344f4edf878cf9f9bc",
+  "git_commit": "613ac7424f99147a7d24287d45632314ce87e0bb"
+}

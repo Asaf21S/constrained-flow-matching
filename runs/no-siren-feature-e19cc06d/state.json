@@ -1,0 +1,8 @@
+{
+  "status": "evaluated",
+  "iteration": 15001,
+  "started_at": "2026-08-12T09:26:51",
+  "train_seconds": 124.5,
+  "finished_at": "2026-08-12T09:46:09",
+  "evaluated_at": "2026-08-12T09:46:09"
+}

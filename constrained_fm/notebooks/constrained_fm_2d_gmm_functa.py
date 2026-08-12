@@ -44,9 +44,9 @@ repo_path = next(p for p in [Path.cwd(), *Path.cwd().parents] if (p / "constrain
 if str(repo_path) not in sys.path:
     sys.path.insert(0, str(repo_path))
 
-from constrained_fm.src.experiment.registry import (FIGURES_DIR, comparison_table, list_runs,
-                                                    load_config, load_metrics, readme_table,
-                                                    run_dir)
+from constrained_fm.src.experiment.registry import (FIGURES_DIR, comparison_table, latest_run,
+                                                    list_runs, load_config, load_metrics,
+                                                    readme_table, run_dir)
 
 print(f"repo {repo_path}")
 
@@ -93,7 +93,7 @@ evaluated = [r["run_id"] for r in runs if r["summary"]]
 if not evaluated:
     raise RuntimeError("no evaluated runs found — submit scripts/run_train.sh first")
 
-run_id = os.environ.get("REPORT_RUN_ID") or evaluated[-1]
+run_id = os.environ.get("REPORT_RUN_ID") or latest_run()
 
 cfg = load_config(run_id)
 metrics = load_metrics(run_id)

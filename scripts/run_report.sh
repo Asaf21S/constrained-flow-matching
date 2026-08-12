@@ -15,9 +15,10 @@
 # numpy; nothing here needs a GPU.
 #
 #   sbatch scripts/run_report.sh
-#   NOTEBOOK=constrained_fm_2d_gmm_functa sbatch scripts/run_report.sh
+#   REPORT_RUN_ID=baseline-129f59a4 sbatch scripts/run_report.sh
 
 NOTEBOOK=${NOTEBOOK:-constrained_fm_2d_gmm_functa}
+REPORT_RUN_ID=${REPORT_RUN_ID:-}
 STAMP=$(date +%Y%m%d_%H%M%S)
 OUT_NB="outputs/${NOTEBOOK}_report_${STAMP}.ipynb"
 
@@ -30,6 +31,7 @@ srun --container-image=/users/rosenbaum/asolomiak/nvidia+pytorch+24.03-py3.sqsh 
      --container-mounts=/users/rosenbaum/asolomiak/constrained-flow-matching:/workspace \
      bash -c "set -eo pipefail && \
               export PATH=\"\$HOME/.local/bin:\$PATH\" && \
+              export REPORT_RUN_ID='${REPORT_RUN_ID}' && \
               cd /workspace && \
               pip install --user -q -r requirements.txt jupytext nbconvert ipykernel && \
               python -m ipykernel install --user --name python3 && \

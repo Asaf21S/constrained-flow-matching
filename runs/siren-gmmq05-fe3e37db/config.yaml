@@ -1,0 +1,53 @@
+name: siren-gmmq05
+description: 'Reverts the encoder to the checkpoint used by the 2026-08-10 notebook
+  run, which scored SR median 95.92 / SWD 0.1113 / JSD 0.0106 against the current
+  baseline''s 90.89 / 0.1927 / 0.0268 at identical mass IoU. Changes only the SIREN
+  weights and the query fraction they were meta-trained with; every other field is
+  inherited. Restore the checkpoint with: git cat-file -p 3007ed9:constrained_fm/functa_dataset/siren_best.pt
+  > constrained_fm/functa_dataset/siren_gmmq05.pt   (sha256 8d02273354)
+
+  '
+degree: 3
+scale: 4.5
+siren:
+  checkpoint: constrained_fm/functa_dataset/siren_gmmq05.pt
+  latent_dim: 512
+  hidden_dim: 512
+  n_layers: 4
+  w0: 30.0
+extraction:
+  points_per_shape: 1000
+  steps: 15
+  lr: 0.01
+  query_gmm_fraction: 0.5
+pool:
+  size: 100000
+  chunk_size: 128
+  min_area: 0.05
+  max_area: 0.95
+fm:
+  hidden_dim: 1024
+  num_blocks: 4
+  time_emb_dim: 128
+  use_siren_feature: true
+train:
+  iterations: 15001
+  batch_size: 1024
+  lr: 0.001
+  lr_min: 1.0e-05
+  mass_weight_power: 0.0
+  max_weight: 20.0
+  seed: 0
+  log_every: 500
+  checkpoint_every: 2500
+evaluation:
+  num_polys: 100
+  num_x0: 10000
+  step_size: 0.05
+  gmm_pool_size: 100000
+  iou_grid_size: 200
+  iou_mass_samples: 20000
+  likelihood_grid: 200
+  num_vis_samples: 50000
+  num_worst_plots: 4
+  seed: 0

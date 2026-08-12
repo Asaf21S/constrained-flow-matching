@@ -50,10 +50,9 @@ shape_ids = [3, 90, 88, 24, 0, 1]
 
 
 def load_siren() -> torch.nn.Module:
-    from constrained_fm.src.consts import VALIDATION_SET_PATH
-    from pathlib import Path
+    from constrained_fm.src.experiment.config import ExperimentConfig
 
-    ckpt = Path(VALIDATION_SET_PATH).parents[1] / "functa_dataset" / "siren_best.pt"
+    ckpt = ExperimentConfig().siren_path()
     siren = build_modulated_siren(latent_dim=latent_dim, hidden_dim=hidden_dim,
                                   n_layers=n_layers, w0=w0).to(device)
     siren.load_state_dict(torch.load(ckpt, map_location=device, weights_only=True))

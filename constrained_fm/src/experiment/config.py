@@ -23,7 +23,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 class SirenConfig:
     """The frozen Functa encoder. Architecture fields must match the checkpoint."""
 
-    checkpoint: str = "constrained_fm/functa_dataset/siren_best.pt"
+    checkpoint: str = "constrained_fm/functa_dataset/siren_gmmq05.pt"
     latent_dim: int = 512
     hidden_dim: int = 512
     n_layers: int = 4

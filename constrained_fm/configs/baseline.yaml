@@ -10,7 +10,7 @@ degree: 3
 scale: 4.5
 
 siren:
-  checkpoint: constrained_fm/functa_dataset/siren_best.pt
+  checkpoint: constrained_fm/functa_dataset/siren_gmmq05.pt
   latent_dim: 512
   hidden_dim: 512
   n_layers: 4
@@ -20,9 +20,9 @@ extraction:
   points_per_shape: 1000
   steps: 15
   lr: 0.01
-  # Where CAVIA query points are drawn from. 0.0 = uniform over the plane, which beat 0.5.
+  # Where CAVIA query points are drawn from. 0.0 = uniform over the plane.
   # Must match the fraction the SIREN was meta-trained with.
-  query_gmm_fraction: 0.0
+  query_gmm_fraction: 0.5
 
 pool:
   size: 100000

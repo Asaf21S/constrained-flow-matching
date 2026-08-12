@@ -20,6 +20,9 @@ __pycache__/
 runs/*/figures/
 
 !constrained_fm/functa_dataset/embed_best.pt
-!constrained_fm/functa_dataset/siren_best.pt
 !constrained_fm/functa_dataset/loss_history.npy
 !constrained_fm/functa_dataset/val_loss_history.npy
+!constrained_fm/functa_dataset/siren_gmmq05.pt
+!constrained_fm/functa_dataset/siren_uniform.pt
+
+constrained_fm/functa_dataset/pools/

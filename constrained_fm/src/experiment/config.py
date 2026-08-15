@@ -36,7 +36,9 @@ class ExtractionConfig:
 
     points_per_shape: int = 1000
     steps: int = 15
-    lr: float = 1e-2
+    # Per-shape step, chunk-size invariant. train_functa.py meta-trains with a mean over
+    # (batch 16, points) at lr 1e-2, so the equivalent per-shape step is 1e-2 / 16.
+    lr: float = 6.25e-4
     # Must match the value the SIREN was meta-trained with; drift here silently degrades fidelity.
     query_gmm_fraction: float = 0.0
 

@@ -19,7 +19,7 @@ srun --container-image=/users/rosenbaum/asolomiak/nvidia+pytorch+24.03-py3.sqsh 
      bash -c "set -eo pipefail && \
               cd /workspace && \
               pip install --user -q -r requirements.txt && \
-              python -m constrained_fm.scripts.probe_extraction_budget $*"
+              python -m constrained_fm.scripts.probe_extraction_scale --config constrained_fm/configs/siren_uniform.yaml"
 
 STATUS=$?
 [ $STATUS -ne 0 ] && echo "FAILED (exit ${STATUS})" && exit $STATUS

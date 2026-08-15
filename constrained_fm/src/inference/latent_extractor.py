@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 
 def extract_latents_batched(
@@ -13,20 +12,27 @@ def extract_latents_batched(
         X_batch: torch.Tensor,
         Y_batch: torch.Tensor,
         latent_dim: int | None = None,
-        lr: float = 1e-2,
+        lr: float = 6.25e-4,
         steps: int = 15,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Adapts a batch of context vectors to unseen shapes via pure-SGD CAVIA adaptation.
 
-    Replicates the validation-time inner loop of scripts/train_functa.py: mean-reduced
-    MSE regression against tanh(P(x, y)) targets, plain SGD, no L2 penalty.
+    Replicates the inner loop of scripts/train_functa.py: MSE regression against
+    tanh(P(x, y)) targets, plain SGD from a zero init, no L2 penalty.
+
+    The loss is averaged over points and summed over shapes, so each z_i receives the
+    gradient of its own mean MSE and the step size does not depend on how many shapes
+    happen to share a call. Meta-training reduced with a mean over (batch, points) at
+    batch 16 and lr 1e-2, so the equivalent per-shape step - and the default here - is
+    1e-2 / 16. CAVIA only meta-learns an initialization that is optimal after exactly
+    `steps` at the step size it trained with, so this scale must match.
 
     Args:
         siren: trained ModulatedSIREN, evaluated in inference mode.
         X_batch: (B, M, 2) coordinates normalized to the SIREN's canonical [-1, 1] domain.
         Y_batch: (B, M) regression targets tanh(P(x, y)) in (-1, 1).
         latent_dim: context vector size; defaults to siren.latent_dim.
-        lr: SGD step size for the inner loop.
+        lr: per-shape SGD step size for the inner loop.
         steps: number of SGD adaptation steps.
 
     Returns:
@@ -45,7 +51,7 @@ def extract_latents_batched(
 
     for _ in range(steps):
         preds = siren(X_batch, z).squeeze(-1)
-        loss = F.mse_loss(preds, Y_batch)
+        loss = ((preds - Y_batch) ** 2).mean(dim=1).sum()
         grad_z = torch.autograd.grad(loss, z)[0]
         z = z - lr * grad_z
 
@@ -61,7 +67,7 @@ def extract_latent(
         X: torch.Tensor,
         Y: torch.Tensor,
         latent_dim: int | None = None,
-        lr: float = 1e-2,
+        lr: float = 6.25e-4,
         steps: int = 15,
 ) -> tuple[torch.Tensor, float]:
     """Single-shape convenience wrapper around extract_latents_batched.

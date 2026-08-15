@@ -22,6 +22,8 @@ Usage:
 
 from __future__ import annotations
 
+import argparse
+
 import torch
 import torch.nn.functional as F
 
@@ -46,13 +48,14 @@ small_points, large_points = 1000, 20000
 iou_samples = 20000
 
 # The validation set is static, so these indices are the shapes seen failing before.
-shape_ids = [3, 90, 88, 24, 0, 1]
+shape_ids = [3, 90, 88, 30, 24, 61]
 
 
-def load_siren() -> torch.nn.Module:
+def load_siren(config: str | None = None) -> torch.nn.Module:
     from constrained_fm.src.experiment.config import ExperimentConfig
 
-    ckpt = ExperimentConfig().siren_path()
+    cfg = ExperimentConfig.from_yaml(config) if config else ExperimentConfig()
+    ckpt = cfg.siren_path()
     siren = build_modulated_siren(latent_dim=latent_dim, hidden_dim=hidden_dim,
                                   n_layers=n_layers, w0=w0).to(device)
     siren.load_state_dict(torch.load(ckpt, map_location=device, weights_only=True))
@@ -111,7 +114,16 @@ def run_adam(siren, X_scaled, Y, steps):
 
 
 def main() -> None:
-    siren = load_siren()
+    parser = argparse.ArgumentParser(description="Diagnose what limits Functa boundary fidelity.")
+    parser.add_argument("--config", help="config YAML whose SIREN checkpoint to probe")
+    parser.add_argument("--shapes", type=int, nargs="+", help="validation shape ids to probe")
+    args = parser.parse_args()
+
+    global shape_ids
+    if args.shapes:
+        shape_ids = args.shapes
+
+    siren = load_siren(args.config)
 
     val_set = get_validation_set(device=device)
     polys = val_set["polynomials"].to(device)

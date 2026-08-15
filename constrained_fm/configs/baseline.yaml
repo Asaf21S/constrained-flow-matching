@@ -19,7 +19,9 @@ siren:
 extraction:
   points_per_shape: 1000
   steps: 15
-  lr: 0.01
+  # Per-shape step, independent of the extraction chunk size. Equals the meta-training
+  # inner lr (1e-2) divided by its batch of 16, which is the step CAVIA optimized for.
+  lr: 0.000625
   # Where CAVIA query points are drawn from. 0.0 = uniform over the plane.
   # Must match the fraction the SIREN was meta-trained with.
   query_gmm_fraction: 0.5

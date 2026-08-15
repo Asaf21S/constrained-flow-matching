@@ -109,6 +109,33 @@ def render_figures(cfg: ExperimentConfig, siren, model, val_polys: torch.Tensor,
                                 degree=cfg.degree, scale=cfg.scale),
         out / "typical_samples.png")
 
+    # Covers best/typical/worst regions of the score distribution in one view.
+    q_idxs = sorted(set([
+        int(order[0]),
+        int(order[len(order) // 4]),
+        int(order[len(order) // 2]),
+        int(order[(3 * len(order)) // 4]),
+        int(order[-1]),
+    ]))
+    gallery_samples = []
+    gallery_coeffs = []
+    gallery_titles = []
+    for idx in q_idxs:
+        s = model.sample(num_points=ev.num_vis_samples, z=z_val[idx], step_size=ev.step_size,
+                         return_intermediates=False, device=device)
+        if isinstance(s, torch.Tensor) and s.ndim == 3:
+            s = s[-1]
+        gallery_samples.append(s.detach().cpu().numpy())
+        gallery_coeffs.append(val_polys[idx])
+        gallery_titles.append(
+            f"shape {idx} | SR {success[idx]:.2f}%\n"
+            f"SWD {per_shape['swd'][idx]:.4f} | JSD {per_shape['jsd'][idx]:.4f}")
+
+    diag.save_figure(
+        diag.plot_final_samples_gallery(gallery_samples, gallery_coeffs, gallery_titles,
+                                        degree=cfg.degree, scale=cfg.scale),
+        out / "final_samples_gallery.png")
+
     if ev.likelihood_grid > 0:
         likelihood = model.compute_likelihood_grid(
             z=z_val[typical], siren=siren, degree=cfg.degree, scale=cfg.scale,

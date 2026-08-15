@@ -138,6 +138,7 @@ show_figure(run_id, "loss_curve.png", "Training loss")
 # %%
 show_figure(run_id, "typical_trajectory.png", "Inference progression (t = 0 to t = 1)")
 show_figure(run_id, "typical_samples.png", "Final samples")
+show_figure(run_id, "final_samples_gallery.png", "Final samples across best/typical/worst constraints")
 show_figure(run_id, "typical_likelihood.png", "Exact model likelihood")
 
 

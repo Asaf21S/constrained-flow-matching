@@ -78,6 +78,28 @@ def plot_final_samples(samples, coeffs: torch.Tensor | None = None, title: str =
     return fig
 
 
+def plot_final_samples_gallery(samples_per_shape, coeffs_per_shape, titles,
+                               degree: int = POLYNOMIAL_DEGREE,
+                               scale: float = PLANE_SCALE) -> Figure:
+    """Grid of final-sample panels across representative validation constraints."""
+    num = len(titles)
+    cols = min(3, max(1, num))
+    rows = int(np.ceil(num / cols))
+    fig, axs = plt.subplots(rows, cols, figsize=(6 * cols, 5.6 * rows), squeeze=False)
+
+    for ax in axs.flatten():
+        ax.set_visible(False)
+
+    for i, (samples, coeffs, title) in enumerate(zip(samples_per_shape, coeffs_per_shape, titles)):
+        ax = axs[i // cols][i % cols]
+        ax.set_visible(True)
+        visualize_single_step(samples, title=title, ax=ax, cmap="Oranges",
+                              coeffs=coeffs, degree=degree, scale=scale)
+
+    fig.tight_layout()
+    return fig
+
+
 def plot_believed_vs_true(siren, samples_per_shape, z_per_shape, coeffs_per_shape, titles,
                           grid_size: int = 200, degree: int = POLYNOMIAL_DEGREE,
                           scale: float = PLANE_SCALE, device=None) -> Figure:
@@ -166,4 +188,5 @@ def plot_success_vs_fidelity(success_rate, mass, mass_iou) -> Figure:
 
 
 __all__ = ["save_figure", "plot_loss_curve", "plot_sample_trajectory", "plot_final_samples",
-           "plot_believed_vs_true", "plot_likelihood", "plot_success_vs_fidelity"]
+           "plot_final_samples_gallery", "plot_believed_vs_true", "plot_likelihood",
+           "plot_success_vs_fidelity"]

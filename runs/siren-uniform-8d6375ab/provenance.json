@@ -1,0 +1,11 @@
+{
+  "run_id": "siren-uniform-8d6375ab",
+  "name": "siren-uniform",
+  "description": "Swaps in the older encoder siren_uniform.pt (2026-08-01, epoch 700, meta val_mse 0.00346), which was meta-trained before the GMM-query option existed and therefore used purely uniform query points. Its query fraction is set to 0.0 to match that training, exactly as baseline uses 0.5 to match siren_gmmq05.pt. Never evaluated downstream despite having the best meta-validation MSE of any checkpoint. Restore it with: git cat-file -p efa8cab:constrained_fm/functa_dataset/siren_best.pt > constrained_fm/functa_dataset/siren_uniform.pt   (sha256 abe5b220b8)\n",
+  "fingerprint": "8d6375ab8d8d4475415a517507953008ea45c27e84f1951059a87a5d88e139e8",
+  "siren_checkpoint": "/workspace/constrained_fm/functa_dataset/siren_uniform.pt",
+  "siren_digest": "abe5b220b88c6221417e5f993c315c8a4babd45e67fddb99b315559c5bcbe2c9",
+  "pool_path": "/workspace/constrained_fm/functa_dataset/pools/pool_100000_167612c69d.pt",
+  "pool_fingerprint": "167612c69d40079ae55cc6b83bffe227271398b4252c8df50a3ef52a60f82669",
+  "git_commit": "b5465a32e3b2c19296c51619d3ce3ce1863a21c9"
+}

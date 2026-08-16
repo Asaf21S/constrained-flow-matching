@@ -1,0 +1,11 @@
+extends: constrained_fm/configs/siren_uniform.yaml
+
+name: mass-power-half-u
+description: >
+  Retries half-strength exposure equalization on top of the corrected extraction step.
+  The first attempt ran while conditioning error dominated, so constraint exposure could
+  not be the binding factor; now that decoded-region IoU is 0.976 and the residual error
+  is concentrated in the low-mass tail, mass^(-0.5) reweighting is worth a second look.
+
+train:
+  mass_weight_power: 0.5

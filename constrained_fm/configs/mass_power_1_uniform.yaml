@@ -1,0 +1,11 @@
+extends: constrained_fm/configs/siren_uniform.yaml
+
+name: mass-power-1-u
+description: >
+  Fully equalizes constraint exposure via mass^(-1) loss weights, retried on top of the
+  corrected extraction step. Targets the remaining tail directly: corr(success_rate, mass)
+  is still +0.51, so low-mass constraints receive far fewer effective gradient updates
+  than high-mass ones under proportional pairing.
+
+train:
+  mass_weight_power: 1.0

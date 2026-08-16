@@ -1,0 +1,11 @@
+{
+  "run_id": "mass-power-half-u-38daee6f",
+  "name": "mass-power-half-u",
+  "description": "Retries half-strength exposure equalization on top of the corrected extraction step. The first attempt ran while conditioning error dominated, so constraint exposure could not be the binding factor; now that decoded-region IoU is 0.976 and the residual error is concentrated in the low-mass tail, mass^(-0.5) reweighting is worth a second look.\n",
+  "fingerprint": "38daee6fa3dbc6d1e31306bb6243b9c335e5383f0fc3c036dd820763a228b927",
+  "siren_checkpoint": "/workspace/constrained_fm/functa_dataset/siren_uniform.pt",
+  "siren_digest": "abe5b220b88c6221417e5f993c315c8a4babd45e67fddb99b315559c5bcbe2c9",
+  "pool_path": "/workspace/constrained_fm/functa_dataset/pools/pool_100000_167612c69d.pt",
+  "pool_fingerprint": "167612c69d40079ae55cc6b83bffe227271398b4252c8df50a3ef52a60f82669",
+  "git_commit": "ad1969c50db62c02dfd314e633326e70befc7c76"
+}

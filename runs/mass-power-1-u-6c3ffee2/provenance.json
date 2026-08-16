@@ -1,0 +1,11 @@
+{
+  "run_id": "mass-power-1-u-6c3ffee2",
+  "name": "mass-power-1-u",
+  "description": "Fully equalizes constraint exposure via mass^(-1) loss weights, retried on top of the corrected extraction step. Targets the remaining tail directly: corr(success_rate, mass) is still +0.51, so low-mass constraints receive far fewer effective gradient updates than high-mass ones under proportional pairing.\n",
+  "fingerprint": "6c3ffee23b813e95bc844ce88a7519e5024fbe13ce82c23fefa593c8caf80563",
+  "siren_checkpoint": "/workspace/constrained_fm/functa_dataset/siren_uniform.pt",
+  "siren_digest": "abe5b220b88c6221417e5f993c315c8a4babd45e67fddb99b315559c5bcbe2c9",
+  "pool_path": "/workspace/constrained_fm/functa_dataset/pools/pool_100000_167612c69d.pt",
+  "pool_fingerprint": "167612c69d40079ae55cc6b83bffe227271398b4252c8df50a3ef52a60f82669",
+  "git_commit": "ad1969c50db62c02dfd314e633326e70befc7c76"
+}

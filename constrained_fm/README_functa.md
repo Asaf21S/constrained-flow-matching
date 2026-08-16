@@ -8,12 +8,13 @@ This matters because most real constraints have no compact parametric form. If a
 
 ## Table of Contents
 1. [Overview](#overview)
-2. [Part I — The Functa Encoder (Modulated SIREN + CAVIA)](#part-i--the-functa-encoder-modulated-siren--cavia)
-3. [Part II — The Functa-Conditioned Flow Matcher](#part-ii--the-functa-conditioned-flow-matcher)
-4. [Results](#results)
-5. [Showcase: Unseen Constraints](#showcase-unseen-constraints)
-6. [Technical Takeaways](#technical-takeaways)
-7. [Appendix: Development Notes](#appendix-development-notes)
+2. [The Prior and the Target](#the-prior-and-the-target)
+3. [Part I — The Functa Encoder (Modulated SIREN + CAVIA)](#part-i--the-functa-encoder-modulated-siren--cavia)
+4. [Part II — The Functa-Conditioned Flow Matcher](#part-ii--the-functa-conditioned-flow-matcher)
+5. [Results](#results)
+6. [Showcase: Unseen Constraints](#showcase-unseen-constraints)
+7. [Technical Takeaways](#technical-takeaways)
+8. [Appendix: Development Notes](#appendix-development-notes)
 
 ---
 
@@ -34,6 +35,23 @@ polynomial P  ──►  1000 query points (x, tanh(P(x)))  ──►  [CAVIA in
 * **Stage 2 (generator).** A flow matcher is trained to transport a Gaussian prior onto the 4-peak GMM **truncated to the region described by $z$**. The SIREN is frozen throughout; only $z$ crosses between the stages.
 
 Target distribution and constraint family are unchanged from the main README: a 4-peak GMM over $[-4.5, 4.5]^2$, and degree-3 polynomial constraints $P(x) \le 0$ rejection-sampled to bound a healthy valid area (5%–95%).
+
+---
+
+## The Prior and the Target
+
+Unchanged from the main README's continuous-manifold experiment, so results are directly comparable.
+
+* **Prior:** Standard Normal Gaussian $\mathcal{N}(0, I)$
+* **Target:** 2D GMM with 4 peaks at $[-1.5, -1.5]$, $[1.5, 2.0]$, $[2.0, -1.5]$, $[-0.5, 0.5]$, of varying variances and covariances
+
+The GMM is the hard case for constrained routing: smooth density gradients, unequal mode weights, and heavily overlapping covariance bridges, so a constraint boundary usually cuts *through* density rather than between modes.
+
+<p align="center">
+  <img src="images/gaussian_prior.png" width="30%" alt="Gaussian Prior">
+  <img src="images/gmm/gmm_target.png" width="30%" alt="GMM Target">
+  <img src="images/gmm/gmm_target_likelihood.png" width="30%" alt="GMM Target Likelihood">
+</p>
 
 ---
 
@@ -118,12 +136,11 @@ $$\mathcal{L} = \mathbb{E}_{t, x_0, x_1, z}\left[\; w \left\lVert v_\theta(x_t, 
 | :--- | :--- |
 | Iterations / batch size | 15,001 / 1024 |
 | Optimizer | Adam, lr $10^{-3}$, cosine annealing to $10^{-5}$ |
-| Wall-clock | ~2.3 min on one GPU (plus ~9 min one-time pool build) |
 
 **The conditioning pool.** Extracting a latent inside the training loop would dominate runtime, so 100,000 rejection-sampled polynomials are encoded once, offline. Two tricks make this cheap and unbiased:
 
-* **Orientation flip.** Since $\tanh(-P) = -\tanh(P)$, the flipped region's regression targets are just the negated ones, so a single pass yields both $z_{\text{pos}}$ (for $C$) and $z_{\text{neg}}$ (for $-C$). Every polynomial thus contributes its region *and* its complement.
-* **Constraint-consistent pairing.** For each target sample $x_1$, a random pool entry is drawn and the orientation that actually *contains* $x_1$ is selected. This guarantees $P(x_1) \le 0$ by construction with zero SIREN calls at train time, and makes each oriented constraint appear with probability proportional to its valid mass. An optional $\text{mass}^{-\text{power}}$ importance weight can equalize that exposure; it changes only the marginal over constraints, leaving $p(x_1 \mid C)$ exactly the truncated target.
+* **Both orientations are stored.** Each pool entry keeps *two* latents: $z_{\text{pos}}$, extracted for the region $\{P \le 0\}$, and $z_{\text{neg}}$, extracted for its complement $\{-P \le 0\}$. The latent itself cannot be flipped — negating $z$ is meaningless in the SIREN's latent space — but the *regression targets* can be, since $\tanh(-P) = -\tanh(P)$. So one forward pass over the query points yields both target sets, and a second 15-step inner loop on the negated targets yields $z_{\text{neg}}$. Every polynomial thus contributes its region *and* its complement, doubling constraint diversity for one extra extraction.
+* **Constraint-consistent pairing.** For each target sample $x_1$, a random pool entry is drawn and the orientation that actually *contains* $x_1$ is selected — a sign test on the stored coefficients, $P(x_1) > 0 \Rightarrow$ use $(-C,\; z_{\text{neg}})$, else $(C,\; z_{\text{pos}})$. This is a lookup, not rejection sampling: nothing is ever discarded and no sample is redrawn, so $P(x_1) \le 0$ holds by construction with zero SIREN calls at train time. Because the choice conditions on $x_1$ lying inside the region, each oriented constraint appears with probability proportional to its valid mass; an optional $\text{mass}^{-\text{power}}$ importance weight can equalize that exposure, changing only the marginal over constraints and leaving $p(x_1 \mid C)$ exactly the truncated target.
 
 ### Evaluation Protocol
 
@@ -148,6 +165,7 @@ Against the explicitly-conditioned polynomial model from the [main README](READM
 | :--- | ---: | ---: |
 | Success Rate (%) | 98.24 | 97.69 |
 | SWD | 0.0822 | **0.0797** |
+| MMD | 0.0007 | 0.0009 |
 | JSD | 0.0048 | 0.0055 |
 
 **Distributional quality reaches parity** — SWD is marginally better, JSD marginally worse — while the constraint is delivered only as a latent code. The remaining gap is in the tail: worst-5% success rate is 86.79 versus 93.48, concentrated on constraints with small valid mass.
@@ -184,37 +202,37 @@ Freshly sampled polynomials, drawn with a seed disjoint from both the training p
 | 5 | 95.05 | 0.0927 | 0.00252 | 0.0074 | 0.104 | 0.960 |
 | 6 | 97.65 | 0.0583 | 0.00091 | 0.0028 | 0.676 | 0.986 |
 
-**Example 1** — large region, near-perfect adherence; the likelihood map reproduces all four modes with a clean cut along the curve.
+**Example 1** — two curve branches trim the right-hand side of the plane. The largest region shown (mass 0.878) and near-perfect adherence; the likelihood map reproduces every mode with a clean cut along the boundary.
 <p align="center">
   <img src="images/functa/showcase/showcase_1_samples.png" width="45%" alt="Showcase 1 samples">
   <img src="images/functa/showcase/showcase_1_likelihood.png" width="45%" alt="Showcase 1 likelihood">
 </p>
 
-**Example 2** — a curve slicing through the overlapping covariance bridge; density is redirected without breaking the target topology.
+**Example 2** — a single broad arc trimming the upper-left. The boundary passes straight through the overlapping covariance bridge, and the density is redirected without breaking the target topology.
 <p align="center">
   <img src="images/functa/showcase/showcase_2_samples.png" width="45%" alt="Showcase 2 samples">
   <img src="images/functa/showcase/showcase_2_likelihood.png" width="45%" alt="Showcase 2 likelihood">
 </p>
 
-**Example 3** — the hard case: a low-mass (0.279) *disconnected* region. Both components are populated and the boundary is respected (SR 93.63%, IoU 0.963), but the mass ratio between components is off, which is what drives the SWD of 0.41.
+**Example 3** — the hard case: a low-mass (0.279) *disconnected* region, a lens at the top plus a closed oval at the bottom. Both components are populated and the boundary is respected (SR 93.63%, IoU 0.963), but the mass ratio between them is off, which is what drives the SWD of 0.41.
 <p align="center">
   <img src="images/functa/showcase/showcase_3_samples.png" width="45%" alt="Showcase 3 samples">
   <img src="images/functa/showcase/showcase_3_likelihood.png" width="45%" alt="Showcase 3 likelihood">
 </p>
 
-**Example 4** — a curved boundary cutting two modes; the density gradient is preserved right up to the cutoff.
+**Example 4** — a wide band enclosed between two sinuous, S-shaped branches. The flow tracks a non-convex boundary on both sides at once and preserves the density gradient right up to each cutoff.
 <p align="center">
   <img src="images/functa/showcase/showcase_4_samples.png" width="45%" alt="Showcase 4 samples">
   <img src="images/functa/showcase/showcase_4_likelihood.png" width="45%" alt="Showcase 4 likelihood">
 </p>
 
-**Example 5** — the smallest region shown (mass 0.104), isolating a single mode's flank; the model concentrates almost all mass correctly (SR 95.05%).
+**Example 5** — the smallest region shown (mass 0.104): a narrow sliver on the right, isolating a single mode against a steep boundary. The model concentrates almost all mass correctly (SR 95.05%).
 <p align="center">
   <img src="images/functa/showcase/showcase_5_samples.png" width="45%" alt="Showcase 5 samples">
   <img src="images/functa/showcase/showcase_5_likelihood.png" width="45%" alt="Showcase 5 likelihood">
 </p>
 
-**Example 6** — an S-shaped boundary; the flow tracks a non-convex curve without leaking across it.
+**Example 6** — a closed teardrop loop, the only bounded region in the set. The interior is filled and the boundary is held all the way around, including the tight curvature at the bottom, with no leakage across the separate branch in the lower-right corner.
 <p align="center">
   <img src="images/functa/showcase/showcase_6_samples.png" width="45%" alt="Showcase 6 samples">
   <img src="images/functa/showcase/showcase_6_likelihood.png" width="45%" alt="Showcase 6 likelihood">
@@ -241,5 +259,5 @@ Condensed record of the issues that shaped the final configuration.
 * **Checkpoint provenance.** A reused `siren_best.pt` filename caused a silent encoder swap and a large unexplained regression. Checkpoints are now named by training protocol with their SHA-256 recorded in each run's fingerprint.
 * **CAVIA step-size bug (largest single win).** The inner-loop loss was mean-reduced over *(batch × points)*, making the per-shape gradient step depend on the extraction chunk size — deployment used chunks of 128 against a meta-training batch of 16, i.e. an **8× too small step** for the same 15 steps. Fixing the reduction to be chunk-invariant raised worst-5% region IoU from 0.66 to 0.93 and cut extraction MSE 58×, with no retraining.
 * **A misleading diagnostic.** An earlier probe concluded the SIREN was capacity-limited; it ran extraction at batch 1, i.e. a 16× *too large* step, and its oscillating output was divergence rather than a capacity ceiling. The capacity conclusion was wrong.
-* **Flow-matcher ablations were near-null.** Mass-reweighting power and the pointwise SIREN feature moved median success rate by under ~1 point, while encoder-side changes moved it by 7+ — conditioning quality dominated throughout.
+* **Flow-matcher ablations were near-null while the encoder dominated.** Mass-reweighting power and the pointwise SIREN feature moved median success rate by under ~1 point, while encoder-side changes moved it by 7+. Retried *after* the extraction fix, however, mass$^{-0.5}$ exposure equalization does help where it should: worst-5% success rate 86.79 → 88.71 and worst-5% SWD 0.3167 → 0.2863, confirming that constraint exposure only became the binding factor once conditioning error was removed.
 * **Attribution tooling.** A believed-region vs. true-region diagnostic was added to attribute error between encoder and generator; it is what establishes that the bottleneck has now moved to the flow matcher.

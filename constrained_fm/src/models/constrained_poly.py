@@ -1,13 +1,15 @@
 import torch
 import torch.nn as nn
 
+from constrained_fm.src.consts import PLANE_SCALE, POLYNOMIAL_DEGREE
 from constrained_fm.src.models.base_fm import BaseFM
 from constrained_fm.src.models.layers import SinusoidalPosEmb, ResBlock
 from constrained_fm.src.geometry.polynomials import compute_poly_features, evaluate_poly
 
 
 class PolynomialConstrainedFM(BaseFM):
-    def __init__(self, input_dim=2, time_dim=64, degree=3, hidden_dim=1024, scale_factor=4.0):
+    def __init__(self, input_dim=2, time_dim=64, degree=POLYNOMIAL_DEGREE, hidden_dim=1024,
+                 scale_factor=PLANE_SCALE):
         super().__init__()
 
         self.input_dim = input_dim

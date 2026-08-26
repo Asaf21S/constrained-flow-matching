@@ -5,6 +5,7 @@ from torch.distributions import Independent, Normal
 from tqdm.auto import tqdm
 
 from constrained_fm.src.solvers.ode_wrapper import WrappedModel
+from constrained_fm.src.consts import PLANE_SCALE, POLYNOMIAL_DEGREE
 from constrained_fm.src.geometry.polynomials import compute_poly_features, evaluate_poly
 
 
@@ -49,7 +50,8 @@ class BaseFM(nn.Module):
         else:
             return samples
 
-    def compute_likelihood_grid(self, bounds=None, coeffs=None, z=None, siren=None, degree=3, scale=4.0, grid_size=200, step_size=0.05,
+    def compute_likelihood_grid(self, bounds=None, coeffs=None, z=None, siren=None,
+                                degree=POLYNOMIAL_DEGREE, scale=PLANE_SCALE, grid_size=200, step_size=0.05,
                                 eval_batch_size=4000, device=None):
         self.eval()
 

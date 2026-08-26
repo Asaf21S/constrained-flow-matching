@@ -13,6 +13,7 @@ import numpy as np
 import torch
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
 from pathlib import Path
 
 from constrained_fm.src.consts import PLANE_SCALE, POLYNOMIAL_DEGREE
@@ -130,6 +131,75 @@ def plot_believed_vs_true(siren, samples_per_shape, z_per_shape, coeffs_per_shap
     return fig
 
 
+def plot_functa_extraction(siren, coeffs: torch.Tensor, z_batch: torch.Tensor,
+                           degree: int = POLYNOMIAL_DEGREE, scale: float = PLANE_SCALE,
+                           resolution: int = 500) -> Figure:
+    """Side-by-side ground-truth polynomial vs. the SIREN's decoded tanh(P) field.
+
+    Left panel: the true region {P(x) <= 0} with its P(x) = 0 boundary.
+    Right panel: SIREN(x, z) as a filled field, its zero level set, and the true
+    boundary overlaid so the two curves can be compared directly.
+    """
+    from constrained_fm.src.geometry.polynomials import (compute_poly_features_batched,
+                                                         evaluate_poly_batched)
+
+    device = next(siren.parameters()).device
+    num_shapes = coeffs.shape[0]
+
+    axis = torch.linspace(-scale, scale, resolution)
+    grid_y, grid_x = torch.meshgrid(axis, axis, indexing="ij")
+    xx, yy = grid_x.numpy(), grid_y.numpy()
+
+    grid_raw = torch.stack([grid_x, grid_y], dim=-1).view(1, -1, 2).to(device)
+    grid_raw = grid_raw.expand(num_shapes, -1, -1)
+
+    x_pow, y_pow = compute_poly_features_batched(grid_raw, degree=degree, scale=scale)
+    P_grid = evaluate_poly_batched(x_pow, y_pow, coeffs)
+    P_grid = P_grid.view(num_shapes, resolution, resolution).cpu().numpy()
+
+    with torch.no_grad():
+        preds = siren(grid_raw / scale, z_batch).squeeze(-1)
+    preds = preds.view(num_shapes, resolution, resolution).cpu().numpy()
+
+    fig, axes = plt.subplots(num_shapes, 2, figsize=(12, 5 * num_shapes), squeeze=False)
+
+    for i in range(num_shapes):
+        ax_gt, ax_pred = axes[i]
+
+        ax_gt.contourf(xx, yy, P_grid[i], levels=[-float("inf"), 0.0],
+                       colors=["dodgerblue"], alpha=0.3)
+        ax_gt.contour(xx, yy, P_grid[i], levels=[0.0], colors="black", linewidths=2.5)
+        ax_gt.set_xlim(-scale, scale)
+        ax_gt.set_ylim(-scale, scale)
+        ax_gt.set_aspect("equal")
+        ax_gt.set_title(f"GT Polynomial {i + 1}")
+        ax_gt.legend(handles=[
+            Line2D([0], [0], color="black", lw=2.5, label="GT Boundary (P=0)"),
+            Patch(color="dodgerblue", alpha=0.3, label="Valid Region (P<=0)"),
+        ], loc="upper right", fontsize="small")
+
+        cf = ax_pred.contourf(xx, yy, preds[i], levels=50, cmap="RdBu_r", alpha=0.85,
+                              vmin=-1, vmax=1)
+        ax_pred.contour(xx, yy, P_grid[i], levels=[0.0], colors="black", linewidths=3.0,
+                        linestyles="solid", zorder=3)
+        ax_pred.contour(xx, yy, preds[i], levels=[0.0], colors="lime", linewidths=1.8,
+                        linestyles="solid", zorder=4)
+        ax_pred.set_xlim(-scale, scale)
+        ax_pred.set_ylim(-scale, scale)
+        ax_pred.set_aspect("equal")
+        ax_pred.set_title(f"SIREN Prediction {i + 1}")
+        ax_pred.legend(handles=[
+            Line2D([0], [0], color="lime", lw=1.8, label="SIREN Boundary (pred=0)"),
+            Line2D([0], [0], color="black", lw=3.0, label="GT Boundary (Overlay)"),
+        ], loc="upper right", fontsize="small")
+
+        cbar = fig.colorbar(cf, ax=ax_pred, fraction=0.046, pad=0.04)
+        cbar.set_label("SIREN Prediction: tanh(P)", rotation=270, labelpad=15)
+
+    fig.tight_layout()
+    return fig
+
+
 def plot_likelihood(likelihood, coeffs: torch.Tensor | None = None,
                     degree: int = POLYNOMIAL_DEGREE, scale: float = PLANE_SCALE,
                     grid_size: int = 200, device=None) -> Figure:
@@ -188,5 +258,5 @@ def plot_success_vs_fidelity(success_rate, mass, mass_iou) -> Figure:
 
 
 __all__ = ["save_figure", "plot_loss_curve", "plot_sample_trajectory", "plot_final_samples",
-           "plot_final_samples_gallery", "plot_believed_vs_true", "plot_likelihood",
-           "plot_success_vs_fidelity"]
+           "plot_final_samples_gallery", "plot_believed_vs_true", "plot_functa_extraction",
+           "plot_likelihood", "plot_success_vs_fidelity"]

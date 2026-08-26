@@ -26,3 +26,4 @@ runs/*/figures/
 !constrained_fm/functa_dataset/siren_uniform.pt
 
 constrained_fm/functa_dataset/pools/
+constrained_fm/improvements_docs/

@@ -54,6 +54,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="particles per shape for the FM half; defaults to the run's eval setting")
     parser.add_argument("--no-flow-matching", action="store_true",
                         help="SIREN half only; skips all ODE sampling")
+    parser.add_argument("--nll-points", type=int, default=None,
+                        help="GT points per constraint for the exact NLL/KLD; defaults to the run's eval setting")
     parser.add_argument("--plot-shapes", type=int, default=4,
                         help="rows in the grid figures, chosen to span the IoU degradation range")
     parser.add_argument("--resolution", type=int, default=400, help="boundary rendering grid per axis")
@@ -107,6 +109,7 @@ def main(argv: list[str] | None = None) -> int:
     num_polys = args.num_polys or ev.num_polys
     num_x0 = args.num_x0 or ev.num_x0
     n_values = sorted(args.num_points)
+    args.nll_points = ev.nll_points if args.nll_points is None else args.nll_points
 
     out = Path(args.outdir) if args.outdir else run_dir(cfg.run_id) / "ablations" / "query_points"
     out.mkdir(parents=True, exist_ok=True)
@@ -173,13 +176,20 @@ def main(argv: list[str] | None = None) -> int:
                                                device=device)
             metrics = evaluate_validation_set_metrics(samples, x_true_pool=gmm_pool, coeffs=polys,
                                                       degree=cfg.degree, scale=cfg.scale,
-                                                      device=device)
+                                                      model=model, z=z_by_n[n],
+                                                      nll_points=args.nll_points,
+                                                      nll_step_size=ev.step_size, device=device)
             per_n[n].update({k: [float(v) for v in metrics[k]]
-                             for k in ("success_rate", "swd", "mmd", "jsd")})
+                             for k in ("success_rate", "swd", "mmd", "jsd") if k in metrics})
+            for key in ("nll", "kld"):
+                if key in metrics:
+                    per_n[n][key] = [float(v) for v in metrics[key]]
             samples_by_n[n] = np.stack([samples[i] for i in shape_ids])
             sr = np.asarray(per_n[n]["success_rate"])
+            kld = np.asarray(per_n[n].get("kld", [float("nan")]))
             print(f"N={n:>5} | success rate mean {sr.mean():.2f}% median {np.median(sr):.2f}% | "
-                  f"SWD median {np.median(per_n[n]['swd']):.4f}", flush=True)
+                  f"SWD median {np.median(per_n[n]['swd']):.4f} | "
+                  f"KLD median {np.nanmedian(kld):.4f}", flush=True)
             dump_metrics()
             del samples
             if device.type == "cuda":
@@ -211,6 +221,8 @@ def main(argv: list[str] | None = None) -> int:
             out / "flow_matching_grid.png")
         metric_series["success rate (%)"] = np.array([per_n[n]["success_rate"] for n in n_values])
         metric_series["SWD"] = np.array([per_n[n]["swd"] for n in n_values])
+        if all("kld" in per_n[n] for n in n_values):
+            metric_series["KLD"] = np.array([per_n[n]["kld"] for n in n_values])
 
     diag.save_figure(
         diag.plot_ablation_curves(n_values, metric_series, xlabel="inference query points N"),
@@ -237,7 +249,7 @@ def load_config_or_die(run_id: str) -> ExperimentConfig:
 
 
 def print_summary(n_values, per_n) -> None:
-    keys = [k for k in ("mass_iou", "success_rate", "swd", "extraction_mse") if k in per_n[n_values[0]]]
+    keys = [k for k in ("mass_iou", "success_rate", "swd", "kld", "extraction_mse") if k in per_n[n_values[0]]]
     header = f"{'N':>6}" + "".join(f"{k:>16}" for k in keys)
     print("\nmedian over shapes")
     print(header)

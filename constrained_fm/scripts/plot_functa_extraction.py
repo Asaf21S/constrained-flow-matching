@@ -33,6 +33,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--num-shapes", type=int, default=10)
     parser.add_argument("--resolution", type=int, default=500,
                         help="rendering grid per axis; higher removes jaggedness in the zero level set")
+    parser.add_argument("--smooth-sigma", type=float, default=2.0,
+                        help="Gaussian blur in grid cells applied before tracing SIREN(x, z) = 0")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--out", default="constrained_fm/images/functa/polynomial_functa.png")
     return parser
@@ -61,7 +63,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"mean extraction MSE: {float(extraction_mse.mean()):.6f}")
 
     fig = diag.plot_functa_extraction(siren, polys, z_batch, degree=cfg.degree, scale=cfg.scale,
-                                      resolution=args.resolution)
+                                      resolution=args.resolution, smooth_sigma=args.smooth_sigma)
     path = diag.save_figure(fig, Path(args.out))
     print(f"wrote {path}")
     return 0

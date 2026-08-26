@@ -11,9 +11,11 @@ import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+import torch.nn.functional as F
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
+from matplotlib.ticker import ScalarFormatter
 from pathlib import Path
 
 from constrained_fm.src.consts import PLANE_SCALE, POLYNOMIAL_DEGREE
@@ -28,6 +30,40 @@ def save_figure(fig: Figure, path: str | Path, dpi: int = 110) -> Path:
     fig.savefig(path, dpi=dpi, bbox_inches="tight")
     plt.close(fig)
     return path
+
+
+def _true_field(C: torch.Tensor, points: torch.Tensor, degree: int = POLYNOMIAL_DEGREE,
+                scale: float = PLANE_SCALE) -> np.ndarray:
+    """P(x) for a single polynomial at the given points, as a host array of shape (M,)."""
+    from constrained_fm.src.geometry.polynomials import compute_poly_features, evaluate_poly
+
+    x_pow, y_pow = compute_poly_features(points, degree=degree, scale=scale)
+    C_expanded = C.unsqueeze(0).expand(points.shape[0], -1, -1)
+    return evaluate_poly(x_pow, y_pow, C_expanded).squeeze(-1).cpu().numpy()
+
+
+def smooth_field(field: np.ndarray, sigma: float) -> np.ndarray:
+    """Separable Gaussian blur applied before tracing a zero level set.
+
+    A w0=30 SIREN carries low-amplitude high-frequency ripple, so its raw sign flips many
+    times inside a thin band around the boundary and contour() returns hundreds of disjoint
+    fragments -- denser grids resolve more of the ripple and look worse, not better. The
+    filter is symmetric, so it does not bias where the crossing sits, and it touches only
+    the rendering: every reported IoU is computed on the raw field.
+    """
+    if sigma <= 0:
+        return field
+
+    radius = int(np.ceil(3 * sigma))
+    offsets = np.arange(-radius, radius + 1, dtype=np.float32)
+    kernel = np.exp(-0.5 * (offsets / sigma) ** 2)
+    kernel /= kernel.sum()
+
+    out = torch.from_numpy(np.ascontiguousarray(field, dtype=np.float32)).view(1, 1, *field.shape)
+    k = torch.from_numpy(kernel)
+    out = F.conv2d(F.pad(out, (0, 0, radius, radius), mode="replicate"), k.view(1, 1, -1, 1))
+    out = F.conv2d(F.pad(out, (radius, radius, 0, 0), mode="replicate"), k.view(1, 1, 1, -1))
+    return out.view(*field.shape).numpy()
 
 
 def plot_loss_curve(losses, log_scale: bool = True) -> Figure:
@@ -133,7 +169,7 @@ def plot_believed_vs_true(siren, samples_per_shape, z_per_shape, coeffs_per_shap
 
 def plot_functa_extraction(siren, coeffs: torch.Tensor, z_batch: torch.Tensor,
                            degree: int = POLYNOMIAL_DEGREE, scale: float = PLANE_SCALE,
-                           resolution: int = 500) -> Figure:
+                           resolution: int = 500, smooth_sigma: float = 2.0) -> Figure:
     """Side-by-side ground-truth polynomial vs. the SIREN's decoded tanh(P) field.
 
     Left panel: the true region {P(x) <= 0} with its P(x) = 0 boundary.
@@ -182,8 +218,8 @@ def plot_functa_extraction(siren, coeffs: torch.Tensor, z_batch: torch.Tensor,
                               vmin=-1, vmax=1)
         ax_pred.contour(xx, yy, P_grid[i], levels=[0.0], colors="black", linewidths=3.0,
                         linestyles="solid", zorder=3)
-        ax_pred.contour(xx, yy, preds[i], levels=[0.0], colors="lime", linewidths=1.8,
-                        linestyles="solid", zorder=4)
+        ax_pred.contour(xx, yy, smooth_field(preds[i], smooth_sigma), levels=[0.0], colors="lime",
+                        linewidths=1.8, linestyles="solid", zorder=4)
         ax_pred.set_xlim(-scale, scale)
         ax_pred.set_ylim(-scale, scale)
         ax_pred.set_aspect("equal")
@@ -195,6 +231,123 @@ def plot_functa_extraction(siren, coeffs: torch.Tensor, z_batch: torch.Tensor,
 
         cbar = fig.colorbar(cf, ax=ax_pred, fraction=0.046, pad=0.04)
         cbar.set_label("SIREN Prediction: tanh(P)", rotation=270, labelpad=15)
+
+    fig.tight_layout()
+    return fig
+
+
+def plot_boundary_ablation_grid(siren, coeffs_list, z_grid, row_labels, col_labels,
+                                cell_labels=None, degree: int = POLYNOMIAL_DEGREE,
+                                scale: float = PLANE_SCALE, resolution: int = 400,
+                                smooth_sigma: float = 2.0) -> Figure:
+    """Rows = polynomials, columns = an ablated setting; each cell overlays the decoded
+    SIREN zero level set on the true region.
+
+    z_grid[r][c] is the latent for row r under setting c.
+    """
+    num_rows, num_cols = len(coeffs_list), len(col_labels)
+
+    axis = torch.linspace(-scale, scale, resolution)
+    grid_y, grid_x = torch.meshgrid(axis, axis, indexing="ij")
+    xx, yy = grid_x.numpy(), grid_y.numpy()
+    device = next(siren.parameters()).device
+    points = torch.stack([grid_x, grid_y], dim=-1).view(-1, 2).to(device)
+
+    fig, axs = plt.subplots(num_rows, num_cols, figsize=(3.1 * num_cols, 3.3 * num_rows),
+                            squeeze=False)
+
+    for r, C in enumerate(coeffs_list):
+        P_grid = _true_field(C, points, degree=degree, scale=scale).reshape(resolution, resolution)
+        for c in range(num_cols):
+            ax = axs[r][c]
+            ax.contourf(xx, yy, P_grid, levels=[-float("inf"), 0.0], colors=["dodgerblue"],
+                        alpha=0.25)
+            ax.contour(xx, yy, P_grid, levels=[0.0], colors="black", linewidths=2.2,
+                       linestyles="solid", zorder=3)
+
+            pred = decode_region(siren, z_grid[r][c], points, scale=scale)
+            pred = pred.reshape(resolution, resolution).cpu().numpy()
+            ax.contour(xx, yy, smooth_field(pred, smooth_sigma), levels=[0.0], colors="lime",
+                       linewidths=1.6, linestyles="solid", zorder=4)
+
+            ax.set_xlim(-scale, scale)
+            ax.set_ylim(-scale, scale)
+            ax.set_aspect("equal")
+            ax.set_xticks([])
+            ax.set_yticks([])
+            if r == 0:
+                ax.set_title(col_labels[c], fontsize=11)
+            if c == 0:
+                ax.set_ylabel(row_labels[r], fontsize=10)
+            if cell_labels is not None:
+                ax.set_xlabel(cell_labels[r][c], fontsize=9)
+
+    fig.legend(handles=[
+        Line2D([0], [0], color="black", lw=2.2, label="GT boundary P(x) = 0"),
+        Line2D([0], [0], color="lime", lw=1.6, label="SIREN(x, z) = 0"),
+    ], loc="lower center", ncol=2, fontsize="medium", bbox_to_anchor=(0.5, -0.015))
+    fig.tight_layout(rect=(0, 0.02, 1, 1))
+    return fig
+
+
+def plot_samples_ablation_grid(samples_grid, coeffs_list, row_labels, col_labels,
+                               cell_labels=None, degree: int = POLYNOMIAL_DEGREE,
+                               scale: float = PLANE_SCALE) -> Figure:
+    """Same layout as plot_boundary_ablation_grid, but each cell is the generated particle
+    density with the true constraint boundary overlaid."""
+    num_rows, num_cols = len(coeffs_list), len(col_labels)
+    fig, axs = plt.subplots(num_rows, num_cols, figsize=(3.1 * num_cols, 3.3 * num_rows),
+                            squeeze=False)
+
+    for r, C in enumerate(coeffs_list):
+        for c in range(num_cols):
+            ax = axs[r][c]
+            visualize_single_step(samples_grid[r][c], title="", ax=ax, cmap="Oranges",
+                                  coeffs=C, degree=degree, scale=scale)
+            ax.set_xlim(-scale, scale)
+            ax.set_ylim(-scale, scale)
+            ax.set_xticks([])
+            ax.set_yticks([])
+            ax.grid(False)
+            if r == 0:
+                ax.set_title(col_labels[c], fontsize=11)
+            if c == 0:
+                ax.set_ylabel(row_labels[r], fontsize=10)
+            if cell_labels is not None:
+                ax.set_xlabel(cell_labels[r][c], fontsize=9)
+
+    fig.legend(handles=[
+        Line2D([0], [0], color="red", lw=2.5, linestyle="dashed", label="GT boundary P(x) = 0"),
+    ], loc="lower center", fontsize="medium", bbox_to_anchor=(0.5, -0.015))
+    fig.tight_layout(rect=(0, 0.02, 1, 1))
+    return fig
+
+
+def plot_ablation_curves(x_values, series, xlabel: str, log_x: bool = True) -> Figure:
+    """One panel per metric; each panel plots median with an inter-quartile band.
+
+    series maps a metric name to a (len(x_values), num_shapes) array.
+    """
+    names = list(series)
+    fig, axs = plt.subplots(1, len(names), figsize=(4.6 * len(names), 4.0), squeeze=False)
+
+    for ax, name in zip(axs[0], names):
+        values = np.asarray(series[name], dtype=float)
+        finite = np.where(np.isfinite(values), values, np.nan)
+        median = np.nanmedian(finite, axis=1)
+        q25, q75 = np.nanpercentile(finite, 25, axis=1), np.nanpercentile(finite, 75, axis=1)
+
+        ax.plot(x_values, median, marker="o", color="darkslateblue", label="median")
+        ax.fill_between(x_values, q25, q75, color="darkslateblue", alpha=0.2, label="IQR")
+        if log_x:
+            ax.set_xscale("log")
+            ax.set_xticks(x_values)
+            ax.get_xaxis().set_major_formatter(ScalarFormatter())
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(name)
+        ax.set_title(name)
+        ax.grid(True, alpha=0.3)
+        ax.legend(fontsize="small")
 
     fig.tight_layout()
     return fig
@@ -259,4 +412,5 @@ def plot_success_vs_fidelity(success_rate, mass, mass_iou) -> Figure:
 
 __all__ = ["save_figure", "plot_loss_curve", "plot_sample_trajectory", "plot_final_samples",
            "plot_final_samples_gallery", "plot_believed_vs_true", "plot_functa_extraction",
+           "plot_boundary_ablation_grid", "plot_samples_ablation_grid", "plot_ablation_curves",
            "plot_likelihood", "plot_success_vs_fidelity"]

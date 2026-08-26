@@ -190,10 +190,16 @@ Polynomial curves are shown to be highly effective at isolating highly correlate
 #### Evaluation Metrics
 | Metric | Median / Value | Mean | Worst 5% | Target |
 | :--- | :--- | :--- | :--- | :--- |
-| **Success Rate (%)** | 98.24 | 97.31 | 93.48 | *Higher is better* |
-| **Sliced Wasserstein (SWD)** | 0.0822 | 0.1075 | 0.2805 | *Lower is better* |
-| **Mean Discrepancy (MMD)** | 0.0007 | 0.0015 | 0.0034 | *Lower is better* |
-| **Jensen-Shannon (JSD)** | 0.0048 | 0.0068 | 0.0177 | *Lower is better* |
+| **Success Rate (%)** | 98.54 | 97.27 | 92.29 | *Higher is better* |
+| **Sliced Wasserstein (SWD)** | 0.0682 | 0.0944 | 0.2108 | *Lower is better* |
+| **Mean Discrepancy (MMD)** | 0.0007 | 0.0017 | 0.0032 | *Lower is better* |
+| **Jensen-Shannon (JSD)** | 0.0037 | 0.0067 | 0.0177 | *Lower is better* |
+| **Negative Log-Likelihood (NLL)** | 2.8676 | 2.7850 | 3.4195 | *Lower is better* |
+| **KL divergence (KLD)** | 0.0290 | 0.0477 | 0.1268 | *Lower is better; 0 is exact* |
+
+Measured on the frozen 100-constraint benchmark with 10,000 samples each, midpoint solver at step size 0.05. NLL is the exact backward-ODE likelihood of constraint-satisfying GT points; KLD subtracts the truncated GMM's own entropy to give $D_{\mathrm{KL}}(p_{\text{true}} \,\|\, p_\theta)$, which is comparable across constraints. See the [Functa README](README_functa.md#against-explicit-conditioning) for the derivation and for the latent-conditioned comparison.
+
+> Earlier revisions of this table reported SR 98.24 / SWD 0.0822 / MMD 0.0007 / JSD 0.0048 from a model trained for 5001 iterations, before `PLANE_SCALE` changed from 4.0 to 4.5. That checkpoint was never saved and its benchmark no longer exists, so the model was retrained (15001 iterations, batch 1024, scale 4.5) and re-scored on the current benchmark. Reproduce with `sbatch scripts/run_poly_fm.sh --batch-size 1024`.
 
 ### Compound Geometric Constraints (Disjoint Bounding Boxes)
 

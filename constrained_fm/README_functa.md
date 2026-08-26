@@ -171,18 +171,28 @@ Raw NLL is not comparable across constraints: the model density is normalized ov
 
 A median KLD of 0.375 nats says the learned conditional density is close to — but not identical with — the truncated target: the model covers the right region with approximately the right mass allocation, and the residual is concentrated on the same low-mass constraints that drive the SWD tail (worst-5% KLD 0.785).
 
-Against the explicitly-conditioned polynomial model from the [main README](README.md#algebraic-constraints-polynomials), which receives the true coefficients *and* the exact $P(x_t)$:
+### Against explicit conditioning
+
+The reference point is the polynomial model from the [main README](README.md#algebraic-constraints-polynomials), which receives the true coefficients *and* the exact $P(x_t)$ at every step. Whatever it achieves is what a latent code has to match without ever seeing the constraint.
+
+That baseline had to be rebuilt from scratch: its original checkpoint was never saved, and the numbers previously quoted here (SR 98.24 / SWD 0.0822) came from a run that (a) trained for 5001 iterations rather than 15001 and (b) predates the `PLANE_SCALE` change from 4.0 to 4.5, so it was scored on a *different benchmark* than the Functa model. **The old comparison was never like-for-like.** The figures below come from a baseline retrained at 15001 iterations, batch 1024 and scale 4.5 — matching the Functa run on every axis — and evaluated on the same frozen 100-constraint benchmark.
 
 | Metric (median) | Coefficient-conditioned | **Functa-conditioned** |
 | :--- | ---: | ---: |
-| Success Rate (%) | 98.24 | 97.69 |
-| SWD | 0.0822 | **0.0817** |
-| MMD | 0.0007 | 0.0009 |
-| JSD | 0.0048 | 0.0055 |
-| NLL | *not yet measured* | 3.2190 |
-| KLD | *not yet measured* | 0.3753 |
+| Success Rate (%) | **98.54** | 97.69 |
+| SWD | **0.0682** | 0.0817 |
+| MMD | **0.0007** | 0.0009 |
+| JSD | **0.0037** | 0.0055 |
+| NLL | **2.8676** | 3.2190 |
+| KLD | **0.0290** | 0.3753 |
 
-**Distributional quality reaches parity** — SWD is level to within run-to-run noise, JSD marginally worse — while the constraint is delivered only as a latent code. The remaining gap is in the tail: worst-5% success rate is 86.79 versus 93.48, concentrated on constraints with small valid mass.
+**Explicit conditioning wins on every metric, and the likelihood metrics say by how much.** On the point-cloud measures the gap is modest — success rate within 0.85 points, SWD ~16% — which is why the earlier, undertrained comparison read as parity. On KLD it is **0.029 vs 0.375 nats, a factor of ~13**. The coefficient-conditioned model reproduces the truncated target almost exactly; the Functa-conditioned one does not.
+
+That gap is invisible to SWD, MMD and JSD, which is the entire argument for measuring likelihood. Those metrics saturate once the samples land in the right region with roughly the right shape, and cannot separate that from a genuinely correct density. The README's long-standing reading of the failure mode — *allocative, not geometric* — was right, and KLD is what finally puts a number on it.
+
+Two honest caveats. First, this is not a controlled test of conditioning alone: `PolynomialConstrainedFM` (residual MLP, coefficients and $P(x_t)$ fed in directly) and `ConstrainedFlowMatcher` (AdaGN modulation plus a pointwise SIREN feature, 19.05M parameters) differ in architecture as well. The defensible claim is that explicit conditioning outperforms latent conditioning *in this setup*, not that latent conditioning is inherently worse. Second, the baseline is handed the exact constraint at every integration step, so it is an upper reference rather than a competitor — the interesting quantity is the size of the gap, and the gap in density is an order of magnitude larger than the point-cloud metrics suggested.
+
+Reproduce with `sbatch scripts/run_poly_fm.sh --batch-size 1024`.
 
 ### Where the residual error lives
 
@@ -200,8 +210,6 @@ Correlation of per-constraint success with decoded-region IoU is $+0.76$, and wi
 ### How many query points does extraction actually need?
 
 The SIREN is meta-trained with 1000 query points per shape, and inference deploys the same 1000. That number was inherited, never justified. Sweeping $N$ at **inference only** — both the SIREN and the flow matcher frozen, the 15-step CAVIA loop otherwise untouched — shows how much of the pipeline's quality the query budget is really buying.
-
-The inner loop is already $N$-invariant by construction: it reduces with a mean over points and a sum over shapes, so each $z_i$ receives the gradient of its own mean MSE and the effective step size does not move with $N$. Only the *variance* of that gradient does.
 
 | $N$ | mass IoU | Success Rate (%) | SWD | extraction MSE |
 | ---: | ---: | ---: | ---: | ---: |
@@ -231,8 +239,6 @@ Downstream, the generated distributions track the same pattern — degradation a
 <p align="center">
   <img src="../runs/siren-uniform-8d6375ab/ablations/query_points/flow_matching_grid.png" width="85%" alt="Generated samples vs query budget">
 </p>
-
-Reproduce with `sbatch scripts/run_ablate_points.sh siren-uniform-8d6375ab`.
 
 ### Qualitative
 
@@ -294,7 +300,7 @@ Freshly sampled polynomials, drawn with a seed disjoint from both the training p
 
 ## Technical Takeaways
 
-* **A constraint can be delivered as a latent instead of as parameters.** Conditioning on a 512-dim functa code matches the explicitly-conditioned model on distributional metrics (SWD 0.0817 vs 0.0822), despite never seeing the polynomial.
+* **A constraint can be delivered as a latent instead of as parameters — at a measurable price.** A 512-dim functa code gets within 0.85 points of success rate and ~16% of SWD of a model handed the true coefficients and the exact $P(x_t)$, despite never seeing the polynomial. But the exact likelihood shows the cost the point-cloud metrics hide: KLD 0.375 vs 0.029 nats, a factor of ~13. The region is right; the density inside it is not.
 * **The pointwise field feature is the key ingredient.** Replacing the exact $P(x_t)$ with the frozen encoder's own $\mathrm{SIREN}(x_t, z)$ preserves per-step boundary awareness, which is what lets a latent-conditioned model compete with a parameter-conditioned one.
 * **The flow matcher is robust to imperfect conditioning.** Trained on (latent, true region) pairs it learns $p(\text{region} \mid z)$ rather than blindly filling the decoded level set — measurably correcting encoder error rather than inheriting it.
 * **Encoding fidelity, not generator capacity, set the ceiling** for most of this work; once extraction was correct, the bottleneck moved to the generator and the remaining error became allocative.

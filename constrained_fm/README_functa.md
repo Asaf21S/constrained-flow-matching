@@ -146,6 +146,14 @@ $$\mathcal{L} = \mathbb{E}_{t, x_0, x_1, z}\left[\; w \left\lVert v_\theta(x_t, 
 
 All numbers below come from a **frozen benchmark of 100 polynomials** never used in training, with **10,000 samples each**, integrated with a midpoint solver at step size 0.05. Latents are re-extracted from scratch for every evaluation, so the reported figures include encoder error rather than hiding it.
 
+**NLL** is the *exact* negative log-likelihood the model assigns to ground-truth GMM points that satisfy the constraint, obtained by integrating the probability-flow ODE backwards from $t=1$ to $t=0$ while accumulating the exact divergence of the velocity field:
+
+$$\log p_\theta(x_1) = \log \mathcal{N}(x_0; 0, I) - \int_1^0 \operatorname{Tr}(\nabla_x v_t)\, dt$$
+
+In 2D the trace is exact at the cost of two backward passes per step, so no Hutchinson estimator is needed. 5,000 constraint-satisfying points are scored per constraint.
+
+Raw NLL is not comparable across constraints: the model density is normalized over the whole plane, while the reference — the GMM truncated to $\{P \le 0\}$ — is normalized over the valid region, whose entropy varies with the constraint. Subtracting that reference entropy yields **KLD**, a Monte Carlo estimate of $D_{\mathrm{KL}}(p_{\text{true}} \,\|\, p_\theta)$, which *is* comparable and can be averaged over the benchmark. Zero means the density is reproduced exactly.
+
 ---
 
 ## Results
@@ -155,20 +163,26 @@ All numbers below come from a **frozen benchmark of 100 polynomials** never used
 | Metric | Median | Mean | Worst 5% | Target |
 | :--- | ---: | ---: | ---: | :--- |
 | **Success Rate (%)** | 97.69 | 95.98 | 86.79 | *Higher is better* |
-| **Sliced Wasserstein (SWD)** | 0.0797 | 0.1141 | 0.3167 | *Lower is better* |
+| **Sliced Wasserstein (SWD)** | 0.0817 | 0.1163 | 0.3494 | *Lower is better* |
 | **Mean Discrepancy (MMD)** | 0.0009 | 0.0029 | 0.0053 | *Lower is better* |
 | **Jensen-Shannon (JSD)** | 0.0055 | 0.0097 | 0.0279 | *Lower is better* |
+| **Negative Log-Likelihood (NLL)** | 3.2190 | 3.1491 | 3.5849 | *Lower is better* |
+| **KL divergence (KLD)** | 0.3753 | 0.4144 | 0.7845 | *Lower is better; 0 is exact* |
+
+A median KLD of 0.375 nats says the learned conditional density is close to — but not identical with — the truncated target: the model covers the right region with approximately the right mass allocation, and the residual is concentrated on the same low-mass constraints that drive the SWD tail (worst-5% KLD 0.785).
 
 Against the explicitly-conditioned polynomial model from the [main README](README.md#algebraic-constraints-polynomials), which receives the true coefficients *and* the exact $P(x_t)$:
 
 | Metric (median) | Coefficient-conditioned | **Functa-conditioned** |
 | :--- | ---: | ---: |
 | Success Rate (%) | 98.24 | 97.69 |
-| SWD | 0.0822 | **0.0797** |
+| SWD | 0.0822 | **0.0817** |
 | MMD | 0.0007 | 0.0009 |
 | JSD | 0.0048 | 0.0055 |
+| NLL | *not yet measured* | 3.2190 |
+| KLD | *not yet measured* | 0.3753 |
 
-**Distributional quality reaches parity** — SWD is marginally better, JSD marginally worse — while the constraint is delivered only as a latent code. The remaining gap is in the tail: worst-5% success rate is 86.79 versus 93.48, concentrated on constraints with small valid mass.
+**Distributional quality reaches parity** — SWD is level to within run-to-run noise, JSD marginally worse — while the constraint is delivered only as a latent code. The remaining gap is in the tail: worst-5% success rate is 86.79 versus 93.48, concentrated on constraints with small valid mass.
 
 ### Where the residual error lives
 
@@ -193,14 +207,15 @@ Across the constraint family the model produces the *correct distribution*, not 
 
 Freshly sampled polynomials, drawn with a seed disjoint from both the training pool and the validation benchmark (verified minimum coefficient distance 0.29 from any benchmark shape). For each: generated samples with the constraint overlaid, and the model's **exact** likelihood, normalized against the truncated GMM's peak density.
 
-| # | Success rate (%) | SWD | MMD | JSD | constraint mass | decoded mass IoU |
-| :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1 | 99.38 | 0.0423 | 0.00049 | 0.0013 | 0.878 | 0.995 |
-| 2 | 99.08 | 0.0376 | 0.00031 | 0.0015 | 0.836 | 0.993 |
-| 3 | 93.63 | 0.4115 | 0.00537 | 0.0104 | 0.279 | 0.963 |
-| 4 | 98.71 | 0.0404 | 0.00040 | 0.0018 | 0.852 | 0.993 |
-| 5 | 95.05 | 0.0927 | 0.00252 | 0.0074 | 0.104 | 0.960 |
-| 6 | 97.65 | 0.0583 | 0.00091 | 0.0028 | 0.676 | 0.986 |
+| # | Success rate (%) | SWD | MMD | JSD | NLL | KLD | constraint mass | decoded mass IoU |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 99.38 | 0.0424 | 0.00049 | 0.0013 | 3.438 | 0.096 | 0.878 | 0.995 |
+| 2 | 99.14 | 0.0463 | 0.00035 | 0.0013 | 3.557 | 0.272 | 0.836 | 0.993 |
+| 3 | 93.43 | 0.3518 | 0.00485 | 0.0104 | 3.230 | 0.765 | 0.279 | 0.963 |
+| 4 | 98.76 | 0.0421 | 0.00051 | 0.0017 | 3.434 | 0.171 | 0.852 | 0.993 |
+| 5 | 95.15 | 0.0995 | 0.00321 | 0.0074 | 2.559 | 0.673 | 0.104 | 0.960 |
+| 6 | 97.60 | 0.0573 | 0.00089 | 0.0028 | 3.303 | 0.286 | 0.676 | 0.986 |
+
 
 **Example 1** — two curve branches trim the right-hand side of the plane. The largest region shown (mass 0.878) and near-perfect adherence; the likelihood map reproduces every mode with a clean cut along the boundary.
 <p align="center">
@@ -214,7 +229,7 @@ Freshly sampled polynomials, drawn with a seed disjoint from both the training p
   <img src="images/functa/showcase/showcase_2_likelihood.png" width="45%" alt="Showcase 2 likelihood">
 </p>
 
-**Example 3** — the hard case: a low-mass (0.279) *disconnected* region, a lens at the top plus a closed oval at the bottom. Both components are populated and the boundary is respected (SR 93.63%, IoU 0.963), but the mass ratio between them is off, which is what drives the SWD of 0.41.
+**Example 3** — the hard case: a low-mass (0.279) *disconnected* region, a lens at the top plus a closed oval at the bottom. Both components are populated and the boundary is respected (SR 93.43%, IoU 0.963), but the mass ratio between them is off, which is what drives the SWD of 0.35 and the highest KLD in the set (0.765).
 <p align="center">
   <img src="images/functa/showcase/showcase_3_samples.png" width="45%" alt="Showcase 3 samples">
   <img src="images/functa/showcase/showcase_3_likelihood.png" width="45%" alt="Showcase 3 likelihood">
@@ -226,7 +241,7 @@ Freshly sampled polynomials, drawn with a seed disjoint from both the training p
   <img src="images/functa/showcase/showcase_4_likelihood.png" width="45%" alt="Showcase 4 likelihood">
 </p>
 
-**Example 5** — the smallest region shown (mass 0.104): a narrow sliver on the right, isolating a single mode against a steep boundary. The model concentrates almost all mass correctly (SR 95.05%).
+**Example 5** — the smallest region shown (mass 0.104): a narrow sliver on the right, isolating a single mode against a steep boundary. The model concentrates almost all mass correctly (SR 95.15%), though the KLD of 0.673 shows the density inside the sliver is still noticeably off.
 <p align="center">
   <img src="images/functa/showcase/showcase_5_samples.png" width="45%" alt="Showcase 5 samples">
   <img src="images/functa/showcase/showcase_5_likelihood.png" width="45%" alt="Showcase 5 likelihood">
@@ -242,7 +257,7 @@ Freshly sampled polynomials, drawn with a seed disjoint from both the training p
 
 ## Technical Takeaways
 
-* **A constraint can be delivered as a latent instead of as parameters.** Conditioning on a 512-dim functa code matches the explicitly-conditioned model on distributional metrics (SWD 0.0797 vs 0.0822), despite never seeing the polynomial.
+* **A constraint can be delivered as a latent instead of as parameters.** Conditioning on a 512-dim functa code matches the explicitly-conditioned model on distributional metrics (SWD 0.0817 vs 0.0822), despite never seeing the polynomial.
 * **The pointwise field feature is the key ingredient.** Replacing the exact $P(x_t)$ with the frozen encoder's own $\mathrm{SIREN}(x_t, z)$ preserves per-step boundary awareness, which is what lets a latent-conditioned model compete with a parameter-conditioned one.
 * **The flow matcher is robust to imperfect conditioning.** Trained on (latent, true region) pairs it learns $p(\text{region} \mid z)$ rather than blindly filling the decoded level set — measurably correcting encoder error rather than inheriting it.
 * **Encoding fidelity, not generator capacity, set the ceiling** for most of this work; once extraction was correct, the bottleneck moved to the generator and the remaining error became allocative.
@@ -259,5 +274,5 @@ Condensed record of the issues that shaped the final configuration.
 * **Checkpoint provenance.** A reused `siren_best.pt` filename caused a silent encoder swap and a large unexplained regression. Checkpoints are now named by training protocol with their SHA-256 recorded in each run's fingerprint.
 * **CAVIA step-size bug (largest single win).** The inner-loop loss was mean-reduced over *(batch × points)*, making the per-shape gradient step depend on the extraction chunk size — deployment used chunks of 128 against a meta-training batch of 16, i.e. an **8× too small step** for the same 15 steps. Fixing the reduction to be chunk-invariant raised worst-5% region IoU from 0.66 to 0.93 and cut extraction MSE 58×, with no retraining.
 * **A misleading diagnostic.** An earlier probe concluded the SIREN was capacity-limited; it ran extraction at batch 1, i.e. a 16× *too large* step, and its oscillating output was divergence rather than a capacity ceiling. The capacity conclusion was wrong.
-* **Flow-matcher ablations were near-null while the encoder dominated.** Mass-reweighting power and the pointwise SIREN feature moved median success rate by under ~1 point, while encoder-side changes moved it by 7+. Retried *after* the extraction fix, however, mass$^{-0.5}$ exposure equalization does help where it should: worst-5% success rate 86.79 → 88.71 and worst-5% SWD 0.3167 → 0.2863, confirming that constraint exposure only became the binding factor once conditioning error was removed.
+* **Flow-matcher ablations were near-null while the encoder dominated.** Mass-reweighting power and the pointwise SIREN feature moved median success rate by under ~1 point, while encoder-side changes moved it by 7+. Retried *after* the extraction fix, however, mass$^{-0.5}$ exposure equalization does help where it should: worst-5% success rate 86.79 → 88.71 and worst-5% SWD 0.3494 → 0.2942, confirming that constraint exposure only became the binding factor once conditioning error was removed. It does not, though, improve the density itself — median KLD is 0.3753 versus 0.3830, a wash — so the gain is in constraint adherence on the tail, not in how the mass is distributed.
 * **Attribution tooling.** A believed-region vs. true-region diagnostic was added to attribute error between encoder and generator; it is what establishes that the bottleneck has now moved to the flow matcher.

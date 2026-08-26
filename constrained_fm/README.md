@@ -199,8 +199,6 @@ Polynomial curves are shown to be highly effective at isolating highly correlate
 
 Measured on the frozen 100-constraint benchmark with 10,000 samples each, midpoint solver at step size 0.05. NLL is the exact backward-ODE likelihood of constraint-satisfying GT points; KLD subtracts the truncated GMM's own entropy to give $D_{\mathrm{KL}}(p_{\text{true}} \,\|\, p_\theta)$, which is comparable across constraints. See the [Functa README](README_functa.md#against-explicit-conditioning) for the derivation and for the latent-conditioned comparison.
 
-> Earlier revisions of this table reported SR 98.24 / SWD 0.0822 / MMD 0.0007 / JSD 0.0048 from a model trained for 5001 iterations, before `PLANE_SCALE` changed from 4.0 to 4.5. That checkpoint was never saved and its benchmark no longer exists, so the model was retrained (15001 iterations, batch 1024, scale 4.5) and re-scored on the current benchmark. Reproduce with `sbatch scripts/run_poly_fm.sh --batch-size 1024`.
-
 ### Compound Geometric Constraints (Disjoint Bounding Boxes)
 
 To scale geometric constraints to complex, non-convex, or fragmented regions, the architecture supports **Compound Bounding Boxes**. This allows the framework to route probability mass into multiple disjoint rectangular regions simultaneously while strictly preserving the global underlying density distribution.

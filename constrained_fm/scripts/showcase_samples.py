@@ -93,7 +93,9 @@ def main(argv: list[str] | None = None) -> int:
             samples = samples[-1]
 
         metrics = evaluate_single_configuration(samples, x_true_pool=gmm_pool, coeffs=C,
-                                                degree=cfg.degree, scale=cfg.scale, device=device)
+                                                degree=cfg.degree, scale=cfg.scale,
+                                                model=model, z=z, nll_points=ev.nll_points,
+                                                nll_step_size=ev.step_size, device=device)
         iou = region_iou(siren, z, C, gmm_pool, degree=cfg.degree, scale=cfg.scale)
         mass = float((evaluate_poly_batched(*compute_poly_features_batched(
             gmm_pool.unsqueeze(0), degree=cfg.degree, scale=cfg.scale),
@@ -101,6 +103,8 @@ def main(argv: list[str] | None = None) -> int:
 
         title = (f"Unseen constraint #{i + 1}   |   SR {metrics['success_rate']:.2f}%   "
                  f"SWD {metrics['swd']:.4f}   MMD {metrics['mmd']:.5f}   JSD {metrics['jsd']:.4f}\n"
+                 f"NLL {metrics.get('nll', float('nan')):.3f}   "
+                 f"KLD {metrics.get('kld', float('nan')):.3f}   |   "
                  f"constraint mass {mass:.3f}   |   decoded-region mass IoU {iou:.3f}")
 
         samples_path = out / f"{args.prefix}_{i + 1}_samples.png"
@@ -121,16 +125,23 @@ def main(argv: list[str] | None = None) -> int:
         rows.append((i + 1, metrics, mass, iou, float(extraction_mse[i])))
         print(f"[{i + 1}/{polys.shape[0]}] {samples_path.name}, {likelihood_path.name}")
 
-    print(f"\n{'shape':>6}{'SR':>9}{'SWD':>9}{'MMD':>10}{'JSD':>9}{'mass':>8}{'massIoU':>9}{'extrMSE':>10}")
+    print(f"\n{'shape':>6}{'SR':>9}{'SWD':>9}{'MMD':>10}{'JSD':>9}{'NLL':>9}{'KLD':>9}"
+          f"{'mass':>8}{'massIoU':>9}{'extrMSE':>10}")
     for idx, metrics, mass, iou, mse in rows:
         print(f"{idx:>6}{metrics['success_rate']:>9.2f}{metrics['swd']:>9.4f}"
-              f"{metrics['mmd']:>10.5f}{metrics['jsd']:>9.4f}{mass:>8.3f}{iou:>9.3f}{mse:>10.5f}")
+              f"{metrics['mmd']:>10.5f}{metrics['jsd']:>9.4f}"
+              f"{metrics.get('nll', float('nan')):>9.3f}"
+              f"{metrics.get('kld', float('nan')):>9.3f}"
+              f"{mass:>8.3f}{iou:>9.3f}{mse:>10.5f}")
 
-    print("\n| # | Success rate (%) | SWD | MMD | JSD | mass | mass IoU |")
-    print("| :--- | ---: | ---: | ---: | ---: | ---: | ---: |")
+    print("\n| # | Success rate (%) | SWD | MMD | JSD | NLL | KLD | mass | mass IoU |")
+    print("| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
     for idx, metrics, mass, iou, _ in rows:
         print(f"| {idx} | {metrics['success_rate']:.2f} | {metrics['swd']:.4f} | "
-              f"{metrics['mmd']:.5f} | {metrics['jsd']:.4f} | {mass:.3f} | {iou:.3f} |")
+              f"{metrics['mmd']:.5f} | {metrics['jsd']:.4f} | "
+              f"{metrics.get('nll', float('nan')):.3f} | "
+              f"{metrics.get('kld', float('nan')):.3f} | "
+              f"{mass:.3f} | {iou:.3f} |")
 
     print(f"\nfigures written to {out}")
     return 0

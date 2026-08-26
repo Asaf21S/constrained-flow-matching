@@ -189,7 +189,9 @@ def main(argv: list[str] | None = None) -> int:
                                            device=device)
     metrics = evaluate_validation_set_metrics(val_samples, x_true_pool=gmm_true_pool,
                                               coeffs=val_polys, degree=cfg.degree,
-                                              scale=cfg.scale, device=device)
+                                              scale=cfg.scale, model=model, z=z_val,
+                                              nll_points=ev.nll_points,
+                                              nll_step_size=ev.step_size, device=device)
 
     per_shape = {
         "success_rate": [float(v) for v in metrics["success_rate"]],
@@ -200,6 +202,9 @@ def main(argv: list[str] | None = None) -> int:
         "mass_iou": val_iou_mass.cpu().tolist(),
         "extraction_mse": extraction_mse.cpu().tolist(),
     }
+    for key in ("nll", "kld"):
+        if key in metrics:
+            per_shape[key] = [float(v) for v in metrics[key]]
 
     summary = summarize(per_shape)
     summary["corr_success_mass"] = correlation(per_shape["success_rate"], per_shape["mass"])
@@ -223,11 +228,14 @@ def main(argv: list[str] | None = None) -> int:
     print(f"corr(success_rate, mass)     = {summary['corr_success_mass']:+.3f}")
     print(f"corr(success_rate, mass_IoU) = {summary['corr_success_mass_iou']:+.3f}")
 
-    print(f"\n{'rank':>4} {'SR':>7} {'mass':>7} {'massIoU':>8} {'swd':>8} {'jsd':>8}")
+    print(f"\n{'rank':>4} {'SR':>7} {'mass':>7} {'massIoU':>8} {'swd':>8} {'jsd':>8} "
+          f"{'nll':>8} {'kld':>8}")
     for rank, i in enumerate(np.argsort(per_shape["success_rate"])[:10]):
+        nll = per_shape.get("nll", [float("nan")] * len(per_shape["swd"]))[i]
+        kld = per_shape.get("kld", [float("nan")] * len(per_shape["swd"]))[i]
         print(f"{rank:>4} {per_shape['success_rate'][i]:7.2f} {per_shape['mass'][i]:7.3f} "
               f"{per_shape['mass_iou'][i]:8.3f} {per_shape['swd'][i]:8.4f} "
-              f"{per_shape['jsd'][i]:8.4f}")
+              f"{per_shape['jsd'][i]:8.4f} {nll:8.3f} {kld:8.3f}")
 
     if not args.no_figures:
         render_figures(cfg, siren, model, val_polys, z_val, val_samples, per_shape, device)

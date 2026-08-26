@@ -92,6 +92,8 @@ class EvalConfig:
     iou_grid_size: int = 200
     iou_mass_samples: int = 20000
     likelihood_grid: int = 200
+    # Constraint-satisfying GT points scored by the exact backward-ODE NLL; 0 disables it.
+    nll_points: int = 5000
     num_vis_samples: int = 50000
     num_worst_plots: int = 4
     seed: int = 0
@@ -136,7 +138,8 @@ class ExperimentConfig:
             pool=replace(self.pool, size=2048),
             train=replace(self.train, iterations=201, log_every=50, checkpoint_every=200),
             evaluation=replace(self.evaluation, num_polys=8, num_x0=2000, gmm_pool_size=20000,
-                               iou_mass_samples=5000, likelihood_grid=50, num_vis_samples=5000),
+                               iou_mass_samples=5000, likelihood_grid=50, nll_points=500,
+                               num_vis_samples=5000),
         )
 
     # --- identity ---------------------------------------------------------

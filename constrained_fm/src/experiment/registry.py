@@ -162,6 +162,8 @@ METRIC_LABELS = [
     ("swd", "Sliced Wasserstein (SWD)", "p95", "Lower is better"),
     ("mmd", "Mean Discrepancy (MMD)", "p95", "Lower is better"),
     ("jsd", "Jensen-Shannon (JSD)", "p95", "Lower is better"),
+    ("nll", "Negative Log-Likelihood (NLL)", "p95", "Lower is better"),
+    ("kld", "KL(p_true || p_model)", "p95", "Lower is better; 0 is exact"),
 ]
 
 
@@ -188,8 +190,9 @@ def comparison_table(run_ids: list[str] | None = None) -> str:
         records = [r for r in records if r["run_id"] in wanted]
     records = [r for r in records if r["summary"]]
 
-    header = ("| run_id | SR median | SR worst5% | SWD median | JSD median | mass IoU mean |\n"
-              "| :--- | ---: | ---: | ---: | ---: | ---: |")
+    header = ("| run_id | SR median | SR worst5% | SWD median | JSD median | NLL median | "
+              "KLD median | mass IoU mean |\n"
+              "| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
     rows = []
     for r in sorted(records, key=lambda x: -x["summary"].get("success_rate_median", 0.0)):
         s = r["summary"]
@@ -198,6 +201,8 @@ def comparison_table(run_ids: list[str] | None = None) -> str:
             f"{s.get('success_rate_p5', float('nan')):.2f} | "
             f"{s.get('swd_median', float('nan')):.4f} | "
             f"{s.get('jsd_median', float('nan')):.4f} | "
+            f"{s.get('nll_median', float('nan')):.4f} | "
+            f"{s.get('kld_median', float('nan')):.4f} | "
             f"{s.get('mass_iou_mean', float('nan')):.3f} |")
     return "\n".join([header, *rows]) if rows else "no evaluated runs yet"
 

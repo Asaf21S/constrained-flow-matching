@@ -6,6 +6,7 @@ from tqdm import tqdm
 from constrained_fm.src.solvers.ode_wrapper import WrappedModel
 from constrained_fm.src.consts import POLYNOMIAL_DEGREE, PLANE_SCALE
 from constrained_fm.src.metrics.distributional import compute_swd, compute_mmd, compute_jsd
+from constrained_fm.src.metrics.likelihood import constraint_nll
 from constrained_fm.src.metrics.success_rates import compute_success_rate_bbox, compute_success_rate_polynomial
 from constrained_fm.src.metrics.distributional import filter_true_samples
 from constrained_fm.src.geometry.polynomials import compute_poly_features
@@ -99,6 +100,7 @@ def run_evaluation_inference(model, x0, bounds=None, coeffs=None, z=None, step_s
 
 def evaluate_single_configuration(samples, x_true_pool, bounds=None, coeffs=None, disjoint_boxes=None,
                                   degree=POLYNOMIAL_DEGREE, scale=PLANE_SCALE, x_pow_true=None, y_pow_true=None,
+                                  model=None, z=None, nll_points=0, nll_step_size=0.05,
                                   device=None):
     metrics = {
         "swd": float('inf'),
@@ -142,11 +144,19 @@ def evaluate_single_configuration(samples, x_true_pool, bounds=None, coeffs=None
     else:
         print("Warning: Not enough valid points in true pool or generated samples to compute SWD/MMD/JSD.")
 
+    # Scored on the same constraint-satisfying GT points the discrepancies use.
+    if model is not None and nll_points > 0:
+        mass = len(x_true_filtered) / max(len(x_true_pool), 1)
+        metrics.update(constraint_nll(model, x_true_filtered, mass, bounds=bounds, coeffs=coeffs,
+                                      z=z, num_points=nll_points, step_size=nll_step_size,
+                                      device=device))
+
     return metrics
 
 
 def evaluate_validation_set_metrics(val_samples_batched, x_true_pool, bounds=None, coeffs=None,
-                                    degree=POLYNOMIAL_DEGREE, scale=PLANE_SCALE, device=None):
+                                    degree=POLYNOMIAL_DEGREE, scale=PLANE_SCALE, model=None, z=None,
+                                    nll_points=0, nll_step_size=0.05, device=None):
     return_single = False
     if isinstance(val_samples_batched, np.ndarray):
         val_samples_batched = torch.tensor(val_samples_batched, dtype=torch.float32, device=x_true_pool.device)
@@ -166,13 +176,16 @@ def evaluate_validation_set_metrics(val_samples_batched, x_true_pool, bounds=Non
         "swd": [],
         "mmd": [],
         "jsd": [],
-        "success_rate": []
+        "success_rate": [],
+        "nll": [],
+        "kld": []
     }
 
     for i in tqdm(range(C_dim), desc="Validation Set Evaluation"):
         samples_gen_single = val_samples_batched[i]
         current_bounds = bounds[i] if bounds is not None else None
         current_coeffs = coeffs[i] if coeffs is not None else None
+        current_z = z[i] if z is not None else None
 
         metrics_i = evaluate_single_configuration(
             samples=samples_gen_single,
@@ -183,6 +196,10 @@ def evaluate_validation_set_metrics(val_samples_batched, x_true_pool, bounds=Non
             scale=scale,
             x_pow_true=x_pow_true,
             y_pow_true=y_pow_true,
+            model=model,
+            z=current_z,
+            nll_points=nll_points,
+            nll_step_size=nll_step_size,
             device=device
         )
 
@@ -190,11 +207,11 @@ def evaluate_validation_set_metrics(val_samples_batched, x_true_pool, bounds=Non
         results["mmd"].append(metrics_i["mmd"])
         results["jsd"].append(metrics_i["jsd"])
 
-        if "success_rate" in metrics_i:
-            results["success_rate"].append(metrics_i["success_rate"])
+        for key in ("success_rate", "nll", "kld"):
+            if key in metrics_i:
+                results[key].append(metrics_i[key])
 
-    if not results["success_rate"]:
-        del results["success_rate"]
+    results = {k: v for k, v in results.items() if v}
 
     if return_single:
         return {k: v[0] for k, v in results.items()}

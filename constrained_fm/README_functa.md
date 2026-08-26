@@ -197,6 +197,43 @@ Scoring the samples twice — once against the true constraint, once against the
 
 Correlation of per-constraint success with decoded-region IoU is $+0.76$, and with constraint mass $+0.51$: the hardest cases are small regions, where a fixed sample budget resolves a thin target and any boundary error costs proportionally more.
 
+### How many query points does extraction actually need?
+
+The SIREN is meta-trained with 1000 query points per shape, and inference deploys the same 1000. That number was inherited, never justified. Sweeping $N$ at **inference only** — both the SIREN and the flow matcher frozen, the 15-step CAVIA loop otherwise untouched — shows how much of the pipeline's quality the query budget is really buying.
+
+The inner loop is already $N$-invariant by construction: it reduces with a mean over points and a sum over shapes, so each $z_i$ receives the gradient of its own mean MSE and the effective step size does not move with $N$. Only the *variance* of that gradient does.
+
+| $N$ | mass IoU | Success Rate (%) | SWD | extraction MSE |
+| ---: | ---: | ---: | ---: | ---: |
+| 50 | 0.9644 | 97.39 | 0.0962 | 1.8e-3 |
+| 100 | 0.9784 | 97.69 | 0.0782 | 7.4e-4 |
+| **300** | **0.9845** | **97.59** | **0.0781** | **5.7e-5** |
+| 500 | 0.9838 | 97.75 | 0.0796 | 5.1e-5 |
+| 1000 *(deployed)* | 0.9843 | 97.67 | 0.0805 | 4.7e-5 |
+| 2000 | 0.9844 | 97.72 | 0.0814 | 4.8e-5 |
+
+*(median over the 100-constraint benchmark)*
+
+**Extraction saturates at $N \approx 300$, so the deployed budget of 1000 is 3× more than it needs to be** — and 2000 buys nothing at all over 1000. Success rate is flat from $N = 100$ onward and SWD is unchanged from 100 to 2000 to within run-to-run noise; the apparent drift upward past 300 is not a real trend. Extraction MSE keeps falling to 2000 while mass IoU does not, which is the signature of the latent fitting the query points harder without describing the region any better.
+
+<p align="center">
+  <img src="../runs/siren-uniform-8d6375ab/ablations/query_points/degradation_curves.png" width="100%" alt="Degradation vs query budget">
+</p>
+
+The median hides where the cost actually lands. Dropping to $N = 50$ moves median IoU by only 0.02 (0.984 → 0.964) but collapses the worst constraint to **0.470** — the failure is entirely in the tail, on exactly the low-mass shapes that already dominate the SWD tail. The boundary grid makes this visible: the third row is unrecognisable at $N = 50$ and fully recovered by $N = 100$, while the easy shapes are indistinguishable across the whole sweep.
+
+<p align="center">
+  <img src="../runs/siren-uniform-8d6375ab/ablations/query_points/siren_boundary_grid.png" width="85%" alt="Decoded boundary vs query budget">
+</p>
+
+Downstream, the generated distributions track the same pattern — degradation at $N = 50$ is confined to the constraints whose latent was mis-extracted, not spread across the benchmark.
+
+<p align="center">
+  <img src="../runs/siren-uniform-8d6375ab/ablations/query_points/flow_matching_grid.png" width="85%" alt="Generated samples vs query budget">
+</p>
+
+Reproduce with `sbatch scripts/run_ablate_points.sh siren-uniform-8d6375ab`.
+
 ### Qualitative
 
 Across the constraint family the model produces the *correct distribution*, not merely admissible points: the four GMM modes keep their relative weights, covariance bridges stay intact, and density terminates abruptly at the boundary instead of smearing across it. Trajectories converge cleanly — samples are not pushed to the boundary and clipped, but routed into the valid region during integration. Disconnected regions are handled without collapsing onto a single component. The visible failure mode is not geometric but **allocative**: on low-mass or multi-component constraints the boundary is respected while the *mass split between components* drifts, which is exactly what the SWD tail measures.
@@ -276,3 +313,4 @@ Condensed record of the issues that shaped the final configuration.
 * **A misleading diagnostic.** An earlier probe concluded the SIREN was capacity-limited; it ran extraction at batch 1, i.e. a 16× *too large* step, and its oscillating output was divergence rather than a capacity ceiling. The capacity conclusion was wrong.
 * **Flow-matcher ablations were near-null while the encoder dominated.** Mass-reweighting power and the pointwise SIREN feature moved median success rate by under ~1 point, while encoder-side changes moved it by 7+. Retried *after* the extraction fix, however, mass$^{-0.5}$ exposure equalization does help where it should: worst-5% success rate 86.79 → 88.71 and worst-5% SWD 0.3494 → 0.2942, confirming that constraint exposure only became the binding factor once conditioning error was removed. It does not, though, improve the density itself — median KLD is 0.3753 versus 0.3830, a wash — so the gain is in constraint adherence on the tail, not in how the mass is distributed.
 * **Attribution tooling.** A believed-region vs. true-region diagnostic was added to attribute error between encoder and generator; it is what establishes that the bottleneck has now moved to the flow matcher.
+* **The extraction query budget was 3x oversized.** Sweeping $N$ at inference shows every metric saturating by $N \approx 300$, with 1000 (deployed) and 2000 indistinguishable from it. The budget was inherited from meta-training rather than measured, and inference could run at a third of the cost. What the extra points do buy is tail insurance: at $N = 50$ the median barely moves while the worst constraint's decoded IoU collapses to 0.470.

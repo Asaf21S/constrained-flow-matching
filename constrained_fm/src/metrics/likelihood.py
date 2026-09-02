@@ -38,8 +38,12 @@ def exact_log_likelihood(model, x_1: torch.Tensor, bounds=None, coeffs: torch.Te
     if num_points == 0:
         return torch.empty(0, device=x_1.device)
 
+    # validate_args=False on the base Normal too: Independent delegates log_prob to it, so
+    # the wrapper alone still raises. A diverged model can integrate back to non-finite x_0,
+    # and the caller already drops non-finite log-probs.
     prior_log_density = Independent(
-        Normal(torch.zeros(2, device=device), torch.ones(2, device=device)), 1).log_prob
+        Normal(torch.zeros(2, device=device), torch.ones(2, device=device), validate_args=False),
+        1, validate_args=False).log_prob
 
     if bounds is not None:
         cond_key, cond = "bounds", torch.as_tensor(

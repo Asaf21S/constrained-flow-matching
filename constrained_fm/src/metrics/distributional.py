@@ -62,12 +62,21 @@ def compute_mmd(samples_gen: torch.Tensor, samples_true: torch.Tensor, gamma=1.0
 
 
 def compute_jsd(samples_gen: torch.Tensor, samples_true: torch.Tensor, grid_size=100) -> float:
-    """Wrapper for Jensen-Shannon Divergence using SciPy."""
+    """Wrapper for Jensen-Shannon Divergence using SciPy.
+
+    Returns inf when the KDE cannot be fitted -- a diverged model can emit non-finite or
+    rank-deficient samples, and this is a diagnostic, not a reason to kill the caller.
+    """
     if len(samples_gen) < 10 or len(samples_true) < 10:
         return float('inf')
 
     X = samples_gen.detach().cpu().numpy()
     Y = samples_true.detach().cpu().numpy()
+
+    X = X[np.isfinite(X).all(axis=1)]
+    Y = Y[np.isfinite(Y).all(axis=1)]
+    if len(X) < 10 or len(Y) < 10:
+        return float('inf')
 
     # Define the evaluation grid bounding box
     x_min = min(X[:, 0].min(), Y[:, 0].min()) - 0.5
@@ -78,11 +87,18 @@ def compute_jsd(samples_gen: torch.Tensor, samples_true: torch.Tensor, grid_size
     grid_X, grid_Y = np.mgrid[x_min:x_max:complex(0, grid_size), y_min:y_max:complex(0, grid_size)]
     positions = np.vstack([grid_X.ravel(), grid_Y.ravel()])
 
-    Z_gen = gaussian_kde(X.T)(positions)
-    Z_true = gaussian_kde(Y.T)(positions)
+    try:
+        Z_gen = gaussian_kde(X.T)(positions)
+        Z_true = gaussian_kde(Y.T)(positions)
+    except np.linalg.LinAlgError:
+        return float('inf')
 
-    Z_gen /= Z_gen.sum()
-    Z_true /= Z_true.sum()
+    total_gen, total_true = Z_gen.sum(), Z_true.sum()
+    if not (np.isfinite(total_gen) and np.isfinite(total_true)) or total_gen <= 0 or total_true <= 0:
+        return float('inf')
+
+    Z_gen /= total_gen
+    Z_true /= total_true
 
     js_distance = jensenshannon(Z_gen, Z_true)
     return float(js_distance ** 2)

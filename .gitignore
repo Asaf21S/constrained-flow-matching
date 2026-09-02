@@ -19,6 +19,11 @@ __pycache__/
 # Checkpoints and loss histories are already covered by the *.pt / *.npy rules above.
 runs/*/figures/
 
+# Per-item shard state for the few-shot baseline: resumability scratch, fully aggregated
+# into summary.json which is tracked.
+constrained_fm/baselines/*/results/
+constrained_fm/baselines/*/samples/
+
 !constrained_fm/functa_dataset/embed_best.pt
 !constrained_fm/functa_dataset/loss_history.npy
 !constrained_fm/functa_dataset/val_loss_history.npy

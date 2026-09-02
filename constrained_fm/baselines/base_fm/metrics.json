@@ -1,0 +1,27 @@
+{
+  "model": "UnconstrainedFM",
+  "evaluated_at": "2026-09-02T13:37:52",
+  "train": {
+    "iterations": 15001,
+    "batch_size": 4096,
+    "lr": 0.001,
+    "hidden_dim": 1024,
+    "num_blocks": 4,
+    "time_dim": 128,
+    "seed": 0
+  },
+  "eval": {
+    "num_eval_samples": 100000,
+    "gmm_pool_size": 100000,
+    "nll_points": 5000,
+    "step_size": 0.05
+  },
+  "unconditional": {
+    "swd": 0.01829884402115909,
+    "mmd": 0.0004726797342300415,
+    "jsd": 0.0003297120536674662,
+    "nll": 3.537213087081909,
+    "kld": 0.0011792182922363281
+  },
+  "final_loss": 2.5336986594200135
+}

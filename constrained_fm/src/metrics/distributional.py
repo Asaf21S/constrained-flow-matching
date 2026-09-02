@@ -28,13 +28,21 @@ def filter_true_samples(x_true: torch.Tensor, bounds=None, coeffs=None, x_pow=No
     return x_true
 
 
+def _finite_rows(samples: torch.Tensor) -> np.ndarray:
+    """Numpy view of the rows that are finite in every coordinate."""
+    arr = samples.detach().cpu().numpy()
+    return arr[np.isfinite(arr).all(axis=1)]
+
+
 def compute_swd(samples_gen: torch.Tensor, samples_true: torch.Tensor, num_projections=50) -> float:
     """Wrapper for Sliced Wasserstein Distance using the POT library."""
     if len(samples_gen) == 0 or len(samples_true) == 0:
         return float('inf')
 
-    X = samples_gen.detach().cpu().numpy()
-    Y = samples_true.detach().cpu().numpy()
+    X = _finite_rows(samples_gen)
+    Y = _finite_rows(samples_true)
+    if len(X) == 0 or len(Y) == 0:
+        return float('inf')
 
     swd = ot.sliced_wasserstein_distance(X, Y, n_projections=num_projections)
     return float(swd)
@@ -45,8 +53,10 @@ def compute_mmd(samples_gen: torch.Tensor, samples_true: torch.Tensor, gamma=1.0
     if len(samples_gen) == 0 or len(samples_true) == 0:
         return float('inf')
 
-    X = samples_gen.detach().cpu().numpy()
-    Y = samples_true.detach().cpu().numpy()
+    X = _finite_rows(samples_gen)
+    Y = _finite_rows(samples_true)
+    if len(X) == 0 or len(Y) == 0:
+        return float('inf')
 
     # Subsample to prevent RAM spikes on the NxN distance matrices
     max_pts = 5000
@@ -70,11 +80,8 @@ def compute_jsd(samples_gen: torch.Tensor, samples_true: torch.Tensor, grid_size
     if len(samples_gen) < 10 or len(samples_true) < 10:
         return float('inf')
 
-    X = samples_gen.detach().cpu().numpy()
-    Y = samples_true.detach().cpu().numpy()
-
-    X = X[np.isfinite(X).all(axis=1)]
-    Y = Y[np.isfinite(Y).all(axis=1)]
+    X = _finite_rows(samples_gen)
+    Y = _finite_rows(samples_true)
     if len(X) < 10 or len(Y) < 10:
         return float('inf')
 
@@ -87,10 +94,11 @@ def compute_jsd(samples_gen: torch.Tensor, samples_true: torch.Tensor, grid_size
     grid_X, grid_Y = np.mgrid[x_min:x_max:complex(0, grid_size), y_min:y_max:complex(0, grid_size)]
     positions = np.vstack([grid_X.ravel(), grid_Y.ravel()])
 
+    # ValueError covers a fully collapsed point cloud, whose covariance has no Cholesky factor.
     try:
         Z_gen = gaussian_kde(X.T)(positions)
         Z_true = gaussian_kde(Y.T)(positions)
-    except np.linalg.LinAlgError:
+    except (np.linalg.LinAlgError, ValueError):
         return float('inf')
 
     total_gen, total_true = Z_gen.sum(), Z_true.sum()

@@ -266,21 +266,41 @@ Read together: **the latent is worth roughly 50–100 valid samples in density t
 
 **It is an upper bound, not an attainable result.** Training length is chosen by early stopping against a held-out set of **10,000** constraint-satisfying points — far more data than the model is allowed to train on. This deliberately removes training length as a confound so each $N$ gets its best-case model.
 
-### All three approaches side by side
+### Enforcing the constraint at inference time: ECI and HardFlow
 
-| Metric (median) | Coefficient-conditioned | Few-shot, $N{=}2000$ | **Functa-conditioned** |
-| :--- | ---: | ---: | ---: |
-| Success Rate (%) | **98.54** | 97.67 | 97.69 |
-| SWD | **0.0682** | 0.1212 | 0.0817 |
-| MMD | **0.0007** | 0.0024 | 0.0009 |
-| JSD | **0.0037** | 0.0104 | 0.0055 |
-| NLL | **2.8676** | 2.9300 | 3.2190 |
-| KLD | **0.0290** | 0.0815 | 0.3753 |
-| constraint supplied as | coefficients + exact $P(x_t)$ | 2000 valid samples | 512-dim latent |
-| models trained | 1 | 100 (one per constraint) | 1 |
-| handles an unseen constraint without retraining | yes | **no** | yes |
+The third alternative skips constraint-aware training altogether. Train one ordinary flow matcher on the *full* GMM, then bend its ODE at sampling time:
 
-That places the latent between the two: it beats 2000 real samples on every point-cloud metric while losing to them on density, and loses to explicit coefficients on everything. Whatever the latent encodes captures the *shape* of the constrained distribution well and its *mass allocation* poorly — both comparisons converge on the same conclusion, and it is a density weakness rather than a geometric one.
+* **ECI** rewrites the **state**. At each Euler step it extrapolates to the endpoint $\hat{x}_1 = x_t + (1-t)v$, projects that endpoint onto $\{P(x) \le 0\}$ by damped Gauss–Newton, and steps toward the projected endpoint with weight $\frac{dt}{1-t}$. That weight reaches 1 on the final step, so the returned sample *is* the projected endpoint — feasibility is exact by construction.
+* **HardFlow** rewrites the **velocity**. It differentiates the endpoint violation hinge $\mathrm{relu}(P(\hat{x}_1)+\varepsilon)$ with respect to the current state and steers with $v - \lambda \nabla$, so the trajectory is nudged into the region rather than teleported into it. Feasibility is approximate and depends on $\lambda$.
+
+Both are free — no retraining, any new constraint, one shared checkpoint. The bill arrives elsewhere. Neither leaves the probability-flow ODE intact, so **NLL and KLD are undefined** for them: a likelihood integrated from the base field describes a model that was never sampled from.
+
+<p align="center">
+  <img src="images/functa/eci_hardflow/eci_hardflow_comparison.png" width="100%" alt="ECI and HardFlow samples vs the unconstrained base model">
+</p>
+
+The picture is the result. Both methods deliver the feasibility they promise, and both pay for it in the same currency: **mass that the base model puts outside the region has to go somewhere, and it goes to the boundary.** ECI stacks it into a literal one-dimensional line — the projection maps every infeasible endpoint to its nearest feasible point, so the pushforward carries a genuine singular component on $P(x)=0$. HardFlow smears it into a dense band a short distance inside instead, because gradient guidance decelerates points as they approach rather than snapping them.
+
+### All five approaches side by side
+
+| Metric (median) | Coefficient-conditioned | Few-shot, $N{=}2000$ | **Functa-conditioned** | ECI | HardFlow |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| Success Rate (%) | 98.54 | 97.67 | 97.69 | **100.00** | **100.00** |
+| SWD | **0.0682** | 0.1212 | 0.0817 | 0.5508 | 0.4397 |
+| MMD | **0.0007** | 0.0024 | 0.0009 | 0.0537 | 0.0304 |
+| JSD | **0.0037** | 0.0104 | 0.0055 | 0.0891 | 0.0595 |
+| NLL | **2.8676** | 2.9300 | 3.2190 | n/a | n/a |
+| KLD | **0.0290** | 0.0815 | 0.3753 | n/a | n/a |
+| constraint supplied as | coefficients + exact $P(x_t)$ | 2000 valid samples | 512-dim latent | exact $P(x)$ at sampling time | exact $P(x)$ at sampling time |
+| constraint seen during training | yes | yes | yes | **no** | **no** |
+| models trained | 1 | 100 (one per constraint) | 1 | 1 | 1 |
+| handles an unseen constraint without retraining | yes | **no** | yes | yes | yes |
+
+The first three columns are trained against the constraint and evaluated with an intact probability-flow ODE, so they have likelihoods. The last two bend a constraint-blind model at sampling time and do not. Read across, the table says something sharper than any single column: **feasibility and fidelity are separable, and every method here buys one with the other.** The inference-time methods take the success-rate column outright — 100% versus 98.5%, with no constraint-aware training whatsoever — and give up an order of magnitude on every distributional metric (ECI costs ~8× the SWD, ~75× the MMD, ~24× the JSD of coefficient conditioning) plus the ability to report a density at all. Nothing in the trained columns comes close to guaranteed feasibility, and nothing in the untrained columns comes close to the right distribution.
+
+One caveat on the comparison: the coefficient-conditioned column is the batch-1024 run used throughout this README, while the base flow matcher underlying ECI and HardFlow follows the batch-4096 recipe. The recipe-matched coefficient-conditioned run scores slightly better (SR 98.90, SWD 0.0471, MMD 0.00050, JSD 0.0028), so the gap above is, if anything, understated.
+
+That places the latent between the two trained alternatives: it beats 2000 real samples on every point-cloud metric while losing to them on density, and loses to explicit coefficients on everything. Whatever the latent encodes captures the *shape* of the constrained distribution well and its *mass allocation* poorly — both comparisons converge on the same conclusion, and it is a density weakness rather than a geometric one.
 
 ### Qualitative
 

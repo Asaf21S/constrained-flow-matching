@@ -161,11 +161,14 @@ class ConstrainedFlowMatcher(BaseFM):
         t_emb = self.time_embed(t)
         c = self.cond_mlp(torch.cat([t_emb, z], dim=-1))
 
-        # 2. Optionally query the frozen SIREN at each point for a direct boundary feature
+        # 2. Optionally query the frozen SIREN at each point for a direct boundary feature.
+        # No torch.no_grad() here: SIREN(x_t, z) is a function of x_t, so d(SIREN)/dx_t is part
+        # of dv/dx_t and must reach the exact-divergence trace in the likelihood ODE. The SIREN
+        # parameters are already frozen in __init__, and x_t/z carry no graph during training,
+        # so keeping the graph costs nothing there.
         if self.use_siren_feature:
-            with torch.no_grad():
-                x_normalized = (x / self.plane_scale).unsqueeze(1)  # (B, 1, 2) for per-example z
-                siren_val = self.siren(x_normalized, z).squeeze(1)  # (B, 1)
+            x_normalized = (x / self.plane_scale).unsqueeze(1)  # (B, 1, 2) for per-example z
+            siren_val = self.siren(x_normalized, z).squeeze(1)  # (B, 1)
             x = torch.cat([x, siren_val], dim=-1)
 
         # 3. Lift spatial coordinates + directly-concatenated z into hidden dimension

@@ -15,13 +15,17 @@ Layout::
         figures/*.png    diagnostic figures
 """
 
+import hashlib
 import json
 import math
 import statistics
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable
 
-from constrained_fm.src.experiment.config import REPO_ROOT, ExperimentConfig
+import yaml
+
+from constrained_fm.src.experiment.config import REPO_ROOT, ExperimentConfig, git_commit
 
 RUNS_ROOT = REPO_ROOT / "runs"
 
@@ -32,6 +36,14 @@ CHECKPOINT_NAME = "ckpt.pt"
 LOSSES_NAME = "losses.npy"
 METRICS_NAME = "metrics.json"
 FIGURES_DIR = "figures"
+
+# Arguments that select what to run or where to write, not what the result is.
+_UNTRACKED_ARGS = frozenset({"outdir", "figure_dir", "plot_only", "skip_train", "shard",
+                             "num_shards", "no_figures", "smoke", "methods"})
+
+
+def _sha_payload(payload: dict[str, Any]) -> str:
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()
 
 
 def run_dir(run_id: str, create: bool = False) -> Path:
@@ -207,8 +219,35 @@ def comparison_table(run_ids: list[str] | None = None) -> str:
     return "\n".join([header, *rows]) if rows else "no evaluated runs yet"
 
 
+def pin_baseline_run(out_dir: Path, method: str, args: Any,
+                     extra: dict[str, Any] | None = None) -> str:
+    """Gives an argparse-driven baseline the same traceability as a YAML-configured run.
+
+    Writes ``config.yaml`` (the resolved arguments) and ``provenance.json`` (fingerprint over
+    those arguments, git commit) into out_dir, and returns the ``<method>-<sha8>`` run id.
+    """
+    settings = dict(vars(args)) if not isinstance(args, dict) else dict(args)
+    settings = {k: v for k, v in sorted(settings.items()) if k not in _UNTRACKED_ARGS}
+    payload = {"method": method, "settings": settings, **(extra or {})}
+    fingerprint = _sha_payload(payload)
+    run_id = f"{method}-{fingerprint[:8]}"
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    with open(out_dir / CONFIG_NAME, "w") as f:
+        yaml.safe_dump({"method": method, "run_id": run_id, **payload}, f, sort_keys=False)
+    write_json(out_dir / PROVENANCE_NAME, {
+        "run_id": run_id,
+        "method": method,
+        "fingerprint": fingerprint,
+        "git_commit": git_commit(),
+        "created_at": datetime.now().isoformat(timespec="seconds"),
+        **(extra or {}),
+    })
+    return run_id
+
+
 __all__ = ["RUNS_ROOT", "run_dir", "init_run", "load_config", "load_metrics", "load_state",
            "write_state", "list_runs", "latest_run", "summarize", "correlation", "percentile",
-           "readme_table", "comparison_table", "read_json", "write_json",
+           "readme_table", "comparison_table", "read_json", "write_json", "pin_baseline_run",
            "CONFIG_NAME", "PROVENANCE_NAME", "STATE_NAME", "CHECKPOINT_NAME",
            "LOSSES_NAME", "METRICS_NAME", "FIGURES_DIR"]

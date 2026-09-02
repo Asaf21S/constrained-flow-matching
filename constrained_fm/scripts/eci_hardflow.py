@@ -12,6 +12,7 @@ model that was never sampled from.
 
     sbatch scripts/run_eci_hardflow.sh
     python -m constrained_fm.scripts.eci_hardflow --methods eci --guidance-scale 20
+    python -m constrained_fm.scripts.eci_hardflow --plot-only   # figures from saved arrays
 """
 
 from __future__ import annotations
@@ -33,7 +34,9 @@ from tqdm import tqdm
 from constrained_fm.src.consts import PLANE_SCALE, POLYNOMIAL_DEGREE
 from constrained_fm.src.datasets.gmm_target import get_points
 from constrained_fm.src.datasets.validation import get_validation_set
-from constrained_fm.src.experiment.registry import readme_table, summarize
+from constrained_fm.src.experiment import artifacts
+from constrained_fm.src.experiment.config import REPO_ROOT
+from constrained_fm.src.experiment.registry import pin_baseline_run, readme_table, summarize
 from constrained_fm.src.experiment.runtime import resolve_device, set_seed
 from constrained_fm.src.inference.constrained_samplers import (DEFAULT_CHUNK, DEFAULT_STEPS,
                                                                sample_eci, sample_euler,
@@ -47,6 +50,8 @@ from constrained_fm.src.visualization import diagnostics as diag
 BASE_CKPT = "constrained_fm/baselines/base_fm/ckpt.pt"
 DEFAULT_OUTDIR = "constrained_fm/baselines"
 DEFAULT_FIGURE_DIR = "constrained_fm/images/functa/eci_hardflow"
+# Cross-method arrays backing the side-by-side comparison figure.
+COMPARISON_DIR = "constrained_fm/baselines/eci_hardflow"
 
 # Methods that alter trajectories manually; exact density estimation does not survive them.
 UNDEFINED_LIKELIHOOD_KEYS = ("nll", "kld")
@@ -88,6 +93,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--outdir", default=DEFAULT_OUTDIR)
     parser.add_argument("--figure-dir", default=DEFAULT_FIGURE_DIR)
+    parser.add_argument("--plot-only", action="store_true",
+                        help="redraw every figure from saved arrays; no model, no sampling")
     return parser
 
 
@@ -147,7 +154,7 @@ def score(method: str, samples: torch.Tensor, gmm_pool: torch.Tensor, polys: tor
     }
 
 
-def render_figures(method: str, samples: torch.Tensor, polys: torch.Tensor,
+def render_figures(method: str, samples, polys: torch.Tensor,
                    per_shape: dict[str, list[float]], figure_dir: Path, args) -> None:
     """Best / quartile / worst constraints by success rate, so the failure mode is visible."""
     order = np.argsort(per_shape["success_rate"])
@@ -156,7 +163,7 @@ def render_figures(method: str, samples: torch.Tensor, polys: torch.Tensor,
 
     diag.save_figure(
         diag.plot_final_samples_gallery(
-            [samples[i].cpu().numpy() for i in picks],
+            [np.asarray(samples[i]) for i in picks],
             [polys[i] for i in picks],
             [f"shape {i} | SR {per_shape['success_rate'][i]:.2f}%\n"
              f"SWD {per_shape['swd'][i]:.4f} | JSD {per_shape['jsd'][i]:.4f}" for i in picks],
@@ -170,8 +177,8 @@ def pick_showcase_shapes(mass: torch.Tensor) -> list[int]:
     return [order[min(int(q * len(order)), len(order) - 1)] for q in SHOWCASE_MASS_QUANTILES]
 
 
-def render_comparison(showcase: dict[str, torch.Tensor], polys: torch.Tensor, picks: list[int],
-                      mass: torch.Tensor, per_shape_by_method: dict[str, dict], figure_dir: Path,
+def render_comparison(showcase: dict[str, np.ndarray], polys: torch.Tensor, picks: list[int],
+                      mass, per_shape_by_method: dict[str, dict], figure_dir: Path,
                       args) -> None:
     """One row per showcase constraint, one column per method, with the unconstrained reference.
 
@@ -184,7 +191,7 @@ def render_comparison(showcase: dict[str, torch.Tensor], polys: torch.Tensor, pi
 
     grid, cells = [], []
     for row, shape in enumerate(picks):
-        grid.append([showcase[m][row].numpy() for m in columns])
+        grid.append([np.asarray(showcase[m][row]) for m in columns])
         cells.append([""] + [f"SR {per_shape_by_method[m]['success_rate'][shape]:.1f}% | "
                              f"SWD {per_shape_by_method[m]['swd'][shape]:.3f}"
                              for m in columns[1:]])
@@ -222,11 +229,45 @@ def load_reference_rows() -> list[tuple[str, dict[str, float]]]:
     return rows
 
 
+def replot(args, figure_dir: Path) -> int:
+    """Redraws every figure from saved arrays. Loads no checkpoint and integrates nothing."""
+    comparison_root = REPO_ROOT / COMPARISON_DIR
+    polys = torch.from_numpy(artifacts.load_array(comparison_root, "polynomials"))
+    picks = artifacts.load_array(comparison_root, "showcase_ids").tolist()
+    mass = artifacts.load_array(comparison_root, "mass")
+    showcase = {"base": artifacts.load_array(comparison_root, "showcase_base")}
+
+    per_shape_by_method = {}
+    for method in args.methods:
+        out = Path(args.outdir) / method
+        if not artifacts.has_array(out, "samples"):
+            print(f"[skip] {method}: no saved samples under {out}")
+            continue
+        record = json.loads((out / "metrics.json").read_text())
+        per_shape_by_method[method] = record["per_shape"]
+        showcase[method] = artifacts.load_array(comparison_root, f"showcase_{method}")
+        render_figures(method, artifacts.load_array(out, "samples"), polys, record["per_shape"],
+                       figure_dir, args)
+        print(f"[{method}] redrawn from {artifacts.artifacts_dir(out)}")
+
+    if not per_shape_by_method:
+        return 1
+
+    render_comparison(showcase, polys, picks, mass, per_shape_by_method, figure_dir, args)
+    print(f"figures written to {figure_dir}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    device = resolve_device()
     figure_dir = Path(args.figure_dir)
     figure_dir.mkdir(parents=True, exist_ok=True)
+
+    if args.plot_only:
+        return replot(args, figure_dir)
+
+    device = resolve_device()
+    comparison_root = REPO_ROOT / COMPARISON_DIR
 
     set_seed(args.seed)
     model = load_base_model(args, device)
@@ -241,7 +282,7 @@ def main(argv: list[str] | None = None) -> int:
 
     picks = pick_showcase_shapes(mass)
     base = sample_euler(model, x0[:SHOWCASE_POINTS], steps=args.steps, chunk_size=args.chunk_size)
-    showcase = {"base": base.cpu().repeat(len(picks), 1, 1)}
+    showcase = {"base": base.cpu().repeat(len(picks), 1, 1).numpy()}
     per_shape_by_method = {}
 
     results = []
@@ -250,17 +291,29 @@ def main(argv: list[str] | None = None) -> int:
         record = score(method, samples, gmm_pool, polys, mass, args, device)
 
         out = Path(args.outdir) / method
-        out.mkdir(parents=True, exist_ok=True)
+        run_id = pin_baseline_run(out, method, args, extra={"base_ckpt": args.ckpt})
+        record["run_id"] = run_id
         (out / "metrics.json").write_text(json.dumps(record, indent=2))
-        render_figures(method, samples, polys, record["per_shape"], figure_dir, args)
-        showcase[method] = samples[picks, :SHOWCASE_POINTS].cpu()
+
+        artifacts.save_arrays(out, samples=samples, polynomials=polys)
+        artifacts.write_manifest(out, run_id=run_id, method=method, degree=args.degree,
+                                 scale=args.scale)
+
+        render_figures(method, samples.cpu().numpy(), polys, record["per_shape"], figure_dir, args)
+        showcase[method] = samples[picks, :SHOWCASE_POINTS].cpu().numpy()
         per_shape_by_method[method] = record["per_shape"]
 
-        print(f"\n### {method}")
+        print(f"\n### {method} ({run_id})")
         print(readme_table(record["summary"]))
         print("NLL / KLD: undefined for this method (trajectories altered outside the ODE)")
         results.append((method.upper(), record["summary"]))
         del samples
+
+    artifacts.save_arrays(comparison_root, polynomials=polys, mass=mass,
+                          showcase_ids=np.asarray(picks, dtype=np.int32),
+                          **{f"showcase_{name}": array for name, array in showcase.items()})
+    artifacts.write_manifest(comparison_root, method="eci_hardflow_comparison",
+                             degree=args.degree, scale=args.scale, methods=list(args.methods))
 
     render_comparison(showcase, polys, picks, mass, per_shape_by_method, figure_dir, args)
 

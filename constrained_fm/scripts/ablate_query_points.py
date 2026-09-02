@@ -37,6 +37,7 @@ from constrained_fm.src.geometry.polynomials import compute_poly_features_batche
 from constrained_fm.src.inference.evaluator import (evaluate_validation_set_metrics,
                                                     run_evaluation_inference)
 from constrained_fm.src.inference.latent_extractor import extract_latents_batched
+from constrained_fm.src.metrics.eval_points import load_nll_eval_set
 from constrained_fm.src.metrics.functa_fidelity import constraint_masses, region_iou_batched
 from constrained_fm.src.visualization import diagnostics as diag
 
@@ -134,6 +135,8 @@ def main(argv: list[str] | None = None) -> int:
 
     mass = constraint_masses(polys, gmm_pool, degree=cfg.degree, scale=cfg.scale)
     iou_points = gmm_pool[torch.randperm(gmm_pool.shape[0], device=device)[:ev.iou_mass_samples]]
+    nll_set = load_nll_eval_set(num_points=args.nll_points, degree=cfg.degree, scale=cfg.scale,
+                                device=device) if args.nll_points > 0 else None
 
     # --- SIREN half: extraction quality per budget --------------------------------
     z_by_n, per_n = {}, {}
@@ -180,7 +183,10 @@ def main(argv: list[str] | None = None) -> int:
                                                       degree=cfg.degree, scale=cfg.scale,
                                                       model=model, z=z_by_n[n],
                                                       nll_points=args.nll_points,
-                                                      nll_step_size=ev.step_size, device=device)
+                                                      nll_step_size=ev.step_size,
+                                                      nll_eval_points=None if nll_set is None else nll_set["points"],
+                                                      nll_masses=None if nll_set is None else nll_set["mass"],
+                                                      device=device)
             per_n[n].update({k: [float(v) for v in metrics[k]]
                              for k in ("success_rate", "swd", "mmd", "jsd") if k in metrics})
             for key in ("nll", "kld"):

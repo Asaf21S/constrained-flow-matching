@@ -18,12 +18,14 @@ import matplotlib
 
 matplotlib.use("Agg")
 
+import numpy as np
 import torch
 
 from constrained_fm.src.datasets.constraints import sample_valid_polynomials
 from constrained_fm.src.datasets.functa_conditioning import sample_query_points
 from constrained_fm.src.datasets.gmm_target import get_points
 from constrained_fm.src.datasets.validation import get_validation_set
+from constrained_fm.src.experiment import artifacts
 from constrained_fm.src.experiment.registry import load_config
 from constrained_fm.src.experiment.runtime import (build_flow_matcher, load_checkpoint, load_siren,
                                                    resolve_device, set_seed)
@@ -84,6 +86,7 @@ def main(argv: list[str] | None = None) -> int:
                                                       steps=cfg.extraction.steps)
 
     rows = []
+    saved_samples, saved_likelihoods, saved_titles = [], [], []
     for i in range(polys.shape[0]):
         C, z = polys[i], z_batch[i]
 
@@ -95,7 +98,8 @@ def main(argv: list[str] | None = None) -> int:
         metrics = evaluate_single_configuration(samples, x_true_pool=gmm_pool, coeffs=C,
                                                 degree=cfg.degree, scale=cfg.scale,
                                                 model=model, z=z, nll_points=ev.nll_points,
-                                                nll_step_size=ev.step_size, device=device)
+                                                nll_step_size=ev.step_size,
+                                                nll_subset_seed=i, device=device)
         iou = region_iou(siren, z, C, gmm_pool, degree=cfg.degree, scale=cfg.scale)
         mass = float((evaluate_poly_batched(*compute_poly_features_batched(
             gmm_pool.unsqueeze(0), degree=cfg.degree, scale=cfg.scale),
@@ -123,7 +127,16 @@ def main(argv: list[str] | None = None) -> int:
             likelihood_path)
 
         rows.append((i + 1, metrics, mass, iou, float(extraction_mse[i])))
+        saved_samples.append(samples.cpu().numpy())
+        saved_likelihoods.append(np.asarray(likelihood))
+        saved_titles.append(title)
         print(f"[{i + 1}/{polys.shape[0]}] {samples_path.name}, {likelihood_path.name}")
+
+    artifacts.save_arrays(out, samples=np.stack(saved_samples), polynomials=polys,
+                          latents=z_batch, likelihoods=np.stack(saved_likelihoods))
+    artifacts.write_manifest(out, run_id=cfg.run_id, method="showcase", iteration=iteration,
+                             degree=cfg.degree, scale=cfg.scale, seed=args.seed,
+                             prefix=args.prefix, titles=saved_titles)
 
     print(f"\n{'shape':>6}{'SR':>9}{'SWD':>9}{'MMD':>10}{'JSD':>9}{'NLL':>9}{'KLD':>9}"
           f"{'mass':>8}{'massIoU':>9}{'extrMSE':>10}")

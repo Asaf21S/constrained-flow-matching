@@ -2,7 +2,10 @@
 """Stage 3: evaluate a trained run against the static validation set.
 
 Runs against a frozen checkpoint, so metrics and diagnostic figures can be regenerated
-in minutes without retraining. Writes runs/<run_id>/metrics.json and figures/.
+in minutes without retraining. Writes runs/<run_id>/metrics.json, artifacts/ and figures/.
+
+Every array a figure needs is persisted under artifacts/ first, so the figures can later be
+redrawn by ``constrained_fm.scripts.plot_run`` without a checkpoint or an ODE solve.
 """
 
 from __future__ import annotations
@@ -21,18 +24,21 @@ import torch
 from constrained_fm.src.datasets.functa_conditioning import sample_query_points
 from constrained_fm.src.datasets.gmm_target import get_points
 from constrained_fm.src.datasets.validation import get_validation_set
+from constrained_fm.src.experiment import artifacts
 from constrained_fm.src.experiment.config import ExperimentConfig
-from constrained_fm.src.experiment.registry import (FIGURES_DIR, LOSSES_NAME, METRICS_NAME,
-                                                    correlation, load_config, readme_table,
-                                                    run_dir, summarize, write_json, write_state)
+from constrained_fm.src.experiment.registry import (FIGURES_DIR, METRICS_NAME, correlation,
+                                                    load_config, readme_table, run_dir, summarize,
+                                                    write_json, write_state)
 from constrained_fm.src.experiment.runtime import (build_flow_matcher, load_checkpoint, load_siren,
                                                    resolve_device, set_seed)
 from constrained_fm.src.geometry.polynomials import compute_poly_features_batched, evaluate_poly_batched
 from constrained_fm.src.inference.evaluator import (evaluate_validation_set_metrics,
                                                     run_evaluation_inference)
 from constrained_fm.src.inference.latent_extractor import extract_latents_batched
-from constrained_fm.src.metrics.functa_fidelity import constraint_masses, region_iou_batched
-from constrained_fm.src.visualization import diagnostics as diag
+from constrained_fm.src.metrics.eval_points import load_nll_eval_set
+from constrained_fm.src.metrics.functa_fidelity import (constraint_masses, decode_region,
+                                                        region_iou_batched, uniform_grid_points)
+from constrained_fm.src.visualization.run_figures import render_run_figures
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -65,87 +71,62 @@ def extract_validation_latents(siren, cfg: ExperimentConfig, val_polys: torch.Te
     return torch.cat(z_chunks, dim=0), torch.cat(mse_chunks, dim=0)
 
 
-def render_figures(cfg: ExperimentConfig, siren, model, val_polys: torch.Tensor,
-                   z_val: torch.Tensor, val_samples: np.ndarray,
-                   per_shape: dict[str, list[float]], device: torch.device) -> None:
-    out = run_dir(cfg.run_id) / FIGURES_DIR
+def save_plot_artifacts(cfg: ExperimentConfig, siren, model, val_polys: torch.Tensor,
+                        z_val: torch.Tensor, val_samples: np.ndarray,
+                        per_shape: dict[str, list[float]], iteration: int,
+                        device: torch.device) -> None:
+    """Persists every array the figures consume: this is the last point an ODE is solved."""
+    root = run_dir(cfg.run_id)
     ev = cfg.evaluation
-    success = np.asarray(per_shape["success_rate"])
-    order = np.argsort(success)
-
-    losses_path = run_dir(cfg.run_id) / LOSSES_NAME
-    if losses_path.exists():
-        diag.save_figure(diag.plot_loss_curve(np.load(losses_path)), out / "loss_curve.png")
-
-    diag.save_figure(
-        diag.plot_success_vs_fidelity(success, per_shape["mass"], per_shape["mass_iou"]),
-        out / "success_vs_fidelity.png")
+    order = np.argsort(np.asarray(per_shape["success_rate"]))
 
     worst = order[:min(ev.num_worst_plots, len(order))].tolist()
-    titles = [f"shape {i} | SR {success[i]:.1f}%\n"
-              f"mass IoU {per_shape['mass_iou'][i]:.2f} | mass {per_shape['mass'][i]:.2f}"
-              for i in worst]
-    diag.save_figure(
-        diag.plot_believed_vs_true(siren, [val_samples[i] for i in worst], [z_val[i] for i in worst],
-                                   [val_polys[i] for i in worst], titles,
-                                   grid_size=ev.iou_grid_size, degree=cfg.degree, scale=cfg.scale,
-                                   device=device),
-        out / "worst_believed_vs_true.png")
-
     # Median-success shape: representative of typical behaviour rather than of the tail.
     typical = int(order[len(order) // 2])
+    # Covers best/typical/worst regions of the score distribution in one view.
+    gallery_ids = sorted({int(order[0]), int(order[len(order) // 4]), typical,
+                          int(order[(3 * len(order)) // 4]), int(order[-1])})
+
+    grid_points = uniform_grid_points(grid_size=ev.iou_grid_size, scale=cfg.scale, device=device)
+    believed = np.stack([
+        decode_region(siren, z_val[i], grid_points, scale=cfg.scale)
+        .reshape(ev.iou_grid_size, ev.iou_grid_size).cpu().numpy() for i in worst])
+
     trajectory, time_grid = model.sample(num_points=ev.num_vis_samples, z=z_val[typical],
                                          step_size=ev.step_size, return_intermediates=True,
                                          device=device)
-    diag.save_figure(
-        diag.plot_sample_trajectory(trajectory.cpu().numpy(), time_grid.cpu().numpy(),
-                                    coeffs=val_polys[typical], degree=cfg.degree, scale=cfg.scale,
-                                    device=device),
-        out / "typical_trajectory.png")
-    diag.save_figure(
-        diag.plot_final_samples(trajectory[-1].cpu().numpy(), coeffs=val_polys[typical],
-                                title=f"shape {typical} | SR {success[typical]:.2f}% | "
-                                      f"SWD {per_shape['swd'][typical]:.4f}",
-                                degree=cfg.degree, scale=cfg.scale),
-        out / "typical_samples.png")
 
-    # Covers best/typical/worst regions of the score distribution in one view.
-    q_idxs = sorted(set([
-        int(order[0]),
-        int(order[len(order) // 4]),
-        int(order[len(order) // 2]),
-        int(order[(3 * len(order)) // 4]),
-        int(order[-1]),
-    ]))
-    gallery_samples = []
-    gallery_coeffs = []
-    gallery_titles = []
-    for idx in q_idxs:
+    gallery = []
+    for idx in gallery_ids:
         s = model.sample(num_points=ev.num_vis_samples, z=z_val[idx], step_size=ev.step_size,
                          return_intermediates=False, device=device)
         if isinstance(s, torch.Tensor) and s.ndim == 3:
             s = s[-1]
-        gallery_samples.append(s.detach().cpu().numpy())
-        gallery_coeffs.append(val_polys[idx])
-        gallery_titles.append(
-            f"shape {idx} | SR {success[idx]:.2f}%\n"
-            f"SWD {per_shape['swd'][idx]:.4f} | JSD {per_shape['jsd'][idx]:.4f}")
+        gallery.append(s.detach().cpu().numpy())
 
-    diag.save_figure(
-        diag.plot_final_samples_gallery(gallery_samples, gallery_coeffs, gallery_titles,
-                                        degree=cfg.degree, scale=cfg.scale),
-        out / "final_samples_gallery.png")
-
+    arrays = {
+        "samples": np.asarray(val_samples, dtype=np.float32),
+        "polynomials": val_polys,
+        "latents": z_val,
+        "believed_fields": believed,
+        "believed_ids": np.asarray(worst, dtype=np.int32),
+        "trajectory": trajectory,
+        "trajectory_time": time_grid,
+        "gallery_samples": np.stack(gallery),
+        "gallery_ids": np.asarray(gallery_ids, dtype=np.int32),
+    }
     if ev.likelihood_grid > 0:
-        likelihood = model.compute_likelihood_grid(
+        arrays["likelihood"] = model.compute_likelihood_grid(
             z=z_val[typical], siren=siren, degree=cfg.degree, scale=cfg.scale,
             grid_size=ev.likelihood_grid, step_size=ev.step_size, device=device)
-        diag.save_figure(
-            diag.plot_likelihood(likelihood, coeffs=val_polys[typical], degree=cfg.degree,
-                                 scale=cfg.scale, grid_size=ev.likelihood_grid, device=device),
-            out / "typical_likelihood.png")
 
-    print(f"figures written to {out}")
+    artifacts.save_arrays(root, **arrays)
+    artifacts.write_manifest(root, run_id=cfg.run_id, iteration=iteration, method="functa",
+                             degree=cfg.degree, scale=cfg.scale, typical_id=typical,
+                             believed_grid_size=ev.iou_grid_size,
+                             likelihood_grid=ev.likelihood_grid,
+                             eval_config=dataclasses.asdict(ev))
+    print(f"plot artifacts written to {artifacts.artifacts_dir(root)}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -178,6 +159,11 @@ def main(argv: list[str] | None = None) -> int:
     z_val, extraction_mse = extract_validation_latents(siren, cfg, val_polys, device)
     val_mass = constraint_masses(val_polys, gmm_true_pool, degree=cfg.degree, scale=cfg.scale)
 
+    # Frozen points + masses shared by every baseline, so NLL/KLD differences are model
+    # differences and not a different draw of ground truth.
+    nll_set = load_nll_eval_set(num_points=ev.nll_points, degree=cfg.degree, scale=cfg.scale,
+                                device=device) if ev.nll_points > 0 else None
+
     # Mass-weighted: level-set disagreement away from the data cannot move the metrics.
     subset = torch.randperm(gmm_true_pool.shape[0], device=device)[:ev.iou_mass_samples]
     val_iou_mass = region_iou_batched(siren, z_val, val_polys, gmm_true_pool[subset],
@@ -191,7 +177,10 @@ def main(argv: list[str] | None = None) -> int:
                                               coeffs=val_polys, degree=cfg.degree,
                                               scale=cfg.scale, model=model, z=z_val,
                                               nll_points=ev.nll_points,
-                                              nll_step_size=ev.step_size, device=device)
+                                              nll_step_size=ev.step_size,
+                                              nll_eval_points=None if nll_set is None else nll_set["points"],
+                                              nll_masses=None if nll_set is None else nll_set["mass"],
+                                              device=device)
 
     per_shape = {
         "success_rate": [float(v) for v in metrics["success_rate"]],
@@ -237,8 +226,11 @@ def main(argv: list[str] | None = None) -> int:
               f"{per_shape['mass_iou'][i]:8.3f} {per_shape['swd'][i]:8.4f} "
               f"{per_shape['jsd'][i]:8.4f} {nll:8.3f} {kld:8.3f}")
 
+    save_plot_artifacts(cfg, siren, model, val_polys, z_val, val_samples, per_shape, iteration,
+                        device)
     if not args.no_figures:
-        render_figures(cfg, siren, model, val_polys, z_val, val_samples, per_shape, device)
+        paths = render_run_figures(run_dir(cfg.run_id), degree=cfg.degree, scale=cfg.scale)
+        print(f"{len(paths)} figures written to {run_dir(cfg.run_id) / FIGURES_DIR}")
 
     return 0
 

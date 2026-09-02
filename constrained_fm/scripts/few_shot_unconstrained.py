@@ -41,9 +41,12 @@ from flow_matching.path.scheduler import CondOTScheduler
 from constrained_fm.src.consts import PLANE_SCALE, POLYNOMIAL_DEGREE
 from constrained_fm.src.datasets.gmm_target import get_points
 from constrained_fm.src.datasets.validation import get_validation_set
+from constrained_fm.src.experiment import artifacts
+from constrained_fm.src.experiment.registry import pin_baseline_run
 from constrained_fm.src.experiment.runtime import resolve_device, set_seed
 from constrained_fm.src.geometry.polynomials import compute_poly_features, evaluate_poly
 from constrained_fm.src.inference.evaluator import evaluate_single_configuration
+from constrained_fm.src.metrics.eval_points import load_nll_eval_set
 from constrained_fm.src.metrics.functa_fidelity import constraint_masses
 from constrained_fm.src.metrics.likelihood import constraint_nll
 from constrained_fm.src.models.unconstrained import UnconstrainedFM
@@ -172,7 +175,7 @@ def train_few_shot(x_train: torch.Tensor, x_val: torch.Tensor, args, device) -> 
 
 
 def run_item(shape_id: int, n_points: int, C: torch.Tensor, gmm_pool: torch.Tensor,
-             mass: float, args, device) -> tuple[dict, np.ndarray]:
+             mass: float, args, device, x_true_valid: torch.Tensor) -> tuple[dict, np.ndarray]:
     set_seed(args.seed + 1000 * shape_id + n_points)
     started = time.time()
 
@@ -189,10 +192,10 @@ def run_item(shape_id: int, n_points: int, C: torch.Tensor, gmm_pool: torch.Tens
     metrics = evaluate_single_configuration(samples, x_true_pool=gmm_pool, coeffs=C,
                                             degree=args.degree, scale=args.scale, device=device)
 
-    # Unconditional model: pass no conditioning to the backward ODE.
-    x_true_valid = gmm_pool[poly_values(C, gmm_pool, args.degree, args.scale) <= 0]
+    # Unconditional model: pass no conditioning to the backward ODE. x_true_valid is the
+    # frozen shared set, identical to the points the functa and coefficient models are scored on.
     metrics.update(constraint_nll(model, x_true_valid, mass, num_points=args.nll_points,
-                                  step_size=args.step_size, device=device))
+                                  step_size=args.step_size, subset_seed=shape_id, device=device))
 
     record = {
         "shape_id": shape_id, "n_points": n_points, "mass": mass,
@@ -210,7 +213,7 @@ def select_shapes(mass: torch.Tensor, count: int) -> list[int]:
     return sorted(int(order[p]) for p in picks)
 
 
-def assemble(args, out: Path, polys: torch.Tensor, mass: torch.Tensor) -> int:
+def assemble(args, out: Path, polys: torch.Tensor, mass: torch.Tensor, run_id: str) -> int:
     figures = Path(args.figure_dir)
     figures.mkdir(parents=True, exist_ok=True)
     records = [json.loads(p.read_text()) for p in sorted((out / "results").glob("*.json"))]
@@ -234,8 +237,8 @@ def assemble(args, out: Path, polys: torch.Tensor, mass: torch.Tensor) -> int:
         summary[str(n)]["median_train_seconds"] = float(np.median([r["train_seconds"] for r in rows]))
 
     (out / "summary.json").write_text(json.dumps(
-        {"n_values": n_values, "shape_ids": shape_ids, "per_n_median": summary,
-         "records": records}, indent=2))
+        {"run_id": run_id, "n_values": n_values, "shape_ids": shape_ids,
+         "per_n_median": summary, "records": records}, indent=2))
 
     header = f"{'N':>6}{'SR':>9}{'SWD':>9}{'MMD':>10}{'JSD':>9}{'NLL':>9}{'KLD':>9}{'train_s':>10}{'n':>5}"
     print("\nmedian over shapes")
@@ -296,6 +299,7 @@ def main(argv: list[str] | None = None) -> int:
     out = Path(args.outdir)
     (out / "results").mkdir(parents=True, exist_ok=True)
     (out / "samples").mkdir(parents=True, exist_ok=True)
+    run_id = pin_baseline_run(out, "few_shot", args)
 
     set_seed(args.seed)
     gmm_pool, _ = get_points(args.gmm_pool_size, device=device)
@@ -303,8 +307,17 @@ def main(argv: list[str] | None = None) -> int:
     polys = val_set["polynomials"].to(device)
     mass = constraint_masses(polys, gmm_pool, degree=args.degree, scale=args.scale)
 
+    artifacts.save_arrays(out, polynomials=polys, mass=mass)
+    artifacts.write_manifest(out, run_id=run_id, method="few_shot", degree=args.degree,
+                             scale=args.scale)
+
     if args.plot_only:
-        return assemble(args, out, polys, mass)
+        return assemble(args, out, polys, mass, run_id)
+
+    # `mass` above still drives shape selection and the plots; the KLD reference mass comes
+    # from the frozen set so it matches the points every other baseline is scored on.
+    nll_set = load_nll_eval_set(num_points=args.nll_points, degree=args.degree, scale=args.scale,
+                                device=device)
 
     if args.all_shapes:
         shape_ids = list(range(polys.shape[0]))
@@ -327,13 +340,14 @@ def main(argv: list[str] | None = None) -> int:
 
         # One pathological constraint must not cost the whole shard; it is retried on rerun.
         try:
-            record, samples = run_item(sid, n, polys[sid], gmm_pool, float(mass[sid]), args, device)
+            record, samples = run_item(sid, n, polys[sid], gmm_pool, float(nll_set["mass"][sid]),
+                                       args, device, nll_set["points"][sid])
         except Exception as exc:
             print(f"[{position}/{len(mine)}] shape {sid} N {n}: FAILED ({type(exc).__name__}: {exc})",
                   flush=True)
             continue
 
-        record_path.write_text(json.dumps(record, indent=2))
+        record_path.write_text(json.dumps({"run_id": run_id, **record}, indent=2))
         np.save(out / "samples" / f"shape{sid}_N{n}.npy", samples)
 
         print(f"[{position}/{len(mine)}] shape {sid} N {n:>4} | "

@@ -30,6 +30,8 @@ from flow_matching.path.scheduler import CondOTScheduler
 from tqdm import tqdm
 
 from constrained_fm.src.datasets.gmm_target import get_points
+from constrained_fm.src.experiment import artifacts
+from constrained_fm.src.experiment.registry import pin_baseline_run
 from constrained_fm.src.experiment.runtime import resolve_device, set_seed
 from constrained_fm.src.metrics.distributional import compute_jsd, compute_mmd, compute_swd
 from constrained_fm.src.metrics.likelihood import constraint_nll
@@ -37,6 +39,8 @@ from constrained_fm.src.models.unconstrained import UnconstrainedFM
 from constrained_fm.src.visualization import diagnostics as diag
 
 DEFAULT_OUTDIR = "constrained_fm/baselines/base_fm"
+# Enough points for a dense 2D histogram without storing the full 100k scoring tensor.
+SAVED_SAMPLES = 50000
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -120,9 +124,10 @@ def main(argv: list[str] | None = None) -> int:
     out = Path(args.outdir)
     (out / "figures").mkdir(parents=True, exist_ok=True)
     ckpt_path = out / "ckpt.pt"
+    run_id = pin_baseline_run(out, "base_fm", args)
 
     set_seed(args.seed)
-    print(f"device {device} | hidden {args.hidden_dim} | {args.num_blocks} blocks")
+    print(f"run_id {run_id} | device {device} | hidden {args.hidden_dim} | {args.num_blocks} blocks")
 
     if args.skip_train:
         model = build_model(args, device)
@@ -140,12 +145,16 @@ def main(argv: list[str] | None = None) -> int:
     gmm_pool, _ = get_points(args.gmm_pool_size, device=device)
     metrics, samples = score_unconditional(model, gmm_pool, args, device)
 
+    artifacts.save_arrays(out, samples=samples[:SAVED_SAMPLES])
+    artifacts.write_manifest(out, run_id=run_id, method="base_fm")
+
     diag.save_figure(
-        diag.plot_final_samples(samples[:20000].detach().cpu().numpy(),
+        diag.plot_final_samples(artifacts.load_array(out, "samples")[:20000],
                                 title="Unconstrained base model"),
         out / "figures" / "base_samples.png")
 
     (out / "metrics.json").write_text(json.dumps({
+        "run_id": run_id,
         "model": "UnconstrainedFM",
         "evaluated_at": datetime.now().isoformat(timespec="seconds"),
         "train": {"iterations": args.iterations, "batch_size": args.batch_size, "lr": args.lr,

@@ -46,6 +46,7 @@ from constrained_fm.src.experiment.runtime import resolve_device, set_seed
 from constrained_fm.src.geometry.polynomials import compute_poly_features, evaluate_poly
 from constrained_fm.src.inference.evaluator import (evaluate_validation_set_metrics,
                                                     run_evaluation_inference)
+from constrained_fm.src.metrics.eval_points import load_nll_eval_set
 from constrained_fm.src.metrics.functa_fidelity import constraint_masses
 from constrained_fm.src.models.constrained_poly import PolynomialConstrainedFM
 
@@ -123,15 +124,34 @@ def train(args, device: torch.device) -> tuple[PolynomialConstrainedFM, list[flo
     return model, losses
 
 
+def save_plot_artifacts(args, out: Path, run_id: str, val_polys: torch.Tensor,
+                        val_samples: np.ndarray, per_shape: dict[str, list[float]]) -> None:
+    """Pins the scored sample tensors so the figures never need the checkpoint again."""
+    order = np.argsort(np.asarray(per_shape["success_rate"]))
+    gallery_ids = sorted({int(order[0]), int(order[len(order) // 4]), int(order[len(order) // 2]),
+                          int(order[(3 * len(order)) // 4]), int(order[-1])})
+
+    artifacts.save_arrays(
+        out,
+        samples=np.asarray(val_samples, dtype=np.float32),
+        polynomials=val_polys,
+        gallery_samples=np.stack([val_samples[i] for i in gallery_ids]).astype(np.float32),
+        gallery_ids=np.asarray(gallery_ids, dtype=np.int32),
+    )
+    artifacts.write_manifest(out, run_id=run_id, method="poly_fm", degree=args.degree,
+                             scale=args.scale, typical_id=int(order[len(order) // 2]))
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     device = resolve_device()
     out = Path(args.outdir)
     out.mkdir(parents=True, exist_ok=True)
     ckpt_path = out / "ckpt.pt"
+    run_id = pin_baseline_run(out, "poly_fm", args)
 
     set_seed(args.seed)
-    print(f"device {device} | scale {args.scale} | degree {args.degree}")
+    print(f"run_id {run_id} | device {device} | scale {args.scale} | degree {args.degree}")
 
     if args.skip_train:
         model = PolynomialConstrainedFM(degree=args.degree, hidden_dim=args.hidden_dim,
@@ -154,10 +174,15 @@ def main(argv: list[str] | None = None) -> int:
 
     val_samples = run_evaluation_inference(model, val_x0, coeffs=val_polys,
                                            step_size=args.step_size, device=device)
+    nll_set = load_nll_eval_set(num_points=args.nll_points, degree=args.degree, scale=args.scale,
+                                device=device) if args.nll_points > 0 else None
     metrics = evaluate_validation_set_metrics(val_samples, x_true_pool=gmm_pool, coeffs=val_polys,
                                               degree=args.degree, scale=args.scale, model=model,
                                               nll_points=args.nll_points,
-                                              nll_step_size=args.step_size, device=device)
+                                              nll_step_size=args.step_size,
+                                              nll_eval_points=None if nll_set is None else nll_set["points"],
+                                              nll_masses=None if nll_set is None else nll_set["mass"],
+                                              device=device)
 
     per_shape = {k: [float(v) for v in metrics[k]] for k in metrics}
     per_shape["mass"] = constraint_masses(val_polys, gmm_pool, degree=args.degree,
@@ -165,6 +190,7 @@ def main(argv: list[str] | None = None) -> int:
     summary = summarize(per_shape)
 
     (out / "metrics.json").write_text(json.dumps({
+        "run_id": run_id,
         "model": "PolynomialConstrainedFM",
         "evaluated_at": datetime.now().isoformat(timespec="seconds"),
         "train": {"iterations": args.iterations, "batch_size": args.batch_size, "lr": args.lr,
@@ -174,6 +200,9 @@ def main(argv: list[str] | None = None) -> int:
         "per_shape": per_shape,
         "summary": summary,
     }, indent=2))
+
+    save_plot_artifacts(args, out, run_id, val_polys, val_samples, per_shape)
+    render_run_figures(out, degree=args.degree, scale=args.scale)
 
     print()
     print(readme_table(summary))

@@ -169,27 +169,20 @@ Raw NLL is not comparable across constraints: the model density is normalized ov
 | **Negative Log-Likelihood (NLL)** | 3.2190 | 3.1491 | 3.5849 | *Lower is better* |
 | **KL divergence (KLD)** | 0.3753 | 0.4144 | 0.7845 | *Lower is better; 0 is exact* |
 
-A median KLD of 0.375 nats says the learned conditional density is close to — but not identical with — the truncated target: the model covers the right region with approximately the right mass allocation, and the residual is concentrated on the same low-mass constraints that drive the SWD tail (worst-5% KLD 0.785).
-
 ### Against explicit conditioning
 
 The reference point is the polynomial model from the [main README](README.md#algebraic-constraints-polynomials), which receives the true coefficients *and* the exact $P(x_t)$ at every step. Whatever it achieves is what a latent code has to match without ever seeing the constraint.
 
-| Metric (median) | Coefficient-conditioned | Few-shot, $N{=}2000$ | **Functa-conditioned** |
-| :--- | ---: | ---: | ---: |
-| Success Rate (%) | **98.54** | 97.67 | 97.69 |
-| SWD | **0.0682** | 0.1212 | 0.0817 |
-| MMD | **0.0007** | 0.0024 | 0.0009 |
-| JSD | **0.0037** | 0.0104 | 0.0055 |
-| NLL | **2.8676** | 2.9300 | 3.2190 |
-| KLD | **0.0290** | 0.0815 | 0.3753 |
-| constraint supplied as | coefficients + exact $P(x_t)$ | 2000 valid samples | 512-dim latent |
-| models trained | 1 | 100 (one per constraint) | 1 |
-| zero-shot | no | no | **yes** |
+| Metric (median) | Coefficient-conditioned | **Functa-conditioned** |
+| :--- | ---: | ---: |
+| Success Rate (%) | **98.54** | 97.69 |
+| SWD | **0.0682** | 0.0817 |
+| MMD | **0.0007** | 0.0009 |
+| JSD | **0.0037** | 0.0055 |
+| NLL | **2.8676** | 3.2190 |
+| KLD | **0.0290** | 0.3753 |
 
 **Explicit conditioning wins on every metric, and the likelihood metrics say by how much.** On the point-cloud measures the gap is modest — success rate within 0.85 points, SWD ~16%. The coefficient-conditioned model reproduces the truncated target almost exactly; the Functa-conditioned one does not.
-
-The middle column is the [few-shot baseline](#how-much-is-the-latent-worth-a-few-shot-baseline) and sharpens the picture: the latent beats 2000 real samples on every point-cloud metric while losing to them on density. Whatever the latent encodes captures the *shape* of the constrained distribution better than a specialist fitted to samples, and its *mass allocation* worse. Both comparisons therefore point at the same weakness, and it is a density weakness, not a geometric one.
 
 ### Where the residual error lives
 
@@ -219,22 +212,20 @@ The SIREN is meta-trained with 1000 query points per shape, and inference deploy
 
 *(median over the 100-constraint benchmark)*
 
-**Extraction saturates at $N \approx 300$, so the deployed budget of 1000 is 3× more than it needs to be** — and 2000 buys nothing at all over 1000. Success rate is flat from $N = 100$ onward and SWD is unchanged from 100 to 2000 to within run-to-run noise; the apparent drift upward past 300 is not a real trend. Extraction MSE keeps falling to 2000 while mass IoU does not, which is the signature of the latent fitting the query points harder without describing the region any better.
+Extraction saturates at $N \approx 300$, so the deployed budget of 1000 is 3× more than it needs to be — and 2000 buys nothing at all over 1000. Success rate and SWD are flat from $N = 100$ onward.
 
 <p align="center">
-  <img src="../runs/siren-uniform-8d6375ab/ablations/query_points/degradation_curves.png" width="100%" alt="Degradation vs query budget">
+  <img src="images/functa/ablation/degradation_curves.png" width="100%" alt="Degradation vs query budget">
 </p>
 
-The median hides where the cost actually lands. Dropping to $N = 50$ moves median IoU by only 0.02 (0.984 → 0.964) but collapses the worst constraint to **0.470** — the failure is entirely in the tail, on exactly the low-mass shapes that already dominate the SWD tail. The boundary grid makes this visible: the third row is unrecognisable at $N = 50$ and fully recovered by $N = 100$, while the easy shapes are indistinguishable across the whole sweep.
-
 <p align="center">
-  <img src="../runs/siren-uniform-8d6375ab/ablations/query_points/siren_boundary_grid.png" width="85%" alt="Decoded boundary vs query budget">
+  <img src="images/functa/ablation/siren_boundary_grid.png" width="85%" alt="Decoded boundary vs query budget">
 </p>
 
 Downstream, the generated distributions track the same pattern — degradation at $N = 50$ is confined to the constraints whose latent was mis-extracted, not spread across the benchmark.
 
 <p align="center">
-  <img src="../runs/siren-uniform-8d6375ab/ablations/query_points/flow_matching_grid.png" width="85%" alt="Generated samples vs query budget">
+  <img src="images/functa/ablation/flow_matching_grid.png" width="85%" alt="Generated samples vs query budget">
 </p>
 
 ### How much is the latent worth? A few-shot baseline
@@ -253,7 +244,7 @@ Conditioning is not the only way to honour a constraint. The data-driven alterna
 
 *(median over the same 100-constraint benchmark)*
 
-**The two metric families disagree, and the disagreement is the result.** Functa wins every point-cloud metric at every budget — even 2000 valid samples do not buy the SWD, MMD or JSD of the zero-shot latent. But from $N = 100$ upward the few-shot model wins on density, and by $N \ge 500$ it does so on **97–99% of individual constraints**:
+Functa wins every point-cloud metric at every budget — even 2000 valid samples do not buy the SWD, MMD or JSD of the zero-shot latent. But from $N = 100$ upward the few-shot model wins on density, and by $N \ge 500$ it does so on **97–99% of individual constraints**:
 
 | $N$ | shapes where few-shot beats Functa on SR | on SWD | on KLD |
 | ---: | ---: | ---: | ---: |
@@ -266,24 +257,32 @@ Conditioning is not the only way to honour a constraint. The data-driven alterna
 Read together: **the latent is worth roughly 50–100 valid samples in density terms, and more than 2000 in distributional-shape terms.** At $N = 50$ the two are at density parity (KLD 0.378 vs 0.375) — that is the crossover. Below it, conditioning on a latent is strictly better than collecting data; above it, a specialist fitted to real samples reproduces the density better while still producing a visibly worse-shaped point cloud.
 
 <p align="center">
-  <img src="baselines/few_shot/few_shot_curves.png" width="100%" alt="Few-shot degradation vs N">
+  <img src="images/functa/few_shot/few_shot_curves.png" width="100%" alt="Few-shot degradation vs N">
 </p>
 
 <p align="center">
-  <img src="baselines/few_shot/few_shot_grid.png" width="85%" alt="Few-shot samples vs N">
+  <img src="images/functa/few_shot/few_shot_grid.png" width="85%" alt="Few-shot samples vs N">
 </p>
 
-Three caveats decide how much weight this carries.
+**It is an upper bound, not an attainable result.** Training length is chosen by early stopping against a held-out set of **10,000** constraint-satisfying points — far more data than the model is allowed to train on. This deliberately removes training length as a confound so each $N$ gets its best-case model.
 
-**It is an upper bound, not an attainable result.** Training length is chosen by early stopping against a held-out set of **10,000** constraint-satisfying points — far more data than the model is allowed to train on. This deliberately removes training length as a confound so each $N$ gets its best-case model, but it is an oracle: at $N = 50$ the selected iterate sits at step 500 (2,560 epochs over 50 points) and the next 3,000 steps *degrade* validation loss. A practitioner holding 50 points and nothing else could not find that iterate. Every number above is therefore optimistic.
+### All three approaches side by side
 
-**It is a specialist against a generalist.** The row labelled Functa is one model covering all 100 constraints zero-shot. The few-shot rows are 600 separate models, each trained for one constraint, each requiring valid samples to already exist — which presupposes solving the sampling problem the model is meant to solve. They are not interchangeable products.
+| Metric (median) | Coefficient-conditioned | Few-shot, $N{=}2000$ | **Functa-conditioned** |
+| :--- | ---: | ---: | ---: |
+| Success Rate (%) | **98.54** | 97.67 | 97.69 |
+| SWD | **0.0682** | 0.1212 | 0.0817 |
+| MMD | **0.0007** | 0.0024 | 0.0009 |
+| JSD | **0.0037** | 0.0104 | 0.0055 |
+| NLL | **2.8676** | 2.9300 | 3.2190 |
+| KLD | **0.0290** | 0.0815 | 0.3753 |
+| constraint supplied as | coefficients + exact $P(x_t)$ | 2000 valid samples | 512-dim latent |
+| models trained | 1 | 100 (one per constraint) | 1 |
+| handles an unseen constraint without retraining | yes | **no** | yes |
 
-**$N$ does not mean the same thing on both axes.** In the query-budget ablation above, $N$ counts CAVIA *query* points labelled with $\tanh(P)$, spread across the plane and mostly *outside* the region. Here it counts valid *samples from the target*. Both are "$N$ pieces of evidence about the constraint", but they are not the same evidence, and the shared axis should not be read as equivalence.
+Both conditioned models are zero-shot: each is trained once over the constraint family and handles an unseen constraint at inference with no retraining. They differ only in *how* the constraint arrives — as explicit parameters or as a latent code. The few-shot baseline is the odd one out, needing a fresh model and fresh valid samples per constraint.
 
-One measurement note: JSD is non-finite on 28 of the 600 items, clustered on low-mass constraints (shapes 26, 28, 29, 30) where the KDE backing `compute_jsd` goes singular. SWD, MMD, NLL and KLD are finite on all 600. The same estimator produces `inf` for shape 28 in the Functa evaluation, so this is a limitation of the JSD estimator on concentrated regions rather than a property of either model.
-
-Reproduce with `sbatch scripts/run_few_shot.sh --all-shapes --shard S --num-shards 8` (8 shards, ~45 min each), then `--plot-only`.
+That places the latent between the two: it beats 2000 real samples on every point-cloud metric while losing to them on density, and loses to explicit coefficients on everything. Whatever the latent encodes captures the *shape* of the constrained distribution well and its *mass allocation* poorly — both comparisons converge on the same conclusion, and it is a density weakness rather than a geometric one.
 
 ### Qualitative
 

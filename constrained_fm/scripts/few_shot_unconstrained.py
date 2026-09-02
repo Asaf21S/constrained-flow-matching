@@ -83,6 +83,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--num-shards", type=int, default=1)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--outdir", default=DEFAULT_OUTDIR)
+    parser.add_argument("--figure-dir", default="constrained_fm/images/functa/few_shot",
+                        help="figures live with the README that embeds them, not with the results")
     parser.add_argument("--plot-only", action="store_true",
                         help="assemble figures and summary from existing per-item results")
     parser.add_argument("--degree", type=int, default=POLYNOMIAL_DEGREE)
@@ -209,6 +211,8 @@ def select_shapes(mass: torch.Tensor, count: int) -> list[int]:
 
 
 def assemble(args, out: Path, polys: torch.Tensor, mass: torch.Tensor) -> int:
+    figures = Path(args.figure_dir)
+    figures.mkdir(parents=True, exist_ok=True)
     records = [json.loads(p.read_text()) for p in sorted((out / "results").glob("*.json"))]
     if not records:
         print("no results to assemble")
@@ -268,7 +272,7 @@ def assemble(args, out: Path, polys: torch.Tensor, mass: torch.Tensor) -> int:
                 [f"shape {i}\nmass {mass[i]:.2f}" for i in rows_used],
                 [f"N = {n}" for n in n_values], cell_labels=cell_labels,
                 degree=args.degree, scale=args.scale),
-            out / "few_shot_grid.png")
+            figures / "few_shot_grid.png")
 
     # Indexed explicitly by (N, shape) so rows stay aligned even if shards finished unevenly.
     complete = [sid for sid in shape_ids if all((sid, n) in by_key for n in n_values)]
@@ -279,10 +283,10 @@ def assemble(args, out: Path, polys: torch.Tensor, mass: torch.Tensor) -> int:
                                     dtype=float)
         diag.save_figure(
             diag.plot_ablation_curves(n_values, series, xlabel="training points N"),
-            out / "few_shot_curves.png")
+            figures / "few_shot_curves.png")
         print(f"curves over {len(complete)} shapes with every N present")
 
-    print(f"\nwrote {out}")
+    print(f"\nwrote {out} (figures in {figures})")
     return 0
 
 

@@ -64,6 +64,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--extraction-chunk", type=int, default=128)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--outdir", default=None)
+    parser.add_argument("--figure-dir", default="constrained_fm/images/functa/ablation",
+                        help="figures live with the README that embeds them, not with the run")
     return parser
 
 
@@ -196,6 +198,8 @@ def main(argv: list[str] | None = None) -> int:
                 torch.cuda.empty_cache()
 
     # --- figures -------------------------------------------------------------------
+    figures = Path(args.figure_dir)
+    figures.mkdir(parents=True, exist_ok=True)
     col_labels = [f"N = {n}" for n in n_values]
     row_labels = [f"shape {i}\nmass {mass[i]:.2f}" for i in shape_ids]
     coeffs_list = [polys[i] for i in shape_ids]
@@ -207,7 +211,7 @@ def main(argv: list[str] | None = None) -> int:
                                          cell_labels=iou_cells, degree=cfg.degree, scale=cfg.scale,
                                          resolution=args.resolution,
                                          smooth_sigma=args.smooth_sigma),
-        out / "siren_boundary_grid.png")
+        figures / "siren_boundary_grid.png")
 
     metric_series = {"mass IoU": iou_by_n,
                      "extraction MSE": np.array([per_n[n]["extraction_mse"] for n in n_values])}
@@ -218,7 +222,7 @@ def main(argv: list[str] | None = None) -> int:
         diag.save_figure(
             diag.plot_samples_ablation_grid(sample_grid, coeffs_list, row_labels, col_labels,
                                             cell_labels=sr_cells, degree=cfg.degree, scale=cfg.scale),
-            out / "flow_matching_grid.png")
+            figures / "flow_matching_grid.png")
         metric_series["success rate (%)"] = np.array([per_n[n]["success_rate"] for n in n_values])
         metric_series["SWD"] = np.array([per_n[n]["swd"] for n in n_values])
         if all("kld" in per_n[n] for n in n_values):
@@ -226,7 +230,7 @@ def main(argv: list[str] | None = None) -> int:
 
     diag.save_figure(
         diag.plot_ablation_curves(n_values, metric_series, xlabel="inference query points N"),
-        out / "degradation_curves.png")
+        figures / "degradation_curves.png")
 
     dump_metrics()
 

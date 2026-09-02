@@ -314,7 +314,7 @@ Across the constraint family the model produces the *correct distribution*, not 
 
 Freshly sampled polynomials, drawn with a seed disjoint from both the training pool and the validation benchmark (verified minimum coefficient distance 0.29 from any benchmark shape). For each: generated samples with the constraint overlaid, and the model's **exact** likelihood, normalized against the truncated GMM's peak density.
 
-> The NLL and KLD columns in this table predate the 2026-09-02 divergence-trace fix and are not directly comparable to the benchmark numbers above; the samples, success rates and point-cloud metrics are unaffected. Re-run `showcase_samples.py` to refresh them.
+> The NLL and KLD columns in this table predate the 2026-09-02 divergence-trace fix and are not directly comparable to the benchmark numbers above; the samples, success rates and point-cloud metrics are unaffected.
 
 | # | Success rate (%) | SWD | MMD | JSD | NLL | KLD | constraint mass | decoded mass IoU |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |

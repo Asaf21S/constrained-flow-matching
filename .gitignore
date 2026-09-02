@@ -19,6 +19,10 @@ __pycache__/
 # Checkpoints and loss histories are already covered by the *.pt / *.npy rules above.
 runs/*/figures/
 
+# Plotting artifacts: the bulk .npy tensors are already ignored above, while every
+# artifacts/manifest.json is tracked so each figure stays traceable to a run and a commit.
+!**/artifacts/manifest.json
+
 # Per-item shard state for the few-shot baseline: resumability scratch, fully aggregated
 # into summary.json which is tracked.
 constrained_fm/baselines/*/results/

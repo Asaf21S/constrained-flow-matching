@@ -54,14 +54,47 @@ The pipeline is four decoupled stages driven by one YAML config per experiment. 
 | build the conditioning pool | `constrained_fm.scripts.build_pool` | `sbatch scripts/run_pool.sh <config.yaml>` |
 | train | `constrained_fm.scripts.train_fm` | `sbatch scripts/run_train.sh <config.yaml>` (evaluates too) |
 | evaluate an existing checkpoint | `constrained_fm.scripts.eval_fm` | `sbatch scripts/run_eval.sh <run_id>` |
+| redraw figures from saved arrays | `constrained_fm.scripts.plot_run` | `sbatch scripts/run_plots.sh <run_id>` |
 
 * Configs live in `constrained_fm/configs/`; every non-baseline config uses `extends: constrained_fm/configs/baseline.yaml` and overrides only what it changes.
 * `run_id` is `<name>-<fingerprint>`, where the fingerprint covers the SIREN weights digest, extraction settings, pool, architecture, and training hyperparameters. The `evaluation` block is deliberately excluded, so re-scoring never forks a run.
-* Artifacts land in `runs/<run_id>/`: `config.yaml`, `provenance.json`, `state.json`, `ckpt.pt`, `losses.npy`, `metrics.json`, `figures/`.
-* **Iterating on metrics or plots must not retrain.** Add the diagnostic to `eval_fm.py` / `src/visualization/diagnostics.py` and re-run stage 3 against the frozen checkpoint.
+* Artifacts land in `runs/<run_id>/`: `config.yaml`, `provenance.json`, `state.json`, `ckpt.pt`, `losses.npy`, `metrics.json`, `artifacts/`, `figures/`.
+* **Iterating on metrics must not retrain.** Add the diagnostic to `eval_fm.py` and re-run stage 3 against the frozen checkpoint.
+* **Iterating on figures must not re-evaluate.** Edit `src/visualization/` and re-run stage 4; it reads only `artifacts/`, `metrics.json` and `losses.npy`.
 * Sweeps run concurrently: `scripts/run_sweep.sh constrained_fm/configs/*.yaml` submits one job per config and chains any missing pool build with `--dependency=afterok`.
 * Interactive debugging: `scripts/run_dev.sh` opens a shell on a compute node inside the container. Use it instead of submitting a job to answer a tensor-shape question.
 * Add `--smoke` (or `SMOKE=1` for the sweep) to shrink every knob for a few-minute end-to-end test before committing to a full run.
+
+## Experiment Tracking Contract (non-negotiable)
+
+Every reported number and every paper figure must be traceable to one run directory. When you
+add, modify, or review any training or evaluation loop -- the Functa model or any baseline
+(coefficient-conditioned, base FM, few-shot, ECI, HardFlow) -- enforce all of the following.
+
+**1. Every run pins its own identity.** A run directory must contain `config.yaml`,
+`provenance.json` (fingerprint + git commit), the checkpoint, and `metrics.json` carrying its
+`run_id`. YAML-driven runs get this from `registry.init_run`; argparse-driven baselines must
+call `registry.pin_baseline_run(out_dir, method, args)` before doing any work and stamp the
+returned `run_id` into every JSON they write. Never let a script write metrics without a run id.
+
+**2. Every evaluation persists the tensors its figures consume.** Before rendering anything,
+write the generated sample tensors, the constraint coefficients, and any decoded field,
+trajectory, or likelihood grid through `src/experiment/artifacts.py`
+(`save_arrays` + `write_manifest`). A metric that appears in a table and a panel that appears in
+a figure must come from the same saved array, not from two separate sampling passes.
+
+**3. Plotting code never generates data.** Nothing under `src/visualization/` may construct a
+model, load a checkpoint, call `.sample()`, or integrate an ODE. Plot functions take arrays and
+coefficients; if one needs a decoded SIREN field, it takes the field, not the SIREN. New figures
+go into `src/visualization/run_figures.py`, which is driven purely by `artifacts/`.
+
+**4. Provide a data-free replot path.** Any script that both computes and plots exposes a
+`--plot-only` flag (see `eci_hardflow.py`, `few_shot_unconstrained.py`) that redraws from disk.
+If a figure cannot be redrawn without a GPU, the artifact set is incomplete -- fix the saving
+side rather than re-running the sampler.
+
+**5. Missing artifacts are an error, not a fallback.** When an artifact is absent, raise and tell
+the caller to re-run the evaluation stage. Never silently regenerate data inside a plotting path.
 
 ## Notebook Editing Rules
 * **The notebook is a report, not an experiment driver.** `constrained_fm/notebooks/constrained_fm_2d_gmm_functa.py` only reads `runs/*/{config.yaml,metrics.json,losses.npy,figures/*.png}`; it must never build a model, sample, or train.

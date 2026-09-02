@@ -6,7 +6,7 @@ from constrained_fm.src.models.layers import SinusoidalPosEmb, ResBlock
 
 
 class UnconstrainedFM(BaseFM):
-    def __init__(self, input_dim=2, time_dim=64, hidden_dim=512):
+    def __init__(self, input_dim=2, time_dim=64, hidden_dim=512, num_blocks=3):
         super().__init__()
 
         self.input_dim = input_dim
@@ -22,11 +22,7 @@ class UnconstrainedFM(BaseFM):
             nn.SiLU()
         )
 
-        self.res_blocks = nn.Sequential(
-            ResBlock(hidden_dim),
-            ResBlock(hidden_dim),
-            ResBlock(hidden_dim)
-        )
+        self.res_blocks = nn.Sequential(*[ResBlock(hidden_dim) for _ in range(num_blocks)])
 
         self.output_proj = nn.Linear(hidden_dim, input_dim)
 

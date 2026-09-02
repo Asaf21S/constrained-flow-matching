@@ -148,7 +148,7 @@ All numbers below come from a **frozen benchmark of 100 polynomials** never used
 
 **NLL** is the *exact* negative log-likelihood the model assigns to ground-truth GMM points that satisfy the constraint, obtained by integrating the probability-flow ODE backwards from $t=1$ to $t=0$ while accumulating the exact divergence of the velocity field:
 
-$$\log p_\theta(x_1) = \log \mathcal{N}(x_0; 0, I) - \int_1^0 \operatorname{Tr}(\nabla_x v_t)\, dt$$
+$$\log p_\theta(x_1) = \log \mathcal{N}(x_0; 0, I) - \int_1^0 \mathrm{Tr}(\nabla_x v_t)\, dt$$
 
 In 2D the trace is exact at the cost of two backward passes per step, so no Hutchinson estimator is needed. 5,000 constraint-satisfying points are scored per constraint.
 

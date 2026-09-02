@@ -101,6 +101,7 @@ def run_evaluation_inference(model, x0, bounds=None, coeffs=None, z=None, step_s
 def evaluate_single_configuration(samples, x_true_pool, bounds=None, coeffs=None, disjoint_boxes=None,
                                   degree=POLYNOMIAL_DEGREE, scale=PLANE_SCALE, x_pow_true=None, y_pow_true=None,
                                   model=None, z=None, nll_points=0, nll_step_size=0.05,
+                                  nll_eval_points=None, nll_mass=None, nll_subset_seed=0,
                                   device=None):
     metrics = {
         "swd": float('inf'),
@@ -144,19 +145,28 @@ def evaluate_single_configuration(samples, x_true_pool, bounds=None, coeffs=None
     else:
         print("Warning: Not enough valid points in true pool or generated samples to compute SWD/MMD/JSD.")
 
-    # Scored on the same constraint-satisfying GT points the discrepancies use.
+    # Exact likelihood is scored on the frozen shared point set when one is supplied, so the
+    # NLL/KLD of every baseline is a mean over literally the same GT points; otherwise fall
+    # back to a deterministically seeded subset of this run's own filtered pool.
     if model is not None and nll_points > 0:
-        mass = len(x_true_filtered) / max(len(x_true_pool), 1)
-        metrics.update(constraint_nll(model, x_true_filtered, mass, bounds=bounds, coeffs=coeffs,
+        if nll_eval_points is not None:
+            if nll_mass is None:
+                raise ValueError("nll_eval_points requires the matching nll_mass")
+            x_nll, mass = nll_eval_points, float(nll_mass)
+        else:
+            x_nll = x_true_filtered
+            mass = len(x_true_filtered) / max(len(x_true_pool), 1)
+        metrics.update(constraint_nll(model, x_nll, mass, bounds=bounds, coeffs=coeffs,
                                       z=z, num_points=nll_points, step_size=nll_step_size,
-                                      device=device))
+                                      subset_seed=nll_subset_seed, device=device))
 
     return metrics
 
 
 def evaluate_validation_set_metrics(val_samples_batched, x_true_pool, bounds=None, coeffs=None,
                                     degree=POLYNOMIAL_DEGREE, scale=PLANE_SCALE, model=None, z=None,
-                                    nll_points=0, nll_step_size=0.05, device=None):
+                                    nll_points=0, nll_step_size=0.05, nll_eval_points=None,
+                                    nll_masses=None, nll_subset_seed=0, device=None):
     return_single = False
     if isinstance(val_samples_batched, np.ndarray):
         val_samples_batched = torch.tensor(val_samples_batched, dtype=torch.float32, device=x_true_pool.device)
@@ -200,6 +210,9 @@ def evaluate_validation_set_metrics(val_samples_batched, x_true_pool, bounds=Non
             z=current_z,
             nll_points=nll_points,
             nll_step_size=nll_step_size,
+            nll_eval_points=None if nll_eval_points is None else nll_eval_points[i],
+            nll_mass=None if nll_masses is None else nll_masses[i],
+            nll_subset_seed=nll_subset_seed + i,
             device=device
         )
 

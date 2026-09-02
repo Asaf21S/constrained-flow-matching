@@ -22,6 +22,7 @@ from flow_matching.solver import ODESolver
 from torch.distributions import Independent, Normal
 
 from constrained_fm.src.datasets.gmm_target import compute_gmm_log_likelihood
+from constrained_fm.src.metrics.eval_points import deterministic_subset
 from constrained_fm.src.solvers.ode_wrapper import WrappedModel
 
 
@@ -85,11 +86,14 @@ def truncated_gmm_log_likelihood(x: torch.Tensor, mass: float, device=None) -> t
 def constraint_nll(model, x_true_valid: torch.Tensor, mass: float, bounds=None,
                    coeffs: torch.Tensor | None = None, z: torch.Tensor | None = None,
                    num_points: int = 5000, step_size: float = 0.05, chunk_size: int = 4000,
-                   device=None) -> dict[str, float]:
+                   subset_seed: int = 0, device=None) -> dict[str, float]:
     """Mean NLL of constraint-satisfying GT points, and the KL divergence it implies.
 
-    x_true_valid must already be filtered to the constraint region; a random subset of
-    num_points is scored.
+    x_true_valid must already be filtered to the constraint region. If it holds more than
+    num_points, a subset is taken with a dedicated generator seeded by subset_seed, so the
+    scored points never depend on the global RNG state the caller happens to be in. Prefer
+    passing the cached shared set from `eval_points.load_nll_eval_set` instead, which makes
+    the points identical across baselines rather than merely reproducible per script.
 
     Subtracting the truncated GMM's own entropy turns the NLL into a Monte Carlo estimate of
     KL(p_true || p_model) >= 0, which unlike raw NLL is comparable across constraints of
@@ -99,9 +103,7 @@ def constraint_nll(model, x_true_valid: torch.Tensor, mass: float, bounds=None,
     if x_true_valid.shape[0] == 0:
         return {"nll": float("nan"), "kld": float("nan")}
 
-    if x_true_valid.shape[0] > num_points:
-        idx = torch.randperm(x_true_valid.shape[0], device=x_true_valid.device)[:num_points]
-        x_true_valid = x_true_valid[idx]
+    x_true_valid = deterministic_subset(x_true_valid, num_points, subset_seed)
 
     log_p_model = exact_log_likelihood(model, x_true_valid, bounds=bounds, coeffs=coeffs, z=z,
                                        step_size=step_size, chunk_size=chunk_size, device=device)

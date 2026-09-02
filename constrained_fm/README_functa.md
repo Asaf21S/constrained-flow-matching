@@ -280,8 +280,6 @@ Read together: **the latent is worth roughly 50–100 valid samples in density t
 | models trained | 1 | 100 (one per constraint) | 1 |
 | handles an unseen constraint without retraining | yes | **no** | yes |
 
-Both conditioned models are zero-shot: each is trained once over the constraint family and handles an unseen constraint at inference with no retraining. They differ only in *how* the constraint arrives — as explicit parameters or as a latent code. The few-shot baseline is the odd one out, needing a fresh model and fresh valid samples per constraint.
-
 That places the latent between the two: it beats 2000 real samples on every point-cloud metric while losing to them on density, and loses to explicit coefficients on everything. Whatever the latent encodes captures the *shape* of the constrained distribution well and its *mass allocation* poorly — both comparisons converge on the same conclusion, and it is a density weakness rather than a geometric one.
 
 ### Qualitative

@@ -122,6 +122,10 @@ def generate_and_visualize_samples(model, x_true_pool=None, num_samples=50000, s
                                    degree=POLYNOMIAL_DEGREE, scale=PLANE_SCALE, cluster_points=True):
     """Generate samples from ``model`` and visualise intermediate steps.
 
+    Legacy exploratory helper for the 2D notebooks only. It is the one plotting entry point
+    that integrates an ODE; run-pipeline figures must go through
+    ``src/visualization/run_figures.py``, which reads saved artifacts instead.
+
     Parameters
     ----------
     model: torch.nn.Module

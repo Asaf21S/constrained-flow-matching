@@ -19,7 +19,7 @@ from matplotlib.ticker import ScalarFormatter
 from pathlib import Path
 
 from constrained_fm.src.consts import PLANE_SCALE, POLYNOMIAL_DEGREE
-from constrained_fm.src.metrics.functa_fidelity import decode_region, uniform_grid_points
+from constrained_fm.src.metrics.functa_fidelity import decode_region
 from constrained_fm.src.visualization.density import calculate_vmax
 from constrained_fm.src.visualization.scatter import assign_gaussian_to_points, visualize_single_step
 
@@ -137,23 +137,25 @@ def plot_final_samples_gallery(samples_per_shape, coeffs_per_shape, titles,
     return fig
 
 
-def plot_believed_vs_true(siren, samples_per_shape, z_per_shape, coeffs_per_shape, titles,
-                          grid_size: int = 200, degree: int = POLYNOMIAL_DEGREE,
-                          scale: float = PLANE_SCALE, device=None) -> Figure:
+def plot_believed_vs_true(samples_per_shape, believed_per_shape, coeffs_per_shape, titles,
+                          degree: int = POLYNOMIAL_DEGREE, scale: float = PLANE_SCALE) -> Figure:
     """Generated samples with the true P(x) = 0 curve (red) and the SIREN's decoded
-    boundary (blue) overlaid, one panel per shape."""
+    boundary (blue) overlaid, one panel per shape.
+
+    believed_per_shape holds the already-decoded SIREN(x, z) field on a square lattice
+    spanning [-scale, scale]^2, so this never touches the encoder.
+    """
     num_shapes = len(titles)
-    points = uniform_grid_points(grid_size=grid_size, scale=scale, device=device)
-    axis = torch.linspace(-scale, scale, grid_size).numpy()
-    xx, yy = np.meshgrid(axis, axis, indexing="ij")
 
     fig, axs = plt.subplots(1, num_shapes, figsize=(5 * num_shapes, 5), squeeze=False)
-    for ax, samples, z, C, title in zip(axs[0], samples_per_shape, z_per_shape,
-                                        coeffs_per_shape, titles):
+    for ax, samples, believed, C, title in zip(axs[0], samples_per_shape, believed_per_shape,
+                                               coeffs_per_shape, titles):
+        believed = np.asarray(believed)
+        axis = np.linspace(-scale, scale, believed.shape[0])
+        xx, yy = np.meshgrid(axis, axis, indexing="ij")
+
         visualize_single_step(samples, title="", ax=ax, cmap="Oranges",
                               coeffs=C, degree=degree, scale=scale)
-        believed = decode_region(siren, z, points, scale=scale)
-        believed = believed.reshape(grid_size, grid_size).cpu().numpy()
         ax.contour(xx, yy, believed, levels=[0.0], colors="blue", linewidths=2.0)
         ax.set_xlim(-scale, scale)
         ax.set_ylim(-scale, scale)

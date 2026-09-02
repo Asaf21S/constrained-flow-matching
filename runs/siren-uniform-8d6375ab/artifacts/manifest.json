@@ -1,0 +1,99 @@
+{
+  "arrays": {
+    "samples": {
+      "shape": [
+        100,
+        10000,
+        2
+      ],
+      "dtype": "float32"
+    },
+    "polynomials": {
+      "shape": [
+        100,
+        4,
+        4
+      ],
+      "dtype": "float32"
+    },
+    "latents": {
+      "shape": [
+        100,
+        512
+      ],
+      "dtype": "float32"
+    },
+    "believed_fields": {
+      "shape": [
+        4,
+        200,
+        200
+      ],
+      "dtype": "float32"
+    },
+    "believed_ids": {
+      "shape": [
+        4
+      ],
+      "dtype": "int32"
+    },
+    "trajectory": {
+      "shape": [
+        10,
+        50000,
+        2
+      ],
+      "dtype": "float32"
+    },
+    "trajectory_time": {
+      "shape": [
+        10
+      ],
+      "dtype": "float32"
+    },
+    "gallery_samples": {
+      "shape": [
+        5,
+        50000,
+        2
+      ],
+      "dtype": "float32"
+    },
+    "gallery_ids": {
+      "shape": [
+        5
+      ],
+      "dtype": "int32"
+    },
+    "likelihood": {
+      "shape": [
+        200,
+        200
+      ],
+      "dtype": "float32"
+    }
+  },
+  "written_at": "2026-09-02T19:41:56",
+  "git_commit": "3edf23f1ff26ec113b61d8f21ee712fcd58637af",
+  "run_id": "siren-uniform-8d6375ab",
+  "iteration": 15001,
+  "method": "functa",
+  "degree": 3,
+  "scale": 4.5,
+  "typical_id": 71,
+  "believed_grid_size": 200,
+  "likelihood_grid": 200,
+  "eval_config": {
+    "num_polys": 100,
+    "num_x0": 10000,
+    "step_size": 0.05,
+    "gmm_pool_size": 100000,
+    "iou_grid_size": 200,
+    "iou_mass_samples": 20000,
+    "likelihood_grid": 200,
+    "nll_points": 5000,
+    "num_vis_samples": 50000,
+    "num_worst_plots": 4,
+    "seed": 0
+  }
+}

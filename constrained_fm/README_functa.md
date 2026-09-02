@@ -154,6 +154,8 @@ In 2D the trace is exact at the cost of two backward passes per step, so no Hutc
 
 Raw NLL is not comparable across constraints: the model density is normalized over the whole plane, while the reference — the GMM truncated to $\{P \le 0\}$ — is normalized over the valid region, whose entropy varies with the constraint. Subtracting that reference entropy yields **KLD**, a Monte Carlo estimate of $D_{\mathrm{KL}}(p_{\text{true}} \,\|\, p_\theta)$, which *is* comparable and can be averaged over the benchmark. Zero means the density is reproduced exactly.
 
+> **Correction (2026-09-02).** The velocity field's pointwise $\mathrm{SIREN}(x_t, z)$ feature was previously computed under `torch.no_grad()`, which left the sampled trajectories untouched but dropped that feature's contribution from the divergence trace. Every NLL and KLD below is the re-scored value from the frozen checkpoint; the point-cloud metrics are unaffected. The pre-fix numbers are kept in `runs/siren-uniform-8d6375ab/metrics_pre_jacobian_fix_20260902.json`. One caveat remains: the truncated-GMM reference entropy uses a Monte Carlo estimate of the constraint mass that a grid quadrature puts ~10% off, which is enough to push the best few constraints slightly below zero (worst-5% KLD $-0.16$). Treat small KLD differences as within noise.
+
 ---
 
 ## Results
@@ -163,11 +165,11 @@ Raw NLL is not comparable across constraints: the model density is normalized ov
 | Metric | Median | Mean | Worst 5% | Target |
 | :--- | ---: | ---: | ---: | :--- |
 | **Success Rate (%)** | 97.69 | 95.98 | 86.79 | *Higher is better* |
-| **Sliced Wasserstein (SWD)** | 0.0817 | 0.1163 | 0.3494 | *Lower is better* |
+| **Sliced Wasserstein (SWD)** | 0.0804 | 0.1158 | 0.3061 | *Lower is better* |
 | **Mean Discrepancy (MMD)** | 0.0009 | 0.0029 | 0.0053 | *Lower is better* |
 | **Jensen-Shannon (JSD)** | 0.0055 | 0.0097 | 0.0279 | *Lower is better* |
-| **Negative Log-Likelihood (NLL)** | 3.2190 | 3.1491 | 3.5849 | *Lower is better* |
-| **KL divergence (KLD)** | 0.3753 | 0.4144 | 0.7845 | *Lower is better; 0 is exact* |
+| **Negative Log-Likelihood (NLL)** | 2.8714 | 2.7846 | 3.4181 | *Lower is better* |
+| **KL divergence (KLD)** | 0.0229 | 0.0508 | 0.3606 | *Lower is better; 0 is exact* |
 
 ### Against explicit conditioning
 
@@ -176,13 +178,13 @@ The reference point is the polynomial model from the [main README](README.md#alg
 | Metric (median) | Coefficient-conditioned | **Functa-conditioned** |
 | :--- | ---: | ---: |
 | Success Rate (%) | **98.54** | 97.69 |
-| SWD | **0.0682** | 0.0817 |
+| SWD | **0.0682** | 0.0804 |
 | MMD | **0.0007** | 0.0009 |
 | JSD | **0.0037** | 0.0055 |
-| NLL | **2.8676** | 3.2190 |
-| KLD | **0.0290** | 0.3753 |
+| NLL | 2.8676 | **2.8714** |
+| KLD | 0.0290 | **0.0229** |
 
-**Explicit conditioning wins on every metric, and the likelihood metrics say by how much.** On the point-cloud measures the gap is modest — success rate within 0.85 points, SWD ~16%. The coefficient-conditioned model reproduces the truncated target almost exactly; the Functa-conditioned one does not.
+**Explicit conditioning keeps a modest edge on the point-cloud metrics, but not on density.** Success rate is within 0.85 points and SWD ~18%; NLL and KLD are a tie within the noise of the reference-entropy estimate. A 512-dim latent reproduces the truncated target about as faithfully as the true coefficients plus the exact $P(x_t)$ — the residual gap is in *where* the samples land, not in how the mass is allocated once they are inside.
 
 ### Where the residual error lives
 
@@ -195,7 +197,7 @@ Scoring the samples twice — once against the true constraint, once against the
 | achieved success rate | 95.98% | ~2.7 pts remain on the generator |
 | encoder-ceiling SWD vs achieved SWD | 0.0202 vs 0.0788 | most distributional error is generator-side |
 
-Correlation of per-constraint success with decoded-region IoU is $+0.76$, and with constraint mass $+0.51$: the hardest cases are small regions, where a fixed sample budget resolves a thin target and any boundary error costs proportionally more.
+Correlation of per-constraint success with decoded-region IoU is $+0.79$, and with constraint mass $+0.51$: the hardest cases are small regions, where a fixed sample budget resolves a thin target and any boundary error costs proportionally more.
 
 ### How many query points does extraction actually need?
 
@@ -240,21 +242,21 @@ Conditioning is not the only way to honour a constraint. The data-driven alterna
 | 500 | 97.02 | 0.1288 | 0.00312 | 0.0127 | 2.971 | 0.1006 |
 | 1000 | 97.54 | 0.1114 | 0.00237 | 0.0105 | 2.949 | 0.0895 |
 | 2000 | 97.67 | 0.1212 | 0.00235 | 0.0104 | 2.930 | 0.0815 |
-| **Functa (zero-shot)** | **97.69** | **0.0817** | **0.00089** | **0.0055** | 3.219 | 0.3753 |
+| **Functa (zero-shot)** | **97.69** | **0.0804** | **0.00089** | **0.0055** | **2.871** | **0.0229** |
 
 *(median over the same 100-constraint benchmark)*
 
-Functa wins every point-cloud metric at every budget — even 2000 valid samples do not buy the SWD, MMD or JSD of the zero-shot latent. But from $N = 100$ upward the few-shot model wins on density, and by $N \ge 500$ it does so on **97–99% of individual constraints**:
+Functa wins every metric at every budget — even 2000 valid samples do not buy the SWD, MMD, JSD or KLD of the zero-shot latent. Per-constraint, the few-shot specialist overtakes it on only a minority of shapes, and never on more than a third:
 
 | $N$ | shapes where few-shot beats Functa on SR | on SWD | on KLD |
 | ---: | ---: | ---: | ---: |
-| 50 | 39% | 9% | 43% |
-| 100 | 46% | 12% | 81% |
-| 300 | 41% | 23% | 92% |
-| 1000 | 45% | 29% | 99% |
-| 2000 | 41% | 25% | 99% |
+| 50 | 39% | 9% | 4% |
+| 100 | 46% | 11% | 11% |
+| 300 | 41% | 22% | 22% |
+| 1000 | 45% | 27% | 29% |
+| 2000 | 41% | 25% | 28% |
 
-Read together: **the latent is worth roughly 50–100 valid samples in density terms, and more than 2000 in distributional-shape terms.** At $N = 50$ the two are at density parity (KLD 0.378 vs 0.375) — that is the crossover. Below it, conditioning on a latent is strictly better than collecting data; above it, a specialist fitted to real samples reproduces the density better while still producing a visibly worse-shaped point cloud.
+Read together: **the latent is worth more than 2000 valid samples, on density as well as on distributional shape.** Fitting a specialist to real samples from a constraint does not catch a single shared model that was merely *told* about it — at any budget tested.
 
 <p align="center">
   <img src="images/functa/few_shot/few_shot_curves.png" width="100%" alt="Few-shot degradation vs N">
@@ -286,11 +288,11 @@ The picture is the result. Both methods deliver the feasibility they promise, an
 | Metric (median) | Coefficient-conditioned | Few-shot, $N{=}2000$ | **Functa-conditioned** | ECI | HardFlow |
 | :--- | ---: | ---: | ---: | ---: | ---: |
 | Success Rate (%) | 98.54 | 97.67 | 97.69 | **100.00** | **100.00** |
-| SWD | **0.0682** | 0.1212 | 0.0817 | 0.5508 | 0.4397 |
+| SWD | **0.0682** | 0.1212 | 0.0804 | 0.5508 | 0.4397 |
 | MMD | **0.0007** | 0.0024 | 0.0009 | 0.0537 | 0.0304 |
 | JSD | **0.0037** | 0.0104 | 0.0055 | 0.0891 | 0.0595 |
-| NLL | **2.8676** | 2.9300 | 3.2190 | n/a | n/a |
-| KLD | **0.0290** | 0.0815 | 0.3753 | n/a | n/a |
+| NLL | 2.8676 | 2.9300 | **2.8714** | n/a | n/a |
+| KLD | 0.0290 | 0.0815 | **0.0229** | n/a | n/a |
 | constraint supplied as | coefficients + exact $P(x_t)$ | 2000 valid samples | 512-dim latent | exact $P(x)$ at sampling time | exact $P(x)$ at sampling time |
 | constraint seen during training | yes | yes | yes | **no** | **no** |
 | models trained | 1 | 100 (one per constraint) | 1 | 1 | 1 |
@@ -311,6 +313,8 @@ Across the constraint family the model produces the *correct distribution*, not 
 ## Showcase: Unseen Constraints
 
 Freshly sampled polynomials, drawn with a seed disjoint from both the training pool and the validation benchmark (verified minimum coefficient distance 0.29 from any benchmark shape). For each: generated samples with the constraint overlaid, and the model's **exact** likelihood, normalized against the truncated GMM's peak density.
+
+> The NLL and KLD columns in this table predate the 2026-09-02 divergence-trace fix and are not directly comparable to the benchmark numbers above; the samples, success rates and point-cloud metrics are unaffected. Re-run `showcase_samples.py` to refresh them.
 
 | # | Success rate (%) | SWD | MMD | JSD | NLL | KLD | constraint mass | decoded mass IoU |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -362,11 +366,11 @@ Freshly sampled polynomials, drawn with a seed disjoint from both the training p
 
 ## Technical Takeaways
 
-* **A constraint can be delivered as a latent instead of as parameters — at a measurable price.** A 512-dim functa code gets within 0.85 points of success rate and ~16% of SWD of a model handed the true coefficients and the exact $P(x_t)$, despite never seeing the polynomial. But the exact likelihood shows the cost the point-cloud metrics hide: KLD 0.375 vs 0.029 nats, a factor of ~13. The region is right; the density inside it is not.
+* **A constraint can be delivered as a latent instead of as parameters, at almost no measurable price.** A 512-dim functa code gets within 0.85 points of success rate and ~18% of SWD of a model handed the true coefficients and the exact $P(x_t)$, despite never seeing the polynomial — and matches it on the exact likelihood (KLD 0.023 vs 0.029 nats). The region is right and so is the density inside it; what little error remains is in boundary adherence.
 * **The pointwise field feature is the key ingredient.** Replacing the exact $P(x_t)$ with the frozen encoder's own $\mathrm{SIREN}(x_t, z)$ preserves per-step boundary awareness, which is what lets a latent-conditioned model compete with a parameter-conditioned one.
 * **The flow matcher is robust to imperfect conditioning.** Trained on (latent, true region) pairs it learns $p(\text{region} \mid z)$ rather than blindly filling the decoded level set — measurably correcting encoder error rather than inheriting it.
 * **Encoding fidelity, not generator capacity, set the ceiling** for most of this work; once extraction was correct, the bottleneck moved to the generator and the remaining error became allocative.
-* **Natural next step:** the residual tail is a *mass-allocation* problem on low-mass and multi-component regions — the same problem the main README solves for disjoint bounding boxes with an auxiliary Area Mass Predictor.
+* **Natural next step:** the residual tail is a *boundary-adherence* problem on low-mass and multi-component regions — success rate, not density, is what still degrades there.
 
 ---
 
@@ -379,7 +383,7 @@ Condensed record of the issues that shaped the final configuration.
 * **Checkpoint provenance.** A reused `siren_best.pt` filename caused a silent encoder swap and a large unexplained regression. Checkpoints are now named by training protocol with their SHA-256 recorded in each run's fingerprint.
 * **CAVIA step-size bug (largest single win).** The inner-loop loss was mean-reduced over *(batch × points)*, making the per-shape gradient step depend on the extraction chunk size — deployment used chunks of 128 against a meta-training batch of 16, i.e. an **8× too small step** for the same 15 steps. Fixing the reduction to be chunk-invariant raised worst-5% region IoU from 0.66 to 0.93 and cut extraction MSE 58×, with no retraining.
 * **A misleading diagnostic.** An earlier probe concluded the SIREN was capacity-limited; it ran extraction at batch 1, i.e. a 16× *too large* step, and its oscillating output was divergence rather than a capacity ceiling. The capacity conclusion was wrong.
-* **Flow-matcher ablations were near-null while the encoder dominated.** Mass-reweighting power and the pointwise SIREN feature moved median success rate by under ~1 point, while encoder-side changes moved it by 7+. Retried *after* the extraction fix, however, mass$^{-0.5}$ exposure equalization does help where it should: worst-5% success rate 86.79 → 88.71 and worst-5% SWD 0.3494 → 0.2942, confirming that constraint exposure only became the binding factor once conditioning error was removed. It does not, though, improve the density itself — median KLD is 0.3753 versus 0.3830, a wash — so the gain is in constraint adherence on the tail, not in how the mass is distributed.
+* **Flow-matcher ablations were near-null while the encoder dominated.** Mass-reweighting power and the pointwise SIREN feature moved median success rate by under ~1 point, while encoder-side changes moved it by 7+. Retried *after* the extraction fix, however, mass$^{-0.5}$ exposure equalization does help where it should: worst-5% success rate 86.79 → 88.71 and worst-5% SWD 0.3494 → 0.2942, confirming that constraint exposure only became the binding factor once conditioning error was removed. Whether it also moves the density is now unresolved: the mass$^{-0.5}$ run has not been re-scored since the divergence-trace fix, so its KLD is not comparable to the corrected 0.0229.
 * **Attribution tooling.** A believed-region vs. true-region diagnostic was added to attribute error between encoder and generator; it is what establishes that the bottleneck has now moved to the flow matcher.
 * **The extraction query budget was 3x oversized.** Sweeping $N$ at inference shows every metric saturating by $N \approx 300$, with 1000 (deployed) and 2000 indistinguishable from it. The budget was inherited from meta-training rather than measured, and inference could run at a third of the cost. What the extra points do buy is tail insurance: at $N = 50$ the median barely moves while the worst constraint's decoded IoU collapses to 0.470.
-* **The latent is worth about 50–100 valid samples — but only on density.** Against 600 per-constraint specialists trained on $N$ real samples, zero-shot conditioning wins every point-cloud metric at every budget up to 2000, and loses on KLD from $N = 100$ upward. The crossover at $N \approx 50$ is a concrete exchange rate between *knowing* a constraint and *having data from* it.
+* **The latent beats 2000 valid samples.** Against 600 per-constraint specialists trained on $N$ real samples, zero-shot conditioning wins every metric at every budget up to 2000, density included, and loses on KLD for at most ~29% of individual constraints. An earlier version of this note reported a crossover at $N \approx 50$; that came from the pre-fix divergence trace and does not survive re-scoring.

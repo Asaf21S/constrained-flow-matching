@@ -1,0 +1,35 @@
+{
+  "run_id": "feasibility_fidelity-cae89da7",
+  "poly_id": 12,
+  "evaluated_at": "2026-09-08T13:24:54",
+  "num_samples": 100000,
+  "metric_samples": 10000,
+  "functa_source": "resample",
+  "scored_against": "rejection-sampled truncated GMM from the shared reference pool",
+  "metrics": {
+    "gt": {
+      "swd": 0.0192107624240029,
+      "mmd": 0.00012737512588500977,
+      "jsd": 0.0014066285879063684,
+      "success_rate": 100.0
+    },
+    "eci": {
+      "swd": 0.5406300416052174,
+      "mmd": 0.09517541527748108,
+      "jsd": 0.16353874182667627,
+      "success_rate": 100.0
+    },
+    "hardflow": {
+      "swd": 0.7378705511370802,
+      "mmd": 0.10705766081809998,
+      "jsd": 0.1582265985249768,
+      "success_rate": 100.0
+    },
+    "functa": {
+      "swd": 0.06553957871639601,
+      "mmd": 0.0011299848556518555,
+      "jsd": 0.005050429220417086,
+      "success_rate": 96.3699996471405
+    }
+  }
+}

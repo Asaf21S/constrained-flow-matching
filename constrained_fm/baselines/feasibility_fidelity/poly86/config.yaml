@@ -1,5 +1,5 @@
 method: feasibility_fidelity
-run_id: feasibility_fidelity-a0e396c7
+run_id: feasibility_fidelity-23b26c2e
 settings:
   bins: null
   boundary_profile: true
@@ -20,14 +20,15 @@ settings:
   hidden_dim: 1024
   margin: 0.001
   metric_keys: null
-  metric_samples: 10000
+  metric_samples: 100000
+  mmd_chunk: 2048
   norm: null
   num_blocks: 4
   num_samples: 100000
   panels_3:
   - gt
   - eci
-  - functa
+  - hardflow
   panels_4:
   - gt
   - eci
@@ -38,7 +39,9 @@ settings:
   scale: 4.5
   seed: 0
   steps: 100
-  style: dark
+  style:
+  - light
+  - dark
   time_dim: 128
   vmax_mode: null
 base_ckpt: constrained_fm/baselines/base_fm/ckpt.pt

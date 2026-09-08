@@ -15,16 +15,18 @@ visibly noisier than its neighbours; ``--functa-source cache`` instead reads the
 already in that run's artifact store. Either way the constraint is cross-checked against the
 validation polynomial, so the four panels are guaranteed to describe the same region.
 
-Panels are drawn from ``--num-samples`` points but scored on a ``--metric-samples`` prefix, so
-the captions stay comparable to the numbers in the benchmark tables while the density maps
-get enough points to look like densities rather than confetti.
+All four panels are drawn from the same number of points (``--num-samples``) with the same
+``np.histogram2d`` -> ``imshow`` path, and scored on that same number against an independent
+rejection-sampled ground-truth set of equal size. The ground-truth panel is therefore scored
+GT-set-1 against GT-set-2, which is what a distributional metric means, and its SWD/MMD is
+the finite-sample noise floor the other three should be read against.
 
 Everything drawn is also written to ``<outdir>/poly<id>/artifacts/``, so ``--plot-only`` restyles
 the figure with no GPU and no sampling. ``--style`` takes several names at once and drops each
 figure set into its own subfolder of ``--figure-dir``.
 
     sbatch scripts/run_feasibility_fidelity.sh
-    sbatch scripts/run_feasibility_fidelity.sh --poly-id 13 --style light dark
+    sbatch scripts/run_feasibility_fidelity.sh --poly-id 13 --style light log
     python -m constrained_fm.scripts.plot_feasibility_fidelity --plot-only --style log
 """
 
@@ -83,9 +85,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--poly-id", type=int, default=DEFAULT_POLY_ID,
                         help="index into the validation polynomial set")
     parser.add_argument("--num-samples", type=int, default=100000,
-                        help="points per panel; the density maps need far more than the metrics")
-    parser.add_argument("--metric-samples", type=int, default=10000,
-                        help="prefix of each panel actually scored, matching the benchmark tables")
+                        help="points per panel; identical for all four methods")
+    parser.add_argument("--metric-samples", type=int, default=None,
+                        help="points scored per method, and the size of the independent "
+                             "ground-truth reference set; defaults to --num-samples")
 
     parser.add_argument("--ckpt", default=BASE_CKPT)
     parser.add_argument("--functa-run", default=FUNCTA_RUN,
@@ -104,7 +107,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--chunk-size", type=int, default=DEFAULT_CHUNK)
 
     parser.add_argument("--gmm-pool-size", type=int, default=100000,
-                        help="reference pool the distributional metrics are scored against")
+                        help="oversampling pool size for each rejection-sampling batch")
+    parser.add_argument("--mmd-chunk", type=int, default=2048,
+                        help="rows per block of the MMD kernel matrix")
     parser.add_argument("--degree", type=int, default=POLYNOMIAL_DEGREE)
     parser.add_argument("--scale", type=float, default=PLANE_SCALE)
     parser.add_argument("--seed", type=int, default=0)
@@ -113,7 +118,7 @@ def build_parser() -> argparse.ArgumentParser:
                         help="columns of the 1x3 figure")
     parser.add_argument("--panels-4", nargs=4, default=list(METHODS), choices=METHODS,
                         help="columns of the 1x4 figure")
-    parser.add_argument("--style", nargs="+", default=["dark"], choices=sorted(feas.STYLE_PRESETS),
+    parser.add_argument("--style", nargs="+", default=["light"], choices=sorted(feas.STYLE_PRESETS),
                         help="one figure set per style, each in its own subfolder")
     parser.add_argument("--bins", type=int, default=None, help="override histogram resolution")
     parser.add_argument("--cmap", default=None)
@@ -167,14 +172,31 @@ def load_base_model(args, device: torch.device) -> UnconstrainedFM:
 
 def rejection_sample(coeffs: torch.Tensor, num_samples: int, args,
                      device: torch.device) -> torch.Tensor:
-    """Draws from the GMM and keeps only {P(x) <= 0}: the exact truncated target."""
+    """Draws from the GMM and keeps only {P(x) <= 0}: the exact truncated target.
+
+    Successive calls consume fresh draws, so calling it twice yields two independent sets.
+    """
+    batch = max(args.gmm_pool_size, num_samples * 2)
     kept, collected = [], 0
     while collected < num_samples:
-        pool, _ = get_points(max(num_samples * 4, 50000), device=device)
+        pool, _ = get_points(batch, device=device)
         inside = pool[true_region_mask(coeffs, pool, degree=args.degree, scale=args.scale)]
         kept.append(inside)
         collected += inside.shape[0]
     return torch.cat(kept, dim=0)[:num_samples]
+
+
+def source_noise(val_set, num_samples: int, device: torch.device) -> torch.Tensor:
+    """Flow-matching start points, extended past the validation set's stored 10k if needed.
+
+    ``val_set["x0"]`` holds only ``n_train_samples_x0`` rows, so slicing it for a larger
+    request silently returns fewer points and leaves the generated panels sparser than the
+    rejection-sampled one. The stored prefix is reused so the first 10k match the benchmark.
+    """
+    x0 = val_set["x0"].to(device)
+    if x0.shape[0] < num_samples:
+        x0 = torch.cat([x0, torch.randn(num_samples - x0.shape[0], 2, device=device)], dim=0)
+    return x0[:num_samples]
 
 
 def load_functa_samples(args, coeffs: torch.Tensor) -> np.ndarray:
@@ -212,19 +234,54 @@ def sample_functa(args, val_polys: torch.Tensor, x0: torch.Tensor,
                                     device=device)
 
 
-def score(samples, gmm_pool: torch.Tensor, coeffs: torch.Tensor, args,
-          device: torch.device) -> dict[str, float]:
-    """Success rate plus SWD / MMD / JSD against the rejection-sampled truncated target.
+def rbf_mmd(x: torch.Tensor, y: torch.Tensor, gamma: float = 1.0,
+            chunk: int = 2048, k_yy: float | None = None) -> tuple[float, float]:
+    """Biased RBF-kernel MMD^2 over *all* points of both sets.
+
+    ``metrics.distributional.compute_mmd`` caps both sets at 5000 points with an unseeded
+    draw, which neither uses the N the figure claims nor returns the same number twice. The
+    kernel means are accumulated blockwise here instead, so 100k x 100k fits in memory.
+    Returns the MMD and the reusable E[k(y, y')] term.
+    """
+    def mean_kernel(a: torch.Tensor, b: torch.Tensor) -> float:
+        total = 0.0
+        for i in range(0, a.shape[0], chunk):
+            d2 = torch.cdist(a[i:i + chunk], b).pow_(2)
+            total += float(d2.mul_(-gamma).exp_().sum(dtype=torch.float64))
+        return total / (a.shape[0] * b.shape[0])
+
+    if k_yy is None:
+        k_yy = mean_kernel(y, y)
+    mmd = mean_kernel(x, x) + k_yy - 2.0 * mean_kernel(x, y)
+    return max(0.0, mmd), k_yy
+
+
+def score(samples, gt_reference: torch.Tensor, coeffs: torch.Tensor, args,
+          device: torch.device, k_yy: float | None = None) -> tuple[dict[str, float], float]:
+    """Success rate plus SWD / MMD against an independent rejection-sampled reference.
+
+    ``gt_reference`` is a second, independently drawn set of exactly ``--metric-samples``
+    points from the same truncated target. The ground-truth panel is therefore scored the
+    same way as every other panel -- GT set 1 against GT set 2 -- which is the only reading
+    of a distributional metric that makes sense, and gives the finite-sample noise floor the
+    other three should be compared against.
 
     Scored on exactly the points the figure draws, so a caption can never disagree with its
     own panel -- the stored benchmark numbers came from a different seed and sample count.
     """
     subset = feas.to_numpy(samples)[:args.metric_samples]
     tensor = torch.as_tensor(subset, dtype=torch.float32, device=device)
-    metrics = evaluate_single_configuration(tensor, x_true_pool=gmm_pool, coeffs=coeffs,
+    if tensor.shape[0] != gt_reference.shape[0]:
+        raise ValueError(f"scoring {tensor.shape[0]} points against {gt_reference.shape[0]} "
+                         f"reference points; both sets must hold --metric-samples")
+
+    metrics = evaluate_single_configuration(tensor, x_true_pool=gt_reference, coeffs=coeffs,
                                             degree=args.degree, scale=args.scale,
                                             device=device)
-    return {key: float(value) for key, value in metrics.items()}
+    mmd, k_yy = rbf_mmd(tensor, gt_reference, chunk=args.mmd_chunk, k_yy=k_yy)
+    return {"success_rate": float(metrics["success_rate"]),
+            "swd": float(metrics["swd"]),
+            "mmd": mmd}, k_yy
 
 
 def render(samples_by_method: dict[str, np.ndarray], metrics_by_method: dict[str, dict],
@@ -279,6 +336,8 @@ def replot(args) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.metric_samples is None:
+        args.metric_samples = args.num_samples
     if args.plot_only:
         return replot(args)
 
@@ -288,8 +347,7 @@ def main(argv: list[str] | None = None) -> int:
     val_set = get_validation_set(device=device)
     val_polys = val_set["polynomials"][:100].to(device)
     coeffs = val_polys[args.poly_id]
-    x0 = val_set["x0"][:args.num_samples].to(device)
-    gmm_pool, _ = get_points(args.gmm_pool_size, device=device)
+    x0 = source_noise(val_set, args.num_samples, device)
 
     model = load_base_model(args, device)
     print(f"device {device} | poly {args.poly_id} | {args.num_samples} samples per panel")
@@ -313,7 +371,19 @@ def main(argv: list[str] | None = None) -> int:
     else:
         samples["functa"] = load_functa_samples(args, coeffs)
 
-    metrics = {m: score(s, gmm_pool, coeffs, args, device) for m, s in samples.items()}
+    counts = {m: int(s.shape[0]) for m, s in samples.items()}
+    if len(set(counts.values())) != 1:
+        raise ValueError(f"panels must be drawn from equal sample counts, got {counts}")
+
+    # Second, independent draw from the same truncated target: this is what the GT panel is
+    # scored against, so its SWD/MMD measure sampling noise rather than a set against itself.
+    gt_reference = rejection_sample(coeffs, args.metric_samples, args, device)
+    print(f"scoring {args.metric_samples} points per method against an independent "
+          f"{gt_reference.shape[0]}-point ground-truth set")
+
+    metrics, k_yy = {}, None
+    for method, points in samples.items():
+        metrics[method], k_yy = score(points, gt_reference, coeffs, args, device, k_yy=k_yy)
 
     root = artifact_root(args)
     run_id = pin_baseline_run(root, "feasibility_fidelity", args,
@@ -329,14 +399,15 @@ def main(argv: list[str] | None = None) -> int:
         "num_samples": args.num_samples,
         "metric_samples": args.metric_samples,
         "functa_source": args.functa_source,
-        "scored_against": "rejection-sampled truncated GMM from the shared reference pool",
+        "scored_against": (f"an independent {args.metric_samples}-point rejection-sampled draw "
+                           f"from the same truncated GMM; MMD uses every point of both sets"),
         "metrics": metrics,
     }, indent=2))
 
     print(f"\n### {run_id}")
     for method in METHODS:
         print(f"{METHOD_LABELS[method].splitlines()[0]:<16} "
-              f"{feas.format_metrics(metrics[method], ('success_rate', 'swd', 'mmd', 'jsd'))}")
+              f"{feas.format_metrics(metrics[method], ('success_rate', 'swd', 'mmd'))}")
 
     written = render(samples, metrics, coeffs, args)
     print("\n".join(f"wrote {p}" for p in written))

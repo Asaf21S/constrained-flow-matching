@@ -1,35 +1,31 @@
 {
-  "run_id": "feasibility_fidelity-cae89da7",
+  "run_id": "feasibility_fidelity-a43f1dc8",
   "poly_id": 12,
-  "evaluated_at": "2026-09-08T13:24:54",
+  "evaluated_at": "2026-09-08T19:17:10",
   "num_samples": 100000,
-  "metric_samples": 10000,
+  "metric_samples": 100000,
   "functa_source": "resample",
-  "scored_against": "rejection-sampled truncated GMM from the shared reference pool",
+  "scored_against": "an independent 100000-point rejection-sampled draw from the same truncated GMM; MMD uses every point of both sets",
   "metrics": {
     "gt": {
-      "swd": 0.0192107624240029,
-      "mmd": 0.00012737512588500977,
-      "jsd": 0.0014066285879063684,
-      "success_rate": 100.0
+      "success_rate": 100.0,
+      "swd": 0.006641443219849953,
+      "mmd": 1.3106179647059957e-05
     },
     "eci": {
-      "swd": 0.5406300416052174,
-      "mmd": 0.09517541527748108,
-      "jsd": 0.16353874182667627,
-      "success_rate": 100.0
+      "success_rate": 100.0,
+      "swd": 0.5420077809028165,
+      "mmd": 0.09393206845122765
     },
     "hardflow": {
-      "swd": 0.7378705511370802,
-      "mmd": 0.10705766081809998,
-      "jsd": 0.1582265985249768,
-      "success_rate": 100.0
+      "success_rate": 99.9959945678711,
+      "swd": 0.7679215793097106,
+      "mmd": 0.10402964131966941
     },
     "functa": {
-      "swd": 0.06553957871639601,
-      "mmd": 0.0011299848556518555,
-      "jsd": 0.005050429220417086,
-      "success_rate": 96.3699996471405
+      "success_rate": 96.40499949455261,
+      "swd": 0.054789503389699304,
+      "mmd": 0.00036956362551454625
     }
   }
 }

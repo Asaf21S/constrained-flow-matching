@@ -16,29 +16,29 @@
     },
     "samples_eci": {
       "shape": [
-        10000,
+        100000,
         2
       ],
       "dtype": "float32"
     },
     "samples_hardflow": {
       "shape": [
-        10000,
+        100000,
         2
       ],
       "dtype": "float32"
     },
     "samples_functa": {
       "shape": [
-        10000,
+        100000,
         2
       ],
       "dtype": "float32"
     }
   },
-  "written_at": "2026-09-08T13:25:03",
-  "git_commit": "2bfbaa41e10439ae0bec9c2e58985f871b0d7059",
-  "run_id": "feasibility_fidelity-5244615b",
+  "written_at": "2026-09-08T19:17:04",
+  "git_commit": "f3356ee1054408afd2880e6faf31d2693b334dfa",
+  "run_id": "feasibility_fidelity-6cdc00dc",
   "poly_id": 13,
   "degree": 3,
   "scale": 4.5,

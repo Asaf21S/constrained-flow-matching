@@ -1,5 +1,5 @@
 method: feasibility_fidelity
-run_id: feasibility_fidelity-caa28631
+run_id: feasibility_fidelity-49c2a507
 settings:
   bins: null
   boundary_profile: true
@@ -20,7 +20,8 @@ settings:
   hidden_dim: 1024
   margin: 0.001
   metric_keys: null
-  metric_samples: 10000
+  metric_samples: 100000
+  mmd_chunk: 2048
   norm: null
   num_blocks: 4
   num_samples: 100000

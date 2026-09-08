@@ -2,7 +2,7 @@
 #SBATCH --job-name=feas_fid
 #SBATCH --output=/users/rosenbaum/asolomiak/constrained-flow-matching/logs/feas_fid_%j.out
 #SBATCH --error=/users/rosenbaum/asolomiak/constrained-flow-matching/logs/feas_fid_%j.err
-#SBATCH --time=00:40:00
+#SBATCH --time=01:30:00
 #SBATCH --partition=dlc
 #SBATCH --gpus-per-node=1
 #SBATCH --cpus-per-task=4
@@ -17,7 +17,7 @@
 # constrained_fm/images/thesis_pool/feasibility_fidelity/<style>/. Restyling needs no GPU:
 #
 #   sbatch scripts/run_feasibility_fidelity.sh
-#   sbatch scripts/run_feasibility_fidelity.sh --poly-id 13 --style light dark --boundary-profile
+#   sbatch scripts/run_feasibility_fidelity.sh --poly-id 13 --style light log --boundary-profile
 #   python -m constrained_fm.scripts.plot_feasibility_fidelity --plot-only --poly-id 13 --style log
 
 set -eo pipefail

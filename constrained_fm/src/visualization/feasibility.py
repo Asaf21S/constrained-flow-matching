@@ -30,7 +30,9 @@ from constrained_fm.src.geometry.polynomials import compute_poly_features, evalu
 METRIC_FORMATS: dict[str, tuple[str, str]] = {
     "success_rate": ("SR", "{:.1f}%"),
     "swd": ("SWD", "{:.3f}"),
-    "mmd": ("MMD", "{:.4f}"),
+    # Spans ~4 decades between the GT noise floor and a projection sampler; fixed-point
+    # rounds the noise floor to 0.0000 and throws away the reference the panel exists to set.
+    "mmd": ("MMD", "{:.1e}"),
     "jsd": ("JSD", "{:.4f}"),
     "nll": ("NLL", "{:.3f}"),
     "kld": ("KLD", "{:.4f}"),
@@ -42,22 +44,28 @@ class FeasibilityStyle:
     """Every knob the figure exposes. Construct one, or start from :data:`STYLE_PRESETS`."""
 
     # --- density field ---
+    # Every panel is the same np.histogram2d -> imshow path. Bin count is a real parameter of
+    # the comparison: too fine and a sampler that moved half its mass onto the wall renders as
+    # scatter rather than as a density, purely because its interior thinned out.
     bins: int = 180
-    cmap: str = "magma"
+    cmap: str = "Oranges"
     norm: str = "power"          # linear | power | log
-    gamma: float = 0.45          # PowerNorm exponent; < 1 lifts the low-density interior
+    gamma: float = 0.6           # PowerNorm exponent; < 1 lifts the low-density interior
     vmax_quantile: float = 0.995
     vmax_mode: str = "reference"  # reference (panel 0) | shared (all panels) | per_panel
+    background: str | None = None  # panel colour where no sample landed; default is cmap(0)
+    density_zorder: float = 2.0
 
     # --- constraint boundary overlay ---
-    # Thin and widely dashed on purpose: an opaque line drawn on top of the boundary hides
-    # the very pile-up the figure exists to show, so the wall stays visible in the gaps.
-    boundary_color: str = "#22d3ee"
+    # Drawn over the density but semi-transparent, so the line reads as an annotation rather
+    # than as part of the distribution while the pile-up underneath still shows through it.
+    boundary_color: str = "#0e7490"
     boundary_linestyle: tuple = (0, (7, 7))
-    boundary_linewidth: float = 1.3
-    boundary_alpha: float = 0.95
+    boundary_linewidth: float = 1.6
+    boundary_alpha: float = 0.6
     boundary_resolution: int = 400
     boundary_label: str = "constraint boundary  $P(x) = 0$"
+    boundary_zorder: float = 3.0
 
     # --- layout / typography ---
     panel_size: float = 3.1
@@ -70,18 +78,21 @@ class FeasibilityStyle:
 
     # --- captions ---
     show_metrics: bool = True
-    metric_keys: Sequence[str] = ("success_rate", "swd", "jsd")
+    metric_keys: Sequence[str] = ("success_rate", "swd", "mmd")
     metric_separator: str = "  "
 
     # --- optional boundary-distance profile row ---
-    profile_bins: int = 121
-    profile_span: float = 0.6     # plot |signed distance| <= this, in plane units
+    profile_bins: int = 200
+    profile_span: float | None = None  # None spans the pooled range of all panels
+    # P/||grad P|| is only a distance near the boundary; where the gradient nearly vanishes it
+    # diverges, and a handful of such points would otherwise set the axis for every panel.
+    profile_range_quantile: float = 0.999
     profile_ratio: float = 0.42   # height of the profile row relative to a map panel
     profile_color: str = "#c2410c"
     profile_fill_alpha: float = 0.25
     profile_share_y: bool = True  # without this a 30x spike and a 1x bump look identical
-    profile_headroom: float = 1.18
-    profile_annotate_ratio: float = 3.0  # label the peak only this far above the shared limit
+    profile_headroom: float = 1.35
+    profile_annotate_ratio: float = 1.05  # report the peak once it is clipped by the shared limit
     profile_ylabel: str = "density"
     profile_xlabel: str = "signed distance to boundary"
 
@@ -91,17 +102,14 @@ class FeasibilityStyle:
 
 
 STYLE_PRESETS: dict[str, FeasibilityStyle] = {
-    # Perceptually-uniform map on its own black zero-level: the wall reads as a bright filament.
-    "dark": FeasibilityStyle(),
-    # Matches the existing repo figures (white background, sequential warm map, red boundary).
-    "light": FeasibilityStyle(cmap="Oranges", boundary_color="#b91c1c", text_color="black",
-                              norm="power", gamma=0.6),
+    # White background, sequential warm map, teal boundary that cannot be confused with it.
+    "light": FeasibilityStyle(),
     # Log density; use when the pile-up is several orders of magnitude above the interior.
-    "log": FeasibilityStyle(norm="log", cmap="magma"),
+    "log": FeasibilityStyle(norm="log"),
 }
 
 
-def get_style(name: str = "dark", **overrides: Any) -> FeasibilityStyle:
+def get_style(name: str = "light", **overrides: Any) -> FeasibilityStyle:
     """Named preset with optional field overrides, e.g. ``get_style("light", bins=400)``."""
     if name not in STYLE_PRESETS:
         raise ValueError(f"unknown style '{name}'; choose from {sorted(STYLE_PRESETS)}")
@@ -127,7 +135,7 @@ def to_numpy(data: Any) -> np.ndarray:
 
 def format_metrics(metrics: Mapping[str, float] | None, keys: Sequence[str],
                    separator: str = "   ") -> str:
-    """Compact caption such as ``SR 100.0%   SWD 0.689   JSD 0.1450``."""
+    """Compact caption such as ``SR 100.0%   SWD 0.689   MMD 0.1108``."""
     if not metrics:
         return ""
     parts = []
@@ -218,16 +226,23 @@ def _make_norm(vmax: float, style: FeasibilityStyle) -> Normalize:
 
 def _draw_map(ax, H: np.ndarray, vmax: float, contour, style: FeasibilityStyle,
               scale: float) -> None:
-    field = np.clip(H, vmax * 1e-3, None) if style.norm == "log" else H
-    # imshow over hist2d: nearest-neighbour resampling keeps the one-bin-wide wall one bin
-    # wide, and empty bins take the colormap's zero colour instead of the figure background.
-    ax.imshow(field.T, origin="lower", extent=(-scale, scale, -scale, scale),
-              cmap=style.cmap, norm=_make_norm(vmax, style), interpolation="nearest")
+    cmap = plt.get_cmap(style.cmap).copy()
+    cmap.set_bad(alpha=0.0)
+    ax.set_facecolor(style.background if style.background is not None else cmap(0.0))
 
     gx, gy, P = contour
     ax.contour(gx, gy, P, levels=[0.0], colors=style.boundary_color,
                linewidths=style.boundary_linewidth, linestyles=[style.boundary_linestyle],
-               alpha=style.boundary_alpha)
+               alpha=style.boundary_alpha, zorder=style.boundary_zorder)
+
+    field = np.clip(H, vmax * 1e-3, None) if style.norm == "log" else H
+    # Empty bins are masked, not zero-valued, so the boundary line underneath stays visible
+    # wherever no sample landed and is painted over wherever mass did land.
+    # imshow over hist2d: nearest-neighbour resampling keeps the one-bin-wide wall one bin wide.
+    ax.imshow(np.ma.masked_where(H <= 0.0, field).T, origin="lower",
+              extent=(-scale, scale, -scale, scale), cmap=cmap,
+              norm=_make_norm(vmax, style), interpolation="nearest",
+              zorder=style.density_zorder)
 
     ax.set_xlim(-scale, scale)
     ax.set_ylim(-scale, scale)
@@ -255,7 +270,7 @@ def plot_feasibility_row(panels: Sequence[Panel], coeffs: torch.Tensor,
         show_profile: append a second row histogramming the signed distance to the
             boundary, which turns the visual pile-up into a readable spike.
     """
-    style = style or STYLE_PRESETS["dark"]
+    style = style or STYLE_PRESETS["light"]
     num = len(panels)
     contour = polynomial_grid(coeffs, resolution=style.boundary_resolution,
                               degree=degree, scale=scale)
@@ -263,9 +278,13 @@ def plot_feasibility_row(panels: Sequence[Panel], coeffs: torch.Tensor,
     hists = [_histogram(p.samples, style.bins, scale) for p in panels]
     vmaxes = _resolve_vmax(hists, style)
 
-    profiles, profile_top = [], None
+    profiles, profile_top, profile_xlim = [], None, None
     if show_profile:
-        profiles = [_profile_data(p, coeffs, style, degree, scale) for p in panels]
+        distances = [signed_boundary_distance(p.samples, coeffs, degree=degree, scale=scale)
+                     for p in panels]
+        edges = _profile_edges(distances, style)
+        profile_xlim = (float(edges[0]), float(edges[-1]))
+        profiles = [_profile_data(d, edges, style) for d in distances]
         if style.profile_share_y:
             profile_top = profiles[0]["peak"] * style.profile_headroom
 
@@ -305,32 +324,49 @@ def plot_feasibility_row(panels: Sequence[Panel], coeffs: torch.Tensor,
 
         if show_profile:
             _draw_profile(fig.add_subplot(gs[1, col]), profiles[col], style, profile_top,
-                          first=col == 0)
+                          profile_xlim, first=col == 0)
 
     fig.tight_layout()
     return fig
 
 
-def _profile_data(panel: Panel, coeffs: torch.Tensor, style: FeasibilityStyle,
-                  degree: int, scale: float) -> dict[str, Any]:
-    distance = signed_boundary_distance(panel.samples, coeffs, degree=degree, scale=scale)
-    edges = np.linspace(-style.profile_span, style.profile_span, style.profile_bins + 1)
-    counts, _ = np.histogram(distance, bins=edges, density=True)
+def _profile_edges(distances: Sequence[np.ndarray], style: FeasibilityStyle) -> np.ndarray:
+    """Shared bin edges. Spanning the whole distribution keeps the wall in context: the spike
+    is only meaningful next to the bulk of the mass it was taken from."""
+    if style.profile_span is not None:
+        lo, hi = -style.profile_span, style.profile_span
+    else:
+        pooled = np.concatenate([np.asarray(d).ravel() for d in distances])
+        tail = 1.0 - style.profile_range_quantile
+        lo = float(np.quantile(pooled, tail))
+        hi = float(np.quantile(pooled, style.profile_range_quantile))
+        pad = 0.02 * max(hi - lo, 1e-6)
+        lo, hi = lo - pad, hi + pad
+    return np.linspace(lo, hi, style.profile_bins + 1)
+
+
+def _profile_data(distance: np.ndarray, edges: np.ndarray,
+                  style: FeasibilityStyle) -> dict[str, Any]:
+    counts, _ = np.histogram(distance, bins=edges)
+    width = float(edges[1] - edges[0])
+    # Normalised by every sample, not just the in-range ones, so mass outside the axis shows
+    # up as missing area instead of being silently redistributed.
+    density = counts / (max(distance.size, 1) * width)
     return {
         "centers": 0.5 * (edges[:-1] + edges[1:]),
-        "counts": counts,
-        "peak": float(counts.max()) if counts.size else 0.0,
+        "counts": density,
+        "peak": float(density.max()) if density.size else 0.0,
         "wall_fraction": float(np.mean(np.abs(distance) < style.wall_tolerance)),
     }
 
 
 def _draw_profile(ax, data: dict[str, Any], style: FeasibilityStyle, top: float | None,
-                  first: bool) -> None:
-    """Histogram of the signed distance to {P = 0}, clipped to a band around the boundary.
+                  xlim: tuple[float, float] | None, first: bool) -> None:
+    """Histogram of the signed distance to {P = 0}, over the full range of the samples.
 
     The true truncated density steps down to zero at 0; a projected or guided sampler instead
     shows a narrow spike immediately to its left, which is the wall effect stated numerically.
-    All panels share a y-axis, otherwise a 30x spike and a mild bump render identically.
+    All panels share both axes, otherwise a 30x spike and a mild bump render identically.
     """
     centers, counts = data["centers"], data["counts"]
     ax.fill_between(centers, counts, step="mid", color=style.profile_color,
@@ -339,24 +375,25 @@ def _draw_profile(ax, data: dict[str, Any], style: FeasibilityStyle, top: float 
     ax.axvline(0.0, color=style.boundary_color, linestyle=style.boundary_linestyle,
                linewidth=style.boundary_linewidth + 0.5)
 
-    ax.set_xlim(-style.profile_span, style.profile_span)
+    if xlim is not None:
+        ax.set_xlim(*xlim)
     if top is not None:
         ax.set_ylim(0.0, top)
-        # Only call out a genuine spike; a panel that merely grazes the shared limit does not
-        # need a label pointing at it.
-        if data["peak"] > top * style.profile_annotate_ratio:
-            ax.annotate(f"peak {data['peak']:.0f}", xy=(0.0, top),
-                        xytext=(-0.10 * style.profile_span / 0.6, top * 0.78),
-                        ha="right", va="center", fontsize=style.metric_size - 1.0,
-                        color=style.profile_color, fontweight="bold",
-                        arrowprops=dict(arrowstyle="-|>", color=style.profile_color, lw=1.2))
     else:
         ax.set_ylim(bottom=0.0)
 
+    # One boxed block rather than two free-floating labels: the spike sits at x = 0 and the
+    # bulk leans against it, so anything unboxed lands on either the curve or the other label.
+    lines = []
     if style.show_wall_fraction:
-        ax.text(0.97, 0.92, f"{100 * data['wall_fraction']:.1f}% on the wall",
-                transform=ax.transAxes, fontsize=style.metric_size - 1.0,
-                va="top", ha="right", color=style.text_color)
+        lines.append(f"{100 * data['wall_fraction']:.1f}% on the wall")
+    if top is not None and data["peak"] > top * style.profile_annotate_ratio:
+        lines.append(f"peak {data['peak']:.0f}, clipped")
+    if lines:
+        ax.text(0.03, 0.95, "\n".join(lines), transform=ax.transAxes, va="top", ha="left",
+                fontsize=style.metric_size - 1.5, color=style.text_color,
+                bbox=dict(facecolor="white", alpha=0.75, edgecolor="none",
+                          boxstyle="round,pad=0.25"))
 
     ax.set_xlabel(style.profile_xlabel, fontsize=style.metric_size - 0.5)
     ax.xaxis.set_major_locator(MaxNLocator(nbins=4, prune="both"))

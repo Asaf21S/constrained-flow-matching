@@ -99,13 +99,17 @@ def render_trends(by_method: dict[str, dict[str, np.ndarray]], mass: np.ndarray,
     written = []
     mass_pct = mass * 100.0
 
-    series = {name: (mass_pct, metrics["success_rate"])
-              for name, metrics in by_method.items()
-              if name in TREND_ALL_METHODS and "success_rate" in metrics}
+    series = {}
+    if "gt" in by_method and "success_rate" in by_method["gt"]:
+        series["gt"] = (mass_pct, mass_pct)
+    for name in ("coeff", "functa"):
+        if name in by_method and "success_rate" in by_method[name]:
+            series[name] = (mass_pct, by_method[name]["success_rate"])
     if series:
         written.append(save_figure(
             plot_metric_trend(series, MASS_AXIS_LABEL, "Success Rate (%)",
-                              "Feasibility vs constraint mass", num_bins=num_bins),
+                              "Feasibility vs constraint mass", num_bins=num_bins,
+                              identity=True),
             figure_dir / "trend_success_rate.png"))
 
     gt_metrics = by_method.get("gt", {})

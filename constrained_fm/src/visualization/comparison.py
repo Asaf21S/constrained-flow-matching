@@ -29,7 +29,7 @@ METHOD_ORDER = ("gt", "coeff", "functa", "eci", "hardflow")
 
 METHOD_LABELS = {
     "gt": "Ground Truth (rejection sampling)",
-    "coeff": "Coefficients (oracle baseline)",
+    "coeff": "Coefficients (ours)",
     "functa": "Functa (ours)",
     "eci": "ECI",
     "hardflow": "HardFlow",

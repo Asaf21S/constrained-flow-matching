@@ -1,0 +1,168 @@
+{
+  "arrays": {
+    "mass": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "coeff__success_rate": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "coeff__swd": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "coeff__mmd": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "coeff__jsd": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "coeff__nll": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "coeff__kld": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "eci__success_rate": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "eci__swd": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "eci__mmd": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "eci__jsd": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "functa__success_rate": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "functa__swd": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "functa__mmd": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "functa__jsd": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "functa__nll": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "functa__kld": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "gt__success_rate": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "gt__swd": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "gt__mmd": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "gt__jsd": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "hardflow__success_rate": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "hardflow__swd": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "hardflow__mmd": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "hardflow__jsd": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    }
+  },
+  "written_at": "2026-09-09T20:02:43",
+  "git_commit": "f02b38599e587ae7a9f5856637ccc7018d4422b3",
+  "run_id": "val1k-c540c646",
+  "method": "val1k",
+  "validation_set": "v1k",
+  "poly_digest": "b139c109225e1cc1",
+  "num_constraints": 1000,
+  "methods": [
+    "coeff",
+    "eci",
+    "functa",
+    "gt",
+    "hardflow"
+  ]
+}

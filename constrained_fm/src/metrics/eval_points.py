@@ -37,6 +37,8 @@ from constrained_fm.src.geometry.polynomials import compute_poly_features
 
 NLL_EVAL_SET_PATH = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "benchmark", "nll_eval_points.pt"))
+NLL_EVAL_SET_V1K_PATH = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "benchmark", "nll_eval_points_v1k.pt"))
 
 # Frozen by definition: changing any of these invalidates every previously reported NLL/KLD,
 # so they are constants here rather than per-run config knobs.
@@ -44,6 +46,10 @@ NLL_EVAL_SEED = 42
 NLL_EVAL_POOL_SIZE = 100_000
 NLL_EVAL_MAX_POINTS = 5000
 NLL_EVAL_VERSION = 1
+
+# The v1k benchmark reaches down to mass 0.02, where a 100k pool yields only 2000 valid
+# points -- below NLL_EVAL_MAX_POINTS -- so it needs a proportionally larger pool.
+NLL_EVAL_V1K_POOL_SIZE = 1_000_000
 
 
 def deterministic_subset(x: torch.Tensor, num_points: int, seed: int) -> torch.Tensor:
@@ -101,14 +107,18 @@ def build_nll_eval_set(polys: torch.Tensor, degree: int = POLYNOMIAL_DEGREE,
 
 def load_nll_eval_set(num_points: int = NLL_EVAL_MAX_POINTS, degree: int = POLYNOMIAL_DEGREE,
                       scale: float = PLANE_SCALE, device=None, path: str = NLL_EVAL_SET_PATH,
-                      rebuild: bool = False) -> dict:
-    """The shared NLL points and masses for the static validation polynomials.
+                      rebuild: bool = False, polys: torch.Tensor | None = None,
+                      pool_size: int = NLL_EVAL_POOL_SIZE) -> dict:
+    """The shared NLL points and masses for a fixed set of validation polynomials.
 
-    Indices line up with ``get_validation_set()["polynomials"]``, so a script evaluating the
-    first ``k`` polynomials just slices the returned lists. Asking for fewer than the cached
-    ``max_points`` takes a prefix, which stays a shared set across baselines.
+    Indices line up with the polynomial set, so a script evaluating a slice of it just
+    slices the returned lists. Asking for fewer than the cached ``max_points`` takes a
+    prefix, which stays a shared set across baselines. ``polys`` defaults to the static
+    100-polynomial benchmark; pass another set together with its own ``path``.
     """
-    polys = get_validation_set(device="cpu")["polynomials"].to(dtype=torch.float32)
+    if polys is None:
+        polys = get_validation_set(device="cpu")["polynomials"]
+    polys = polys.detach().to(device="cpu", dtype=torch.float32)
     digest = _digest(polys)
 
     cached = None
@@ -117,17 +127,18 @@ def load_nll_eval_set(num_points: int = NLL_EVAL_MAX_POINTS, degree: int = POLYN
         stale = (cached.get("version") != NLL_EVAL_VERSION
                  or cached.get("poly_digest") != digest
                  or cached.get("degree") != degree
-                 or cached.get("scale") != scale)
+                 or cached.get("scale") != scale
+                 or cached.get("pool_size") != pool_size)
         if stale:
             raise RuntimeError(
                 f"cached NLL evaluation set at {path} does not match the current benchmark "
-                f"(version/digest/degree/scale mismatch). Delete it or rerun with --rebuild "
+                f"(version/digest/degree/scale/pool mismatch). Delete it or rerun with --rebuild "
                 f"to regenerate; note that this changes every reported NLL/KLD.")
 
     if cached is None:
         print(f"Building shared NLL evaluation set ({polys.shape[0]} polynomials, "
-              f"{NLL_EVAL_MAX_POINTS} points each)...")
-        cached = build_nll_eval_set(polys, degree=degree, scale=scale)
+              f"{NLL_EVAL_MAX_POINTS} points each, {pool_size} point pool)...")
+        cached = build_nll_eval_set(polys, degree=degree, scale=scale, pool_size=pool_size)
         tmp = f"{path}.tmp"
         os.makedirs(os.path.dirname(path), exist_ok=True)
         torch.save(cached, tmp)
@@ -151,14 +162,27 @@ def load_nll_eval_set(num_points: int = NLL_EVAL_MAX_POINTS, degree: int = POLYN
     }
 
 
+def load_nll_eval_set_v1k(num_points: int = NLL_EVAL_MAX_POINTS, degree: int = POLYNOMIAL_DEGREE,
+                          scale: float = PLANE_SCALE, device=None, rebuild: bool = False) -> dict:
+    """The shared NLL points for the v1k benchmark, indexed like its polynomial array."""
+    from constrained_fm.src.datasets.validation_v1k import get_validation_set_v1k
+
+    polys = get_validation_set_v1k(device="cpu")["polynomials"]
+    return load_nll_eval_set(num_points=num_points, degree=degree, scale=scale, device=device,
+                             path=NLL_EVAL_SET_V1K_PATH, rebuild=rebuild, polys=polys,
+                             pool_size=NLL_EVAL_V1K_POOL_SIZE)
+
+
 def _main() -> int:
     import argparse
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--rebuild", action="store_true", help="regenerate even if cached")
+    parser.add_argument("--val-set", default="legacy100", choices=["legacy100", "v1k"])
     args = parser.parse_args()
 
-    eval_set = load_nll_eval_set(rebuild=args.rebuild)
+    eval_set = (load_nll_eval_set_v1k(rebuild=args.rebuild) if args.val_set == "v1k"
+                else load_nll_eval_set(rebuild=args.rebuild))
     short = eval_set["available"].min().item()
     print(f"path        {eval_set['path']}")
     print(f"digest      {eval_set['poly_digest']} | pool {eval_set['pool_size']} | "
@@ -172,8 +196,9 @@ def _main() -> int:
     return 0
 
 
-__all__ = ["NLL_EVAL_SET_PATH", "NLL_EVAL_SEED", "NLL_EVAL_POOL_SIZE", "NLL_EVAL_MAX_POINTS",
-           "deterministic_subset", "build_nll_eval_set", "load_nll_eval_set"]
+__all__ = ["NLL_EVAL_SET_PATH", "NLL_EVAL_SET_V1K_PATH", "NLL_EVAL_SEED", "NLL_EVAL_POOL_SIZE",
+           "NLL_EVAL_V1K_POOL_SIZE", "NLL_EVAL_MAX_POINTS", "deterministic_subset",
+           "build_nll_eval_set", "load_nll_eval_set", "load_nll_eval_set_v1k"]
 
 
 if __name__ == "__main__":

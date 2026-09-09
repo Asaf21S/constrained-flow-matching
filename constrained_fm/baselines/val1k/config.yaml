@@ -1,0 +1,23 @@
+method: val1k
+run_id: val1k-c540c646
+settings:
+  base_ckpt: constrained_fm/baselines/base_fm/ckpt.pt
+  base_hidden_dim: 1024
+  base_num_blocks: 4
+  base_time_dim: 128
+  chunk_size: 20000
+  coeff_ckpt: constrained_fm/baselines/poly_fm_b1024/ckpt.pt
+  coeff_hidden_dim: 1024
+  correction_loops: 1
+  degree: 3
+  extraction_chunk: 128
+  functa_run_id: siren-uniform-8d6375ab
+  gmm_pool_size: 100000
+  guidance_scale: 100.0
+  margin: 0.001
+  nll_points: 5000
+  num_x0: 10000
+  projection_iters: 16
+  scale: 4.5
+  step_size: 0.05
+  steps: 100

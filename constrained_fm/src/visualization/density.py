@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
@@ -9,9 +11,23 @@ from constrained_fm.src.geometry.polynomials import compute_poly_features, evalu
 from constrained_fm.src.consts import GMM_MEANS, GMM_COVS, GMM_WEIGHTS, POLYNOMIAL_DEGREE, PLANE_SCALE
 from constrained_fm.src.datasets.gmm_target import get_points, compute_gmm_density
 
+# Matches LaTeX's default Computer Modern for consistent typography in the paper.
+plt.rcParams.update({
+    "font.family": "serif",
+    "font.serif": ["Computer Modern Roman", "cmr10", "DejaVu Serif"],
+    "mathtext.fontset": "cm",
+    "axes.grid": False,
+})
 
-def visualize_true_gmm_likelihood(means=GMM_MEANS, covs=GMM_COVS, weights=GMM_WEIGHTS, grid_size=200, device=None):
-    """Render the ground-truth GMM likelihood heatmap."""
+
+def visualize_true_gmm_likelihood(means=GMM_MEANS, covs=GMM_COVS, weights=GMM_WEIGHTS, grid_size=200, device=None,
+                                  save_path=None, show=True):
+    """Render the ground-truth GMM likelihood heatmap.
+
+    ``save_path`` is a path (with or without extension) to save the figure under; both a
+    ``.png`` and a ``.pdf`` version are written. Set ``show=False`` to suppress the interactive
+    display (e.g. when running on a headless cluster node).
+    """
     density = compute_gmm_density(means=means, covs=covs, weights=weights, grid_size=grid_size, device=device)
     density_grid = density.reshape(grid_size, grid_size)
     true_vmax = torch.max(density_grid).item()
@@ -19,10 +35,25 @@ def visualize_true_gmm_likelihood(means=GMM_MEANS, covs=GMM_COVS, weights=GMM_WE
     fig, ax = plt.subplots(figsize=(6, 6))
     norm = cm.colors.Normalize(vmax=true_vmax, vmin=0.0)
     ax.imshow(density_grid.cpu().numpy(), extent=(-4.5, 4.5, -4.5, 4.5), origin='lower', cmap='viridis', norm=norm)
-    ax.set_title(f'Ground Truth GMM Likelihood\nPeak Density: {true_vmax:.3f}')
-    fig.colorbar(cm.ScalarMappable(norm=norm, cmap='viridis'), ax=ax, orientation='vertical', label='True Density')
+    ax.grid(False)
+    cbar = fig.colorbar(cm.ScalarMappable(norm=norm, cmap='viridis'), ax=ax, orientation='vertical')
+    cbar.set_label('True Density', family='serif')
+    cbar.ax.tick_params(labelsize=10)
+    for label in cbar.ax.get_yticklabels():
+        label.set_family('serif')
     ax.set_aspect('equal')
-    plt.show()
+
+    if save_path is not None:
+        save_path = Path(save_path)
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        stem = save_path.with_suffix('')
+        fig.savefig(stem.with_suffix('.png'), dpi=300, bbox_inches='tight')
+        fig.savefig(stem.with_suffix('.pdf'), bbox_inches='tight')
+
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
 
 
 def calculate_vmax(bounds=None, coeffs=None, degree=POLYNOMIAL_DEGREE, scale=PLANE_SCALE, unconstrained_vmax=None,

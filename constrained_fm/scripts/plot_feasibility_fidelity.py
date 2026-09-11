@@ -1,33 +1,34 @@
 # -*- coding: utf-8 -*-
 """Builds the feasibility-vs-fidelity figure for a single 2D constraint.
 
-Four distributions over the same truncated GMM target:
+Five distributions over the same truncated GMM target:
 
     Ground Truth   rejection sampling, the distribution every method is trying to match
     ECI            inference-time projection onto {P(x) <= 0}
     HardFlow       inference-time gradient guidance towards {P(x) <= 0}
     Functa         ours; the constraint enters through the conditioning, not the trajectory
+    Coefficients   conditions on the raw (4, 4) coefficient matrix instead of a functa latent
 
 ECI and HardFlow are re-sampled here rather than loaded, because the benchmark run in
 ``eci_hardflow.py`` predates the artifact store and left no per-shape sample arrays behind.
 Functa is re-sampled from ``runs/<run_id>/ckpt.pt`` at the same point count, so no panel is
 visibly noisier than its neighbours; ``--functa-source cache`` instead reads the 10k samples
 already in that run's artifact store. Either way the constraint is cross-checked against the
-validation polynomial, so the four panels are guaranteed to describe the same region.
+validation polynomial, so every panel is guaranteed to describe the same region.
 
-All four panels are drawn from the same number of points (``--num-samples``) with the same
+All panels are drawn from the same number of points (``--num-samples``) with the same
 ``np.histogram2d`` -> ``imshow`` path, and scored on that same number against an independent
 rejection-sampled ground-truth set of equal size. The ground-truth panel is therefore scored
 GT-set-1 against GT-set-2, which is what a distributional metric means, and its SWD/MMD is
-the finite-sample noise floor the other three should be read against.
+the finite-sample noise floor the others should be read against.
 
-Everything drawn is also written to ``<outdir>/poly<id>/artifacts/``, so ``--plot-only`` restyles
-the figure with no GPU and no sampling. ``--style`` takes several names at once and drops each
-figure set into its own subfolder of ``--figure-dir``.
+``--variants`` selects which panel compositions to draw; each lands in its own subfolder of
+``--figure-dir``. Everything drawn is also written to ``<outdir>/poly<id>/artifacts/``, so
+``--plot-only`` recomposes and restyles the figures with no GPU and no sampling.
 
     sbatch scripts/run_feasibility_fidelity.sh
-    sbatch scripts/run_feasibility_fidelity.sh --poly-id 13 --style light log
-    python -m constrained_fm.scripts.plot_feasibility_fidelity --plot-only --style log
+    sbatch scripts/run_feasibility_fidelity.sh --poly-id 13
+    python -m constrained_fm.scripts.plot_feasibility_fidelity --plot-only --variants 5panel_all
 """
 
 from __future__ import annotations
@@ -59,10 +60,12 @@ from constrained_fm.src.inference.constraint_projection import DEFAULT_MARGIN
 from constrained_fm.src.inference.evaluator import (evaluate_single_configuration,
                                                     run_evaluation_inference)
 from constrained_fm.src.metrics.functa_fidelity import true_region_mask
+from constrained_fm.src.models.constrained_poly import PolynomialConstrainedFM
 from constrained_fm.src.models.unconstrained import UnconstrainedFM
 from constrained_fm.src.visualization import feasibility as feas
 
 BASE_CKPT = "constrained_fm/baselines/base_fm/ckpt.pt"
+POLY_CKPT = "constrained_fm/baselines/poly_fm/ckpt.pt"
 FUNCTA_RUN = "runs/siren-uniform-8d6375ab"
 OUTDIR = "constrained_fm/baselines/feasibility_fidelity"
 FIGURE_DIR = "constrained_fm/images/thesis_pool/feasibility_fidelity"
@@ -71,12 +74,22 @@ FIGURE_DIR = "constrained_fm/images/thesis_pool/feasibility_fidelity"
 # mode, so both baselines pile a visible wall onto it while Functa keeps the interior intact.
 DEFAULT_POLY_ID = 86
 
-METHODS = ("gt", "eci", "hardflow", "functa")
+METHODS = ("gt", "eci", "hardflow", "coeff", "functa")
 METHOD_LABELS = {
     "gt": "Ground Truth\n(rejection sampling)",
     "eci": "ECI\n(inference projection)",
     "hardflow": "HardFlow\n(inference guidance)",
+    "coeff": "Coefficients (ours)\n(polynomial conditioning)",
     "functa": "Functa (ours)\n(constrained conditioning)",
+}
+
+# One figure per entry, each in its own subfolder. Ground truth must stay first: it sets the
+# colour scale for every other panel and the shared y-limit of the profile row.
+PANEL_VARIANTS: dict[str, tuple[str, ...]] = {
+    "3panel_baselines": ("gt", "eci", "hardflow"),
+    "4panel_functa": ("gt", "eci", "hardflow", "functa"),
+    "4panel_coeff": ("gt", "eci", "hardflow", "coeff"),
+    "5panel_all": ("gt", "eci", "hardflow", "coeff", "functa"),
 }
 
 
@@ -91,6 +104,9 @@ def build_parser() -> argparse.ArgumentParser:
                              "ground-truth reference set; defaults to --num-samples")
 
     parser.add_argument("--ckpt", default=BASE_CKPT)
+    parser.add_argument("--poly-ckpt", default=POLY_CKPT,
+                        help="coefficient-conditioned flow matcher (train_poly_fm.py)")
+    parser.add_argument("--coeff-step-size", type=float, default=0.05)
     parser.add_argument("--functa-run", default=FUNCTA_RUN,
                         help="run directory holding ckpt.pt and artifacts/")
     parser.add_argument("--functa-source", default="resample", choices=["resample", "cache"],
@@ -114,12 +130,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--scale", type=float, default=PLANE_SCALE)
     parser.add_argument("--seed", type=int, default=0)
 
-    parser.add_argument("--panels-3", nargs=3, default=["gt", "eci", "hardflow"], choices=METHODS,
-                        help="columns of the 1x3 figure")
-    parser.add_argument("--panels-4", nargs=4, default=list(METHODS), choices=METHODS,
-                        help="columns of the 1x4 figure")
+    parser.add_argument("--variants", nargs="+", default=list(PANEL_VARIANTS),
+                        choices=list(PANEL_VARIANTS),
+                        help="which panel compositions to render; one subfolder each")
+    parser.add_argument("--highlight", nargs="*", default=["coeff", "functa"], choices=METHODS,
+                        help="methods drawn with the accent frame")
     parser.add_argument("--style", nargs="+", default=["light"], choices=sorted(feas.STYLE_PRESETS),
-                        help="one figure set per style, each in its own subfolder")
+                        help="one figure set per style")
     parser.add_argument("--bins", type=int, default=None, help="override histogram resolution")
     parser.add_argument("--cmap", default=None)
     parser.add_argument("--norm", default=None, choices=["linear", "power", "log"])
@@ -256,6 +273,28 @@ def rbf_mmd(x: torch.Tensor, y: torch.Tensor, gamma: float = 1.0,
     return max(0.0, mmd), k_yy
 
 
+def sample_coeff(args, coeffs: torch.Tensor, x0: torch.Tensor,
+                 device: torch.device) -> np.ndarray:
+    """Flow matcher conditioned on the raw (4, 4) coefficient matrix rather than a latent.
+
+    Built from ``train_poly_fm.py``'s defaults, which are the values the checkpoint was
+    trained with; the model takes no config file of its own.
+    """
+    path = REPO_ROOT / args.poly_ckpt if not Path(args.poly_ckpt).is_absolute() \
+        else Path(args.poly_ckpt)
+    if not path.exists():
+        raise FileNotFoundError(f"{path} not found -- run scripts/run_poly_fm.sh first")
+
+    model = PolynomialConstrainedFM(degree=args.degree, hidden_dim=args.hidden_dim,
+                                    scale_factor=args.scale).to(device)
+    model.load_state_dict(torch.load(path, map_location=device, weights_only=True))
+    model.eval()
+    samples = run_evaluation_inference(model, x0, coeffs=coeffs.unsqueeze(0).detach().clone(),
+                                       step_size=args.coeff_step_size, device=device)
+    del model
+    return np.asarray(samples, dtype=np.float32)
+
+
 def score(samples, gt_reference: torch.Tensor, coeffs: torch.Tensor, args,
           device: torch.device, k_yy: float | None = None) -> tuple[dict[str, float], float]:
     """Success rate plus SWD / MMD against an independent rejection-sampled reference.
@@ -293,20 +332,24 @@ def render(samples_by_method: dict[str, np.ndarray], metrics_by_method: dict[str
     written = []
     for style_name in args.style:
         style = resolve_style(args, style_name)
-        target = figure_dir / style_name
-        for name, methods in (("3panel", args.panels_3), ("4panel", args.panels_4)):
+        for variant in args.variants:
+            methods = PANEL_VARIANTS[variant]
             missing = [m for m in methods if m not in samples_by_method]
             if missing:
-                print(f"[skip] {name}: no samples for {missing}")
+                print(f"[skip] {variant}: no samples for {missing}")
                 continue
 
             panels = [feas.Panel(label=METHOD_LABELS[m], samples=samples_by_method[m],
-                                 metrics=metrics_by_method.get(m), highlight=(m == "functa"))
+                                 metrics=metrics_by_method.get(m),
+                                 highlight=(m in args.highlight))
                       for m in methods]
             fig = feas.plot_feasibility_row(panels, coeffs, style=style, degree=args.degree,
                                             scale=args.scale, show_profile=args.boundary_profile)
 
-            stem = f"feasibility_fidelity_{name}_poly{args.poly_id}"
+            stem = f"feasibility_fidelity_{variant}_poly{args.poly_id}"
+            if style_name != "light":
+                stem = f"{stem}_{style_name}"
+            target = figure_dir / variant
             target.mkdir(parents=True, exist_ok=True)
             for suffix in args.formats:
                 path = target / f"{stem}.{suffix}"
@@ -371,6 +414,8 @@ def main(argv: list[str] | None = None) -> int:
     else:
         samples["functa"] = load_functa_samples(args, coeffs)
 
+    samples["coeff"] = sample_coeff(args, coeffs, x0, device)
+
     counts = {m: int(s.shape[0]) for m, s in samples.items()}
     if len(set(counts.values())) != 1:
         raise ValueError(f"panels must be drawn from equal sample counts, got {counts}")
@@ -387,7 +432,8 @@ def main(argv: list[str] | None = None) -> int:
 
     root = artifact_root(args)
     run_id = pin_baseline_run(root, "feasibility_fidelity", args,
-                              extra={"base_ckpt": args.ckpt, "functa_run": args.functa_run})
+                              extra={"base_ckpt": args.ckpt, "poly_ckpt": args.poly_ckpt,
+                                     "functa_run": args.functa_run})
     artifacts.save_arrays(root, polynomial=coeffs,
                           **{f"samples_{m}": s for m, s in samples.items()})
     artifacts.write_manifest(root, run_id=run_id, poly_id=args.poly_id,

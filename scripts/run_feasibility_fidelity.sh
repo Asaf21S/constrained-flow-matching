@@ -11,14 +11,15 @@
 #SBATCH --mail-user=asafucho@gmail.com
 #SBATCH --mail-type=BEGIN,END,FAIL
 
-# Feasibility-vs-fidelity paper figure for one constraint: GT | ECI | HardFlow | Functa.
-# Needs constrained_fm/baselines/base_fm/ckpt.pt and runs/<functa-run>/artifacts/samples.npy.
+# Feasibility-vs-fidelity paper figure for one constraint:
+# GT | ECI | HardFlow | Functa | Coefficients, in four panel compositions.
+# Needs constrained_fm/baselines/{base_fm,poly_fm}/ckpt.pt and runs/<functa-run>/ckpt.pt.
 # Writes arrays to constrained_fm/baselines/feasibility_fidelity/poly<id>/ and figures to
-# constrained_fm/images/thesis_pool/feasibility_fidelity/<style>/. Restyling needs no GPU:
+# constrained_fm/images/thesis_pool/feasibility_fidelity/<variant>/. Restyling needs no GPU:
 #
 #   sbatch scripts/run_feasibility_fidelity.sh
-#   sbatch scripts/run_feasibility_fidelity.sh --poly-id 13 --style light log --boundary-profile
-#   python -m constrained_fm.scripts.plot_feasibility_fidelity --plot-only --poly-id 13 --style log
+#   sbatch scripts/run_feasibility_fidelity.sh --poly-id 13 --boundary-profile
+#   python -m constrained_fm.scripts.plot_feasibility_fidelity --plot-only --variants 5panel_all
 
 set -eo pipefail
 

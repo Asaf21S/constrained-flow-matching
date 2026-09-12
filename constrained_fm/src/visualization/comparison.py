@@ -166,10 +166,9 @@ def plot_metric_trend(series: dict[str, tuple[np.ndarray, np.ndarray]], xlabel: 
 
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
-    ax.set_title(title)
     ax.grid(True, which="both", **GRID_STYLE)
     ax.set_axisbelow(True)
-    ax.legend(frameon=False, fontsize=9)
+    ax.legend(loc="lower right", frameon=False, fontsize=9)
     fig.tight_layout()
     return fig
 
@@ -220,7 +219,6 @@ def plot_parity(x, y, xlabel: str, ylabel: str, title: str, color_by=None,
     ax.set_aspect("equal", adjustable="box")
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
-    ax.set_title(title, fontsize=10)
     ax.grid(True, which="both", **GRID_STYLE)
     ax.set_axisbelow(True)
 
@@ -260,7 +258,6 @@ def plot_parity_grid(panels: list[dict], suptitle: str, ncols: int = 2, log: boo
     for ax in flat[len(panels):]:
         ax.axis("off")
 
-    fig.suptitle(suptitle, fontsize=13)
     fig.tight_layout(rect=(0, 0, 0.92 if mappable is not None else 1.0, 0.97))
     if mappable is not None:
         cbar_ax = fig.add_axes((0.94, 0.12, 0.015, 0.76))

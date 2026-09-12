@@ -4,9 +4,9 @@
 Two formats, both pure functions of the merged metric arrays:
 
 * **Trend lines** -- one panel per metric, every method on the same axes, drawn as a median
-  through equal-count bins with an interquartile band. Bins are quantile-based rather than
-  equal-width so the band's width reports spread rather than how many constraints happened
-  to fall in a bin.
+  through a window sliding along sorted x with an interquartile band. Every point summarises
+  the same number of constraints, so the band's width reports spread rather than how many
+  constraints happened to fall in a bin.
 * **Parity scatter** -- one method's metric against another's, constraint by constraint,
   with a dashed y = x line. Below the line means the y method won that constraint.
 
@@ -57,7 +57,7 @@ METHOD_STYLES = {"gt": (0, (6, 4)), "coeff": "-", "functa": "-", "eci": "-", "ha
 # label, axis title, log scale. SWD/MMD/JSD span orders of magnitude across the mass range;
 # NLL and KLD do not, and KLD dips below zero on the finite-sample estimate.
 METRIC_SPECS = {
-    "success_rate": ("SR", "Success Rate (%)", False),
+    "success_rate": ("AR", "Acceptance Rate (%)", False),
     "swd": ("SWD", "Sliced Wasserstein Distance", True),
     "mmd": ("MMD", "Maximum Mean Discrepancy", True),
     "jsd": ("JSD", "Jensen-Shannon Divergence", True),
@@ -91,67 +91,72 @@ def positive_pairs(x, y) -> tuple[np.ndarray, np.ndarray]:
     return x[keep], y[keep]
 
 
-def binned_trend(x, y, num_bins: int = 12, min_per_bin: int = 5
-                 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Median and interquartile band of y over equal-count bins of x.
+def rolling_trend(x, y, window: int = 100, step: int = 25
+                  ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Median and interquartile band of y over a window sliding along sorted x.
 
-    Returns (centre, median, lower, upper); bins holding fewer than ``min_per_bin``
-    constraints are dropped rather than plotted as a spike.
+    Returns (centre, median, lower, upper). Every point summarises exactly ``window``
+    constraints, so the band's width reports spread and never sample scarcity.
     """
     x, y = finite_pairs(x, y)
     if x.size == 0:
         empty = np.empty(0)
         return empty, empty, empty, empty
 
-    edges = np.unique(np.quantile(x, np.linspace(0.0, 1.0, num_bins + 1)))
-    if edges.size < 2:
-        edges = np.array([x.min(), x.max() + 1e-12])
-    # right=True on the interior edges, then fold the closed upper edge back into the last bin.
-    slot = np.clip(np.digitize(x, edges[1:-1], right=True), 0, edges.size - 2)
+    order = np.argsort(x, kind="stable")
+    x, y = x[order], y[order]
+    window = min(window, x.size)
+
+    starts = list(range(0, x.size - window + 1, max(step, 1)))
+    # The final partial step would otherwise drop the upper tail entirely.
+    if starts[-1] != x.size - window:
+        starts.append(x.size - window)
 
     centre, median, lower, upper = [], [], [], []
-    for b in range(edges.size - 1):
-        values = y[slot == b]
-        if values.size < min_per_bin:
-            continue
-        centre.append(float(np.median(x[slot == b])))
-        median.append(float(np.median(values)))
-        lower.append(float(np.quantile(values, 0.25)))
-        upper.append(float(np.quantile(values, 0.75)))
+    for start in starts:
+        xs, ys = x[start:start + window], y[start:start + window]
+        centre.append(float(np.median(xs)))
+        median.append(float(np.median(ys)))
+        lower.append(float(np.quantile(ys, 0.25)))
+        upper.append(float(np.quantile(ys, 0.75)))
 
     return (np.asarray(centre), np.asarray(median), np.asarray(lower), np.asarray(upper))
 
 
 def plot_metric_trend(series: dict[str, tuple[np.ndarray, np.ndarray]], xlabel: str,
                       ylabel: str, title: str, logx: bool = False, logy: bool = False,
-                      num_bins: int = 12, identity: bool = False,
+                      window: int = 100, step: int = 25, identity: bool = False,
+                      identity_label: str = "parity ($y = x$)",
+                      identity_color: str = "#9ca3af",
+                      labels: dict[str, str] | None = None,
                       figsize: tuple[float, float] = (7.6, 5.2)) -> Figure:
-    """One trend line with an interquartile band per method, all on shared axes.
+    """One rolling-median line with an interquartile band per method, on shared axes.
 
     ``series`` maps a method name to its (x, y) arrays; methods are drawn in METHOD_ORDER so
-    the legend reads the same on every figure.
+    the legend reads the same on every figure. ``labels`` overrides legend text per method.
     """
     fig, ax = plt.subplots(figsize=figsize)
     ordered = [m for m in METHOD_ORDER if m in series] + \
               [m for m in series if m not in METHOD_ORDER]
+    labels = labels or {}
 
     for method in ordered:
         x, y = series[method]
         x, y = (positive_pairs(x, y) if logy else finite_pairs(x, y))
-        centre, median, lower, upper = binned_trend(x, y, num_bins=num_bins)
+        centre, median, lower, upper = rolling_trend(x, y, window=window, step=step)
         if centre.size == 0:
             continue
         color = METHOD_COLORS.get(method, "#6b7280")
         ax.fill_between(centre, lower, upper, color=color, alpha=0.15, linewidth=0)
         ax.plot(centre, median, color=color, linewidth=2.0,
-                linestyle=METHOD_STYLES.get(method, "-"), marker="o", markersize=3.5,
-                label=label_for(method))
+                linestyle=METHOD_STYLES.get(method, "-"), marker="o", markersize=3.0,
+                label=labels.get(method, label_for(method)))
 
     if identity:
         lo, hi = ax.get_xlim()
         span = np.geomspace(max(lo, 1e-12), hi, 64) if logx else np.linspace(lo, hi, 64)
-        ax.plot(span, span, color="#9ca3af", linestyle=(0, (5, 5)), linewidth=1.1,
-                zorder=0, label="parity ($y = x$)")
+        ax.plot(span, span, color=identity_color, linestyle=(0, (5, 5)), linewidth=1.4,
+                zorder=0, label=identity_label)
         ax.set_xlim(lo, hi)
 
     if logx:
@@ -273,5 +278,5 @@ def save_figure(fig: Figure, path: str | Path, dpi: int = 200) -> Path:
 
 
 __all__ = ["METHOD_ORDER", "METHOD_LABELS", "METHOD_SHORT", "METHOD_COLORS", "METRIC_SPECS",
-           "label_for", "short_label", "finite_pairs", "positive_pairs", "binned_trend",
+           "label_for", "short_label", "finite_pairs", "positive_pairs", "rolling_trend",
            "plot_metric_trend", "win_rate", "plot_parity", "plot_parity_grid", "save_figure"]

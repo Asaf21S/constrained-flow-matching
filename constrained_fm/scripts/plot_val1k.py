@@ -4,19 +4,20 @@
 Reads only the merged metrics.json, persists the arrays the figures consume under
 ``artifacts/``, and renders:
 
-* **Format A, trend lines** -- one figure per metric, all methods on shared axes.
+* **Format A, trend lines** -- one figure per metric, all methods on shared axes, each point a
+  rolling median over a fixed number of constraints sorted along the x axis.
   SWD / MMD / JSD are drawn against the *ground truth's own value* for that metric, which is
   the achievable noise floor at that constraint, so the GT curve is the parity line and the
-  vertical gap to it is the excess discrepancy. Success rate is drawn against the true
-  constraint mass. NLL and KLD are drawn against the true constraint mass for the
-  coefficient and Functa models only -- ECI and HardFlow alter the state outside the
-  probability-flow ODE, so no density of theirs is defined, and rejection sampling's KLD is
-  identically zero by construction.
+  vertical gap to it is the excess discrepancy. Acceptance rate is drawn against the true
+  constraint mass, where sampling the target GMM unconditionally traces y = x. NLL and KLD are
+  drawn against the true constraint mass for the coefficient and Functa models only -- ECI and
+  HardFlow alter the state outside the probability-flow ODE, so no density of theirs is
+  defined, and rejection sampling's KLD is identically zero by construction.
 * **Format B, head-to-head parity scatter** -- SWD / MMD / JSD, our two learned methods
   against each inference-time baseline, one point per constraint.
 
     sbatch scripts/run_val1k_plots.sh
-    python -m constrained_fm.scripts.plot_val1k --num-bins 16 --no-panels
+    python -m constrained_fm.scripts.plot_val1k --window 150 --step 50 --no-panels
 """
 
 from __future__ import annotations
@@ -28,9 +29,10 @@ from pathlib import Path
 import numpy as np
 
 from constrained_fm.src.experiment import artifacts
-from constrained_fm.src.visualization.comparison import (METRIC_SPECS, plot_metric_trend,
-                                                         plot_parity, plot_parity_grid,
-                                                         save_figure, short_label, win_rate)
+from constrained_fm.src.visualization.comparison import (METHOD_COLORS, METRIC_SPECS,
+                                                         plot_metric_trend, plot_parity,
+                                                         plot_parity_grid, save_figure,
+                                                         short_label, win_rate)
 
 DEFAULT_OUTDIR = "constrained_fm/baselines/val1k"
 DEFAULT_FIGURE_DIR = "constrained_fm/images/thesis_pool/val1k"
@@ -44,13 +46,19 @@ DENSITY_METRICS = ("nll", "kld")
 PARITY_PAIRS = (("gt", "coeff"), ("gt", "functa"), ("eci", "coeff"), ("eci", "functa"),
                 ("hardflow", "coeff"), ("hardflow", "functa"))
 MASS_AXIS_LABEL = "True constraint mass (%)"
+ACCEPTANCE_AXIS_LABEL = "Acceptance Rate (%)"
+# Sampling the target GMM unconditionally accepts exactly the constraint's mass, hence y = x.
+GMM_REFERENCE_LABEL = "Unconstrained Target GMM"
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Render the v1k comparison figure suite.")
     parser.add_argument("--outdir", default=DEFAULT_OUTDIR)
     parser.add_argument("--figure-dir", default=DEFAULT_FIGURE_DIR)
-    parser.add_argument("--num-bins", type=int, default=12, help="equal-count bins per trend line")
+    parser.add_argument("--window", type=int, default=100,
+                        help="constraints summarised by each trend point")
+    parser.add_argument("--step", type=int, default=25,
+                        help="constraints the trend window advances between points")
     parser.add_argument("--no-panels", action="store_true",
                         help="render only the combined parity grids, not the standalone panels")
     return parser
@@ -95,21 +103,20 @@ def persist_arrays(out: Path, payload: dict, by_method: dict[str, dict[str, np.n
 
 
 def render_trends(by_method: dict[str, dict[str, np.ndarray]], mass: np.ndarray,
-                  figure_dir: Path, num_bins: int) -> list[Path]:
+                  figure_dir: Path, window: int, step: int) -> list[Path]:
     written = []
     mass_pct = mass * 100.0
 
     series = {}
-    if "gt" in by_method and "success_rate" in by_method["gt"]:
-        series["gt"] = (mass_pct, mass_pct)
     for name in ("coeff", "functa"):
         if name in by_method and "success_rate" in by_method[name]:
             series[name] = (mass_pct, by_method[name]["success_rate"])
     if series:
         written.append(save_figure(
-            plot_metric_trend(series, MASS_AXIS_LABEL, "Success Rate (%)",
-                              "Feasibility vs constraint mass", num_bins=num_bins,
-                              identity=True),
+            plot_metric_trend(series, MASS_AXIS_LABEL, ACCEPTANCE_AXIS_LABEL,
+                              "Acceptance rate vs constraint mass", window=window, step=step,
+                              identity=True, identity_label=GMM_REFERENCE_LABEL,
+                              identity_color=METHOD_COLORS["gt"]),
             figure_dir / "trend_success_rate.png"))
 
     gt_metrics = by_method.get("gt", {})
@@ -124,7 +131,7 @@ def render_trends(by_method: dict[str, dict[str, np.ndarray]], mass: np.ndarray,
         written.append(save_figure(
             plot_metric_trend(series, f"Ground truth {short} (noise floor)", axis_label,
                               f"{short} against the achievable noise floor",
-                              logx=log, logy=log, num_bins=num_bins, identity=True),
+                              logx=log, logy=log, window=window, step=step, identity=True),
             figure_dir / f"trend_{metric}.png"))
 
     for metric in DENSITY_METRICS:
@@ -138,7 +145,7 @@ def render_trends(by_method: dict[str, dict[str, np.ndarray]], mass: np.ndarray,
         written.append(save_figure(
             plot_metric_trend(series, MASS_AXIS_LABEL, axis_label,
                               f"{short} vs constraint mass (exact likelihood)",
-                              logy=log, num_bins=num_bins),
+                              logy=log, window=window, step=step),
             figure_dir / f"trend_{metric}.png"))
 
     return written
@@ -206,7 +213,7 @@ def main(argv: list[str] | None = None) -> int:
           f"{payload['num_constraints']} constraints | methods {sorted(by_method)}")
 
     persist_arrays(out, payload, by_method, mass)
-    written = render_trends(by_method, mass, figure_dir, args.num_bins)
+    written = render_trends(by_method, mass, figure_dir, args.window, args.step)
     written += render_parity(by_method, mass, figure_dir, not args.no_panels)
 
     for path in written:

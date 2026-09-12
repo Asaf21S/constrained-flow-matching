@@ -18,7 +18,7 @@
 #   python3 -m constrained_fm.scripts.merge_val1k
 #
 #   sbatch scripts/run_val1k_plots.sh
-#   sbatch scripts/run_val1k_plots.sh --num-bins 16
+#   sbatch scripts/run_val1k_plots.sh --window 150 --step 50
 
 set -eo pipefail
 

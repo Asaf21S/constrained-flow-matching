@@ -25,6 +25,7 @@ from matplotlib.ticker import MaxNLocator
 
 from constrained_fm.src.consts import PLANE_SCALE, POLYNOMIAL_DEGREE
 from constrained_fm.src.geometry.polynomials import compute_poly_features, evaluate_poly
+from constrained_fm.src.visualization.style import SERIF_RC
 
 # Short name and format string per metric, so panel captions stay compact enough to read.
 METRIC_FORMATS: dict[str, tuple[str, str]] = {
@@ -78,7 +79,7 @@ class FeasibilityStyle:
 
     # --- captions ---
     show_metrics: bool = True
-    metric_keys: Sequence[str] = ("success_rate", "swd", "mmd")
+    metric_keys: Sequence[str] = ("success_rate", "swd")
     metric_separator: str = "  "
 
     # --- optional boundary-distance profile row ---
@@ -135,7 +136,7 @@ def to_numpy(data: Any) -> np.ndarray:
 
 def format_metrics(metrics: Mapping[str, float] | None, keys: Sequence[str],
                    separator: str = "   ") -> str:
-    """Compact caption such as ``SR 100.0%   SWD 0.689   MMD 0.1108``."""
+    """Compact caption such as ``SR 100.0%   SWD 0.689``."""
     if not metrics:
         return ""
     parts = []
@@ -290,43 +291,44 @@ def plot_feasibility_row(panels: Sequence[Panel], coeffs: torch.Tensor,
 
     rows = 2 if show_profile else 1
     height = style.panel_size * (1 + style.profile_ratio if show_profile else 1) + 0.6
-    fig = plt.figure(figsize=(style.panel_size * num, height))
-    gs = fig.add_gridspec(rows, num, hspace=0.45, wspace=0.06,
-                          height_ratios=[1.0, style.profile_ratio] if show_profile else [1.0])
+    with plt.rc_context(SERIF_RC):
+        fig = plt.figure(figsize=(style.panel_size * num, height))
+        gs = fig.add_gridspec(rows, num, hspace=0.45, wspace=0.06,
+                              height_ratios=[1.0, style.profile_ratio] if show_profile else [1.0])
 
-    for col, (panel, H, vmax) in enumerate(zip(panels, hists, vmaxes)):
-        ax = fig.add_subplot(gs[0, col])
-        _draw_map(ax, H, vmax, contour, style, scale)
-        ax.set_title(panel.label, fontsize=style.title_size, color=style.text_color,
-                     fontweight="bold" if panel.highlight else "normal")
+        for col, (panel, H, vmax) in enumerate(zip(panels, hists, vmaxes)):
+            ax = fig.add_subplot(gs[0, col])
+            _draw_map(ax, H, vmax, contour, style, scale)
+            ax.set_title(panel.label, fontsize=style.title_size, color=style.text_color,
+                         fontweight="bold" if panel.highlight else "normal")
 
-        caption = panel.caption
-        if caption is None and style.show_metrics:
-            caption = format_metrics(panel.metrics, style.metric_keys, style.metric_separator)
-        if caption:
-            ax.set_xlabel(caption, fontsize=style.metric_size, color=style.text_color,
-                          labelpad=4)
+            caption = panel.caption
+            if caption is None and style.show_metrics:
+                caption = format_metrics(panel.metrics, style.metric_keys, style.metric_separator)
+            if caption:
+                ax.set_xlabel(caption, fontsize=style.metric_size, color=style.text_color,
+                              labelpad=4)
 
-        if panel.highlight:
-            _frame(ax, style.highlight_color, style.highlight_linewidth)
-        else:
-            _frame(ax, style.spine_color, 0.8)
+            if panel.highlight:
+                _frame(ax, style.highlight_color, style.highlight_linewidth)
+            else:
+                _frame(ax, style.spine_color, 0.8)
 
-        # Inside the first panel rather than under the figure: a figure-level legend lands on
-        # top of the profile row's axis labels once that row is enabled.
-        if legend and col == 0:
-            ax.legend(handles=[Line2D([0], [0], color=style.boundary_color,
-                                      lw=style.boundary_linewidth + 0.7,
-                                      linestyle=style.boundary_linestyle,
-                                      label=style.boundary_label)],
-                      loc="lower left", fontsize=style.metric_size - 1.0, framealpha=0.75,
-                      handlelength=2.6, borderpad=0.4)
+            # Inside the first panel rather than under the figure: a figure-level legend lands on
+            # top of the profile row's axis labels once that row is enabled.
+            if legend and col == 0:
+                ax.legend(handles=[Line2D([0], [0], color=style.boundary_color,
+                                          lw=style.boundary_linewidth + 0.7,
+                                          linestyle=style.boundary_linestyle,
+                                          label=style.boundary_label)],
+                          loc="lower left", fontsize=style.metric_size - 1.0, framealpha=0.75,
+                          handlelength=2.6, borderpad=0.4)
 
-        if show_profile:
-            _draw_profile(fig.add_subplot(gs[1, col]), profiles[col], style, profile_top,
-                          profile_xlim, first=col == 0)
+            if show_profile:
+                _draw_profile(fig.add_subplot(gs[1, col]), profiles[col], style, profile_top,
+                              profile_xlim, first=col == 0)
 
-    fig.tight_layout()
+        fig.tight_layout()
     return fig
 
 

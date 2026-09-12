@@ -1,0 +1,60 @@
+{
+  "arrays": {
+    "polynomials": {
+      "shape": [
+        8,
+        4,
+        4
+      ],
+      "dtype": "float32"
+    },
+    "latents": {
+      "shape": [
+        8,
+        512
+      ],
+      "dtype": "float32"
+    },
+    "pred_fields": {
+      "shape": [
+        8,
+        600,
+        600
+      ],
+      "dtype": "float32"
+    },
+    "true_fields": {
+      "shape": [
+        8,
+        600,
+        600
+      ],
+      "dtype": "float32"
+    },
+    "interp_fields": {
+      "shape": [
+        4,
+        5,
+        600,
+        600
+      ],
+      "dtype": "float32"
+    },
+    "interp_pairs": {
+      "shape": [
+        4,
+        2
+      ],
+      "dtype": "int32"
+    },
+    "interp_times": {
+      "shape": [
+        5
+      ],
+      "dtype": "float32"
+    }
+  },
+  "written_at": "2026-09-12T19:33:20",
+  "git_commit": "b9855d9531406795cab434d4ad2f611d2b422085",
+  "run_id": "siren_encoder_figures-c3903980"
+}

@@ -79,8 +79,8 @@ METHOD_LABELS = {
     "gt": "Ground Truth\n(rejection sampling)",
     "eci": "ECI\n(inference projection)",
     "hardflow": "HardFlow\n(inference guidance)",
-    "coeff": "Coefficients (ours)\n(polynomial conditioning)",
-    "functa": "Functa (ours)\n(constrained conditioning)",
+    "coeff": "Constraint Params (ours)",
+    "functa": "Functa (ours)",
 }
 
 # One figure per entry, each in its own subfolder. Ground truth must stay first: it sets the

@@ -1,9 +1,10 @@
 {
-  "run_id": "feasibility_fidelity-6cdc00dc",
+  "run_id": "feasibility_fidelity-e8241232",
   "method": "feasibility_fidelity",
-  "fingerprint": "6cdc00dc83bac09e338fab357a13b4ab7949826212d3b4f0a220bac5adb09fd3",
-  "git_commit": "f3356ee1054408afd2880e6faf31d2693b334dfa",
-  "created_at": "2026-09-08T19:17:04",
+  "fingerprint": "e824123247499ab1fd7c9a062c7ef59af38156a1292c604c8682fbf3456c903a",
+  "git_commit": "b9855d9531406795cab434d4ad2f611d2b422085",
+  "created_at": "2026-09-12T19:30:26",
   "base_ckpt": "constrained_fm/baselines/base_fm/ckpt.pt",
+  "poly_ckpt": "constrained_fm/baselines/poly_fm/ckpt.pt",
   "functa_run": "runs/siren-uniform-8d6375ab"
 }

@@ -1,11 +1,12 @@
 method: feasibility_fidelity
-run_id: feasibility_fidelity-49c2a507
+run_id: feasibility_fidelity-f8f940cc
 settings:
   bins: null
   boundary_profile: true
   chunk_size: 20000
   ckpt: constrained_fm/baselines/base_fm/ckpt.pt
   cmap: null
+  coeff_step_size: 0.05
   correction_loops: 1
   degree: 3
   dpi: 300
@@ -18,6 +19,9 @@ settings:
   gmm_pool_size: 100000
   guidance_scale: 100.0
   hidden_dim: 1024
+  highlight:
+  - coeff
+  - functa
   margin: 0.001
   metric_keys: null
   metric_samples: 100000
@@ -25,15 +29,7 @@ settings:
   norm: null
   num_blocks: 4
   num_samples: 100000
-  panels_3:
-  - gt
-  - eci
-  - hardflow
-  panels_4:
-  - gt
-  - eci
-  - hardflow
-  - functa
+  poly_ckpt: constrained_fm/baselines/poly_fm/ckpt.pt
   poly_id: 63
   projection_iters: 16
   scale: 4.5
@@ -41,8 +37,13 @@ settings:
   steps: 100
   style:
   - light
-  - dark
   time_dim: 128
+  variants:
+  - 3panel_baselines
+  - 4panel_functa
+  - 4panel_coeff
+  - 5panel_all
   vmax_mode: null
 base_ckpt: constrained_fm/baselines/base_fm/ckpt.pt
+poly_ckpt: constrained_fm/baselines/poly_fm/ckpt.pt
 functa_run: runs/siren-uniform-8d6375ab

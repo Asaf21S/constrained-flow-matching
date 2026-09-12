@@ -25,14 +25,7 @@ from matplotlib.lines import Line2D
 
 from constrained_fm.src.consts import PLANE_SCALE
 from constrained_fm.src.visualization.diagnostics import smooth_field
-
-# Computer Modern, matching the LaTeX body text of the paper.
-SERIF_RC: dict[str, Any] = {
-    "font.family": "serif",
-    "font.serif": ["Computer Modern Roman", "cmr10", "DejaVu Serif"],
-    "mathtext.fontset": "cm",
-    "axes.grid": False,
-}
+from constrained_fm.src.visualization.style import SERIF_RC
 
 
 @dataclass

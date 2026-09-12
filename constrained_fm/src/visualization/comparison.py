@@ -267,6 +267,7 @@ def save_figure(fig: Figure, path: str | Path, dpi: int = 200) -> Path:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, dpi=dpi, bbox_inches="tight")
+    fig.savefig(path.with_suffix(".pdf"), bbox_inches="tight")
     plt.close(fig)
     return path
 

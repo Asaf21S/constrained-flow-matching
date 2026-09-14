@@ -25,7 +25,7 @@ from matplotlib.lines import Line2D
 
 from constrained_fm.src.consts import PLANE_SCALE
 from constrained_fm.src.visualization.diagnostics import smooth_field
-from constrained_fm.src.visualization.style import SERIF_RC
+from constrained_fm.src.visualization.style import PAPER_RC
 
 
 @dataclass
@@ -55,8 +55,8 @@ class EncoderStyle:
 
     # --- layout ---
     panel_size: float = 4.4
-    tick_size: float = 11.0
-    title_size: float = 15.0
+    tick_size: float = 16.0
+    title_size: float = 22.0
     show_ticks: bool = True
     spine_color: str | None = None
 
@@ -65,14 +65,14 @@ class EncoderStyle:
     colorbar_label: str = r"$f_\theta(x, z)$"
     colorbar_fraction: float = 0.046
     colorbar_pad: float = 0.04
-    label_size: float = 13.0
+    label_size: float = 20.0
 
     # --- legend ---
     show_legend: bool = False
     gt_label: str = r"ground truth  $P(x) = 0$"
     pred_label: str = r"decoded  $f_\theta(x, z) = 0$"
     legend_loc: str = "upper right"
-    legend_size: float = 10.0
+    legend_size: float = 16.0
 
 
 STYLE_PRESETS: dict[str, EncoderStyle] = {
@@ -161,7 +161,7 @@ def plot_encoder_panel(pred_field: np.ndarray, true_field: np.ndarray,
     true_field = np.asarray(true_field)
     vmin, vmax = field_limits(pred_field[None], style)
 
-    with plt.rc_context(SERIF_RC):
+    with plt.rc_context(PAPER_RC):
         fig, ax = plt.subplots(figsize=(style.panel_size, style.panel_size))
         mappable = _draw_field(ax, pred_field, vmin, vmax, style, scale)
         _draw_boundary(ax, true_field, scale, style.gt_color, style.gt_linestyle,
@@ -201,10 +201,10 @@ def plot_interpolation_row(fields: np.ndarray, times: Sequence[float],
         raise ValueError(f"{fields.shape[0]} fields for {len(times)} interpolation times")
     vmin, vmax = field_limits(fields, style)
 
-    with plt.rc_context(SERIF_RC):
+    with plt.rc_context(PAPER_RC):
         fig, axs = plt.subplots(1, len(times),
                                 figsize=(style.panel_size * len(times), style.panel_size),
-                                squeeze=False)
+                                squeeze=False, constrained_layout=True)
         mappable = None
         for ax, field, t in zip(axs[0], fields, times):
             mappable = _draw_field(ax, field, vmin, vmax, style, scale)
@@ -215,7 +215,53 @@ def plot_interpolation_row(fields: np.ndarray, times: Sequence[float],
 
         if style.show_colorbar and mappable is not None:
             _add_colorbar(fig, mappable, list(axs[0]), style)
-        fig.tight_layout()
+    return fig
+
+
+def plot_boundary_grid(pred_fields: np.ndarray, true_fields: np.ndarray, rows: int, cols: int,
+                       scale: float = PLANE_SCALE,
+                       style: EncoderStyle | None = None) -> Figure:
+    """Grid of decoded-field panels, one per constraint, sharing one colour scale.
+
+    Cell content is identical to :func:`plot_encoder_panel`; this only arranges ``rows *
+    cols`` of them and, if the style asks for one, draws a single colorbar for the whole
+    grid instead of one per panel.
+
+    Args:
+        pred_fields: (rows * cols, R, R) decoded ``f_theta(x, z)`` fields.
+        true_fields: (rows * cols, R, R) the matching ``P(x)`` fields.
+    """
+    style = style or get_style()
+    pred_fields = np.asarray(pred_fields)
+    true_fields = np.asarray(true_fields)
+    cells = rows * cols
+    if pred_fields.shape[0] != cells or true_fields.shape[0] != cells:
+        raise ValueError(f"{rows}x{cols} grid needs {cells} fields, "
+                         f"got {pred_fields.shape[0]} pred / {true_fields.shape[0]} true")
+    vmin, vmax = field_limits(pred_fields, style)
+
+    with plt.rc_context(PAPER_RC):
+        fig, axs = plt.subplots(rows, cols, figsize=(style.panel_size * cols,
+                                                      style.panel_size * rows), squeeze=False,
+                                constrained_layout=True)
+        mappable = None
+        for ax, pred_field, true_field in zip(axs.flat, pred_fields, true_fields):
+            mappable = _draw_field(ax, pred_field, vmin, vmax, style, scale)
+            _draw_boundary(ax, true_field, scale, style.gt_color, style.gt_linestyle,
+                           style.gt_linewidth, zorder=3)
+            _draw_boundary(ax, pred_field, scale, style.pred_color, style.pred_linestyle,
+                           style.pred_linewidth, zorder=4, sigma=style.smooth_sigma)
+            _finish_axes(ax, style, scale)
+
+        if style.show_colorbar and mappable is not None:
+            _add_colorbar(fig, mappable, list(axs.flat), style)
+        if style.show_legend:
+            axs.flat[0].legend(handles=[
+                Line2D([0], [0], color=style.gt_color, lw=style.gt_linewidth,
+                       linestyle=style.gt_linestyle, label=style.gt_label),
+                Line2D([0], [0], color=style.pred_color, lw=style.pred_linewidth,
+                       linestyle=style.pred_linestyle, label=style.pred_label),
+            ], loc=style.legend_loc, fontsize=style.legend_size, framealpha=0.9)
     return fig
 
 
@@ -234,5 +280,6 @@ def save_encoder_figure(fig: Figure, stem: str | Path, formats: Sequence[str] = 
     return written
 
 
-__all__ = ["SERIF_RC", "EncoderStyle", "STYLE_PRESETS", "get_style", "field_limits",
-           "plot_encoder_panel", "plot_interpolation_row", "save_encoder_figure"]
+__all__ = ["PAPER_RC", "EncoderStyle", "STYLE_PRESETS", "get_style", "field_limits",
+           "plot_encoder_panel", "plot_interpolation_row", "plot_boundary_grid",
+           "save_encoder_figure"]

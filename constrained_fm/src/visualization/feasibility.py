@@ -25,7 +25,7 @@ from matplotlib.ticker import MaxNLocator
 
 from constrained_fm.src.consts import PLANE_SCALE, POLYNOMIAL_DEGREE
 from constrained_fm.src.geometry.polynomials import compute_poly_features, evaluate_poly
-from constrained_fm.src.visualization.style import SERIF_RC
+from constrained_fm.src.visualization.style import PAPER_RC
 
 # Short name and format string per metric, so panel captions stay compact enough to read.
 METRIC_FORMATS: dict[str, tuple[str, str]] = {
@@ -70,8 +70,8 @@ class FeasibilityStyle:
 
     # --- layout / typography ---
     panel_size: float = 3.1
-    title_size: float = 12.0
-    metric_size: float = 9.0
+    title_size: float = 15.0
+    metric_size: float = 11.0
     text_color: str = "black"
     highlight_color: str = "#1a7f37"
     highlight_linewidth: float = 2.2
@@ -291,7 +291,7 @@ def plot_feasibility_row(panels: Sequence[Panel], coeffs: torch.Tensor,
 
     rows = 2 if show_profile else 1
     height = style.panel_size * (1 + style.profile_ratio if show_profile else 1) + 0.6
-    with plt.rc_context(SERIF_RC):
+    with plt.rc_context(PAPER_RC):
         fig = plt.figure(figsize=(style.panel_size * num, height))
         gs = fig.add_gridspec(rows, num, hspace=0.45, wspace=0.06,
                               height_ratios=[1.0, style.profile_ratio] if show_profile else [1.0])
@@ -321,12 +321,13 @@ def plot_feasibility_row(panels: Sequence[Panel], coeffs: torch.Tensor,
                                           lw=style.boundary_linewidth + 0.7,
                                           linestyle=style.boundary_linestyle,
                                           label=style.boundary_label)],
-                          loc="lower left", fontsize=style.metric_size - 1.0, framealpha=0.75,
-                          handlelength=2.6, borderpad=0.4)
+                          loc="lower left", fontsize=style.metric_size + 0.5,
+                          framealpha=0.75, handlelength=2.6, borderpad=0.4)
 
-            if show_profile:
-                _draw_profile(fig.add_subplot(gs[1, col]), profiles[col], style, profile_top,
-                              profile_xlim, first=col == 0)
+        if show_profile:
+            for col, data in enumerate(profiles):
+                ax = fig.add_subplot(gs[1, col])
+                _draw_profile(ax, data, style, profile_top, profile_xlim, first=col == 0)
 
         fig.tight_layout()
     return fig
@@ -393,15 +394,15 @@ def _draw_profile(ax, data: dict[str, Any], style: FeasibilityStyle, top: float 
         lines.append(f"peak {data['peak']:.0f}, clipped")
     if lines:
         ax.text(0.03, 0.95, "\n".join(lines), transform=ax.transAxes, va="top", ha="left",
-                fontsize=style.metric_size - 1.5, color=style.text_color,
+                fontsize=style.metric_size - 0.5, color=style.text_color,
                 bbox=dict(facecolor="white", alpha=0.75, edgecolor="none",
                           boxstyle="round,pad=0.25"))
 
-    ax.set_xlabel(style.profile_xlabel, fontsize=style.metric_size - 0.5)
+    ax.set_xlabel(style.profile_xlabel, fontsize=style.metric_size)
     ax.xaxis.set_major_locator(MaxNLocator(nbins=4, prune="both"))
-    ax.tick_params(labelsize=style.metric_size - 1.5)
+    ax.tick_params(labelsize=style.metric_size)
     if first:
-        ax.set_ylabel(style.profile_ylabel, fontsize=style.metric_size - 0.5)
+        ax.set_ylabel(style.profile_ylabel, fontsize=style.metric_size)
     else:
         ax.set_yticklabels([])
     ax.grid(True, alpha=0.25)

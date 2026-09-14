@@ -1,0 +1,21 @@
+method: query_budget
+run_id: query_budget-dee3227e
+settings:
+  degree: 3
+  extraction_chunk: 128
+  gmm_pool_size: 100000
+  iou_mass_samples: 20000
+  no_flow_matching: false
+  num_points:
+  - 10
+  - 25
+  - 50
+  - 100
+  - 300
+  - 1000
+  - 2000
+  num_x0: 10000
+  run_id: siren-uniform-8d6375ab
+  scale: 4.5
+  step_size: 0.05
+  validation_set: v1k

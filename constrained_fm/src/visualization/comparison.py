@@ -25,12 +25,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.figure import Figure
 
-METHOD_ORDER = ("gt", "coeff", "functa", "eci", "hardflow")
+from constrained_fm.src.visualization.style import PAPER_RC
+
+plt.rcParams.update(PAPER_RC)
+
+METHOD_ORDER = ("gt", "coeff", "functa", "fewshot", "eci", "hardflow")
 
 METHOD_LABELS = {
     "gt": "Ground Truth (rejection sampling)",
     "coeff": "Coefficients (ours)",
     "functa": "Functa (ours)",
+    "fewshot": "Few-Shot",
     "eci": "ECI",
     "hardflow": "HardFlow",
 }
@@ -40,6 +45,7 @@ METHOD_SHORT = {
     "gt": "Ground Truth",
     "coeff": "Coefficients",
     "functa": "Functa (ours)",
+    "fewshot": "Few-Shot",
     "eci": "ECI",
     "hardflow": "HardFlow",
 }
@@ -48,11 +54,13 @@ METHOD_COLORS = {
     "gt": "#111827",
     "coeff": "#2563eb",
     "functa": "#dc2626",
+    "fewshot": "#7c3aed",
     "eci": "#0d9488",
     "hardflow": "#d97706",
 }
 
-METHOD_STYLES = {"gt": (0, (6, 4)), "coeff": "-", "functa": "-", "eci": "-", "hardflow": "-"}
+METHOD_STYLES = {"gt": (0, (6, 4)), "coeff": "-", "functa": "-", "fewshot": "-",
+                 "eci": "-", "hardflow": "-"}
 
 # label, axis title, log scale. SWD/MMD/JSD span orders of magnitude across the mass range;
 # NLL and KLD do not, and KLD dips below zero on the finite-sample estimate.
@@ -129,7 +137,7 @@ def plot_metric_trend(series: dict[str, tuple[np.ndarray, np.ndarray]], xlabel: 
                       identity_label: str = "parity ($y = x$)",
                       identity_color: str = "#9ca3af",
                       labels: dict[str, str] | None = None,
-                      figsize: tuple[float, float] = (7.6, 5.2)) -> Figure:
+                      figsize: tuple[float, float] = (8.4, 5.8)) -> Figure:
     """One rolling-median line with an interquartile band per method, on shared axes.
 
     ``series`` maps a method name to its (x, y) arrays; methods are drawn in METHOD_ORDER so
@@ -148,14 +156,14 @@ def plot_metric_trend(series: dict[str, tuple[np.ndarray, np.ndarray]], xlabel: 
             continue
         color = METHOD_COLORS.get(method, "#6b7280")
         ax.fill_between(centre, lower, upper, color=color, alpha=0.15, linewidth=0)
-        ax.plot(centre, median, color=color, linewidth=2.0,
-                linestyle=METHOD_STYLES.get(method, "-"), marker="o", markersize=3.0,
+        ax.plot(centre, median, color=color, linewidth=2.6,
+                linestyle=METHOD_STYLES.get(method, "-"), marker="o", markersize=4.0,
                 label=labels.get(method, label_for(method)))
 
     if identity:
         lo, hi = ax.get_xlim()
         span = np.geomspace(max(lo, 1e-12), hi, 64) if logx else np.linspace(lo, hi, 64)
-        ax.plot(span, span, color=identity_color, linestyle=(0, (5, 5)), linewidth=1.4,
+        ax.plot(span, span, color=identity_color, linestyle=(0, (5, 5)), linewidth=1.9,
                 zorder=0, label=identity_label)
         ax.set_xlim(lo, hi)
 
@@ -168,7 +176,7 @@ def plot_metric_trend(series: dict[str, tuple[np.ndarray, np.ndarray]], xlabel: 
     ax.set_ylabel(ylabel)
     ax.grid(True, which="both", **GRID_STYLE)
     ax.set_axisbelow(True)
-    ax.legend(loc="lower right", frameon=False, fontsize=9)
+    ax.legend(loc="lower right", frameon=False)
     fig.tight_layout()
     return fig
 
@@ -224,7 +232,7 @@ def plot_parity(x, y, xlabel: str, ylabel: str, title: str, color_by=None,
 
     caption = annotate if annotate is not None else \
         f"below the line: {win_rate(x_arr, y_arr):.1f}% of {x_arr.size}"
-    ax.text(0.03, 0.97, caption, transform=ax.transAxes, va="top", ha="left", fontsize=8.5,
+    ax.text(0.03, 0.97, caption, transform=ax.transAxes, va="top", ha="left", fontsize=13,
             bbox=dict(boxstyle="round,pad=0.3", facecolor="white", edgecolor="#d1d5db",
                       alpha=0.9))
 
@@ -237,7 +245,7 @@ def plot_parity(x, y, xlabel: str, ylabel: str, title: str, color_by=None,
 
 def plot_parity_grid(panels: list[dict], suptitle: str, ncols: int = 2, log: bool = True,
                      color_label: str = "True constraint mass (%)",
-                     panel_size: tuple[float, float] = (4.6, 4.4)) -> Figure:
+                     panel_size: tuple[float, float] = (5.2, 5.0)) -> Figure:
     """The head-to-head panels of one metric on a shared grid, with a single colourbar.
 
     Each entry of ``panels`` carries x, y, xlabel, ylabel, title and optional color_by.

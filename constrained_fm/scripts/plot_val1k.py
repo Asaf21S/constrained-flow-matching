@@ -7,12 +7,15 @@ Reads only the merged metrics.json, persists the arrays the figures consume unde
 * **Format A, trend lines** -- one figure per metric, all methods on shared axes, each point a
   rolling median over a fixed number of constraints sorted along the x axis.
   SWD / MMD / JSD are drawn against the *ground truth's own value* for that metric, which is
-  the achievable noise floor at that constraint, so the GT curve is the parity line and the
-  vertical gap to it is the excess discrepancy. Acceptance rate is drawn against the true
-  constraint mass, where sampling the target GMM unconditionally traces y = x. NLL and KLD are
-  drawn against the true constraint mass for the coefficient and Functa models only -- ECI and
-  HardFlow alter the state outside the probability-flow ODE, so no density of theirs is
-  defined, and rejection sampling's KLD is identically zero by construction.
+  the achievable noise floor at that constraint. No empirical ground-truth series is drawn
+  there: on that axis the ground truth *is* the y = x line, so it is rendered as the parity
+  reference and the vertical gap to it is the excess discrepancy. Acceptance rate is drawn
+  against the true constraint mass, where sampling the target GMM unconditionally traces
+  y = x. NLL and KLD are drawn against the true constraint mass for the methods sampled by
+  an intact probability-flow ODE -- ECI and HardFlow alter the state outside it, so no
+  density of theirs is defined, and rejection sampling's KLD is identically zero.
+  Every trend metric is exported twice: once including the few-shot baseline
+  (``*_with_fewshot``) and once without it.
 * **Format B, head-to-head parity scatter** -- SWD / MMD / JSD, our two learned methods
   against each inference-time baseline, one point per constraint.
 
@@ -37,11 +40,14 @@ from constrained_fm.src.visualization.comparison import (METHOD_COLORS, METRIC_S
 DEFAULT_OUTDIR = "constrained_fm/baselines/val1k"
 DEFAULT_FIGURE_DIR = "constrained_fm/images/thesis_pool/val1k"
 
-TREND_ALL_METHODS = ("gt", "coeff", "functa", "eci", "hardflow")
+TREND_ALL_METHODS = ("coeff", "functa", "fewshot", "eci", "hardflow")
 # Metrics drawn against the ground truth's own value for that metric.
 GT_AXIS_METRICS = ("swd", "mmd", "jsd")
-# Metrics whose density only exists for the two ODE-faithful methods.
+# Metrics whose density only exists for methods sampled by an intact probability-flow ODE.
 DENSITY_METRICS = ("nll", "kld")
+DENSITY_TREND_METHODS = ("coeff", "functa", "fewshot")
+ACCEPTANCE_TREND_METHODS = ("coeff", "functa", "fewshot")
+FEWSHOT = "fewshot"
 # Baseline on x, our method on y.
 PARITY_PAIRS = (("gt", "coeff"), ("gt", "functa"), ("eci", "coeff"), ("eci", "functa"),
                 ("hardflow", "coeff"), ("hardflow", "functa"))
@@ -49,6 +55,8 @@ MASS_AXIS_LABEL = "True constraint mass (%)"
 ACCEPTANCE_AXIS_LABEL = "Acceptance Rate (%)"
 # Sampling the target GMM unconditionally accepts exactly the constraint's mass, hence y = x.
 GMM_REFERENCE_LABEL = "Unconstrained Target GMM"
+# On a ground-truth x axis the parity line *is* the ground truth, so no empirical series is drawn.
+GT_REFERENCE_LABEL = "Ground Truth"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -102,22 +110,47 @@ def persist_arrays(out: Path, payload: dict, by_method: dict[str, dict[str, np.n
                              methods=sorted(by_method))
 
 
-def render_trends(by_method: dict[str, dict[str, np.ndarray]], mass: np.ndarray,
-                  figure_dir: Path, window: int, step: int) -> list[Path]:
-    written = []
-    mass_pct = mass * 100.0
+def fewshot_label(payload: dict) -> str | None:
+    """The shot budget is part of the baseline's identity, so it belongs in the legend."""
+    merged = payload.get("methods", {}).get(FEWSHOT)
+    if merged is None:
+        return None
+    n_points = merged.get("eval", {}).get("n_points")
+    return f"Few-Shot ($N{{=}}{n_points}$)" if n_points else "Few-Shot"
 
-    series = {}
-    for name in ("coeff", "functa"):
-        if name in by_method and "success_rate" in by_method[name]:
-            series[name] = (mass_pct, by_method[name]["success_rate"])
-    if series:
-        written.append(save_figure(
-            plot_metric_trend(series, MASS_AXIS_LABEL, ACCEPTANCE_AXIS_LABEL,
-                              "Acceptance rate vs constraint mass", window=window, step=step,
-                              identity=True, identity_label=GMM_REFERENCE_LABEL,
-                              identity_color=METHOD_COLORS["gt"]),
-            figure_dir / "trend_success_rate.png"))
+
+def save_both_variants(figure_factory, figure_dir: Path, stem: str,
+                       has_fewshot: bool) -> list[Path]:
+    """Version B never shows the few-shot line; version A is added only when it exists."""
+    written = [save_figure(figure_factory(False), figure_dir / f"{stem}.png")]
+    if has_fewshot:
+        written.append(save_figure(figure_factory(True),
+                                   figure_dir / f"{stem}_with_fewshot.png"))
+    return written
+
+
+def render_trends(by_method: dict[str, dict[str, np.ndarray]], mass: np.ndarray,
+                  figure_dir: Path, window: int, step: int,
+                  fewshot_name: str | None = None) -> list[Path]:
+    written: list[Path] = []
+    mass_pct = mass * 100.0
+    has_fewshot = FEWSHOT in by_method
+    labels = {FEWSHOT: fewshot_name} if fewshot_name else None
+
+    def pick(names, include_fewshot: bool, metric: str) -> list[str]:
+        return [n for n in names if n in by_method and metric in by_method[n]
+                and (include_fewshot or n != FEWSHOT)]
+
+    def acceptance(include_fewshot: bool):
+        series = {n: (mass_pct, by_method[n]["success_rate"])
+                  for n in pick(ACCEPTANCE_TREND_METHODS, include_fewshot, "success_rate")}
+        return plot_metric_trend(series, MASS_AXIS_LABEL, ACCEPTANCE_AXIS_LABEL, "",
+                                 window=window, step=step, identity=True,
+                                 identity_label=GMM_REFERENCE_LABEL,
+                                 identity_color=METHOD_COLORS["gt"], labels=labels)
+
+    if pick(ACCEPTANCE_TREND_METHODS, True, "success_rate"):
+        written += save_both_variants(acceptance, figure_dir, "trend_success_rate", has_fewshot)
 
     gt_metrics = by_method.get("gt", {})
     for metric in GT_AXIS_METRICS:
@@ -125,28 +158,31 @@ def render_trends(by_method: dict[str, dict[str, np.ndarray]], mass: np.ndarray,
         if metric not in gt_metrics:
             print(f"skipping trend_{metric}: ground truth has no {short}")
             continue
-        series = {name: (gt_metrics[metric], metrics[metric])
-                  for name, metrics in by_method.items()
-                  if name in TREND_ALL_METHODS and metric in metrics}
-        written.append(save_figure(
-            plot_metric_trend(series, f"Ground truth {short} (noise floor)", axis_label,
-                              f"{short} against the achievable noise floor",
-                              logx=log, logy=log, window=window, step=step, identity=True),
-            figure_dir / f"trend_{metric}.png"))
+
+        def gt_axis(include_fewshot: bool, metric=metric, short=short,
+                    axis_label=axis_label, log=log):
+            series = {n: (gt_metrics[metric], by_method[n][metric])
+                      for n in pick(TREND_ALL_METHODS, include_fewshot, metric)}
+            return plot_metric_trend(series, f"Ground truth {short} (noise floor)", axis_label,
+                                     "", logx=log, logy=log, window=window, step=step,
+                                     identity=True, identity_label=GT_REFERENCE_LABEL,
+                                     identity_color=METHOD_COLORS["gt"], labels=labels)
+
+        written += save_both_variants(gt_axis, figure_dir, f"trend_{metric}", has_fewshot)
 
     for metric in DENSITY_METRICS:
         short, axis_label, log = METRIC_SPECS[metric]
-        series = {name: (mass_pct, by_method[name][metric])
-                  for name in ("coeff", "functa")
-                  if name in by_method and metric in by_method[name]}
-        if not series:
+        if not pick(DENSITY_TREND_METHODS, True, metric):
             print(f"skipping trend_{metric}: no method reports it")
             continue
-        written.append(save_figure(
-            plot_metric_trend(series, MASS_AXIS_LABEL, axis_label,
-                              f"{short} vs constraint mass (exact likelihood)",
-                              logy=log, window=window, step=step),
-            figure_dir / f"trend_{metric}.png"))
+
+        def density(include_fewshot: bool, metric=metric, axis_label=axis_label, log=log):
+            series = {n: (mass_pct, by_method[n][metric])
+                      for n in pick(DENSITY_TREND_METHODS, include_fewshot, metric)}
+            return plot_metric_trend(series, MASS_AXIS_LABEL, axis_label, "",
+                                     logy=log, window=window, step=step, labels=labels)
+
+        written += save_both_variants(density, figure_dir, f"trend_{metric}", has_fewshot)
 
     return written
 
@@ -213,7 +249,8 @@ def main(argv: list[str] | None = None) -> int:
           f"{payload['num_constraints']} constraints | methods {sorted(by_method)}")
 
     persist_arrays(out, payload, by_method, mass)
-    written = render_trends(by_method, mass, figure_dir, args.window, args.step)
+    written = render_trends(by_method, mass, figure_dir, args.window, args.step,
+                            fewshot_name=fewshot_label(payload))
     written += render_parity(by_method, mass, figure_dir, not args.no_panels)
 
     for path in written:

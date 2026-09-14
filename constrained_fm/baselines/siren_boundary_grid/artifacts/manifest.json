@@ -1,0 +1,38 @@
+{
+  "arrays": {
+    "polynomials": {
+      "shape": [
+        24,
+        4,
+        4
+      ],
+      "dtype": "float32"
+    },
+    "latents": {
+      "shape": [
+        24,
+        512
+      ],
+      "dtype": "float32"
+    },
+    "pool_pred_fields": {
+      "shape": [
+        24,
+        500,
+        500
+      ],
+      "dtype": "float32"
+    },
+    "pool_true_fields": {
+      "shape": [
+        24,
+        500,
+        500
+      ],
+      "dtype": "float32"
+    }
+  },
+  "written_at": "2026-09-14T18:09:19",
+  "git_commit": "d9386c851b4fa8080fd71b26c68e624512c4577d",
+  "run_id": "siren_boundary_grid-4005b721"
+}

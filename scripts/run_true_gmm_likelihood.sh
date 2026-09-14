@@ -13,4 +13,4 @@ mkdir -p "$ENROOT_CACHE_PATH"
 
 srun --container-image=/users/rosenbaum/asolomiak/nvidia+pytorch+24.03-py3.sqsh \
      --container-mounts=/users/rosenbaum/asolomiak/constrained-flow-matching:/workspace \
-     bash -c "cd /workspace && python -c \"from constrained_fm.src.visualization.density import visualize_true_gmm_likelihood; visualize_true_gmm_likelihood(save_path='constrained_fm/images/thesis_pool/true_gmm_likelihood', show=False)\""
+     bash -c "cd /workspace && python -c \"from constrained_fm.src.visualization.density import visualize_true_gmm_likelihood; visualize_true_gmm_likelihood(save_path='constrained_fm/images/thesis_pool/target_and_constraints/true_gmm_likelihood', show=False)\""

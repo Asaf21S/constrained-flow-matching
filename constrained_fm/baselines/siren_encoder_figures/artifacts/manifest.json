@@ -54,7 +54,7 @@
       "dtype": "float32"
     }
   },
-  "written_at": "2026-09-12T19:33:20",
-  "git_commit": "b9855d9531406795cab434d4ad2f611d2b422085",
+  "written_at": "2026-09-14T18:07:47",
+  "git_commit": "d9386c851b4fa8080fd71b26c68e624512c4577d",
   "run_id": "siren_encoder_figures-c3903980"
 }

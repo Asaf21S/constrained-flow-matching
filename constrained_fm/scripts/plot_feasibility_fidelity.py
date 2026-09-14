@@ -79,7 +79,7 @@ METHOD_LABELS = {
     "gt": "Ground Truth\n(rejection sampling)",
     "eci": "ECI\n(inference projection)",
     "hardflow": "HardFlow\n(inference guidance)",
-    "coeff": "Constraint Params (ours)",
+    "coeff": "Constraint Amortization (Ours)",
     "functa": "Functa (ours)",
 }
 

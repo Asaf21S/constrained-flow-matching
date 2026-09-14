@@ -10,9 +10,9 @@ import matplotlib.colors as mcolors
 from constrained_fm.src.geometry.polynomials import compute_poly_features, evaluate_poly
 from constrained_fm.src.consts import GMM_MEANS, GMM_COVS, GMM_WEIGHTS, POLYNOMIAL_DEGREE, PLANE_SCALE
 from constrained_fm.src.datasets.gmm_target import get_points, compute_gmm_density
-from constrained_fm.src.visualization.style import SERIF_RC
+from constrained_fm.src.visualization.style import PAPER_RC
 
-plt.rcParams.update(SERIF_RC)
+plt.rcParams.update(PAPER_RC)
 
 
 def visualize_true_gmm_likelihood(means=GMM_MEANS, covs=GMM_COVS, weights=GMM_WEIGHTS, grid_size=200, device=None,

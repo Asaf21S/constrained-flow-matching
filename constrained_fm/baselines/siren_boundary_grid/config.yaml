@@ -1,0 +1,13 @@
+method: siren_boundary_grid
+run_id: siren_boundary_grid-4005b721
+settings:
+  cols: 4
+  config_run_id: siren-uniform-8d6375ab
+  extraction_lr: 0.000625
+  extraction_steps: 15
+  num_grids: 3
+  points_per_shape: 1000
+  pool_size: 24
+  resolution: 500
+  rows: 2
+  seed: 0

@@ -32,8 +32,6 @@ class ConstraintGridStyle:
     panel_size: float = 2.1
     spine_color: str = "#999999"
     spine_linewidth: float = 0.8
-    show_mass_label: bool = True
-    mass_label_size: float = 10.0
 
 
 STYLE_PRESETS: dict[str, ConstraintGridStyle] = {
@@ -64,8 +62,8 @@ def _render_panel(ax, coeffs: torch.Tensor, degree: int, scale: float, grid_size
         spine.set_linewidth(style.spine_linewidth)
 
 
-def plot_constraint_grid(polynomials: torch.Tensor, masses: torch.Tensor | None = None,
-                         nrows: int = 2, ncols: int = 5, seed: int = 0, grid_size: int = 200,
+def plot_constraint_grid(polynomials: torch.Tensor, nrows: int = 2, ncols: int = 5,
+                         seed: int = 0, grid_size: int = 200,
                          degree: int = POLYNOMIAL_DEGREE, scale: float = PLANE_SCALE,
                          extent: tuple[float, float, float, float] = (-4.5, 4.5, -4.5, 4.5),
                          style: ConstraintGridStyle | str = "paper", save_path=None, show: bool = True):
@@ -88,9 +86,6 @@ def plot_constraint_grid(polynomials: torch.Tensor, masses: torch.Tensor | None 
                                  figsize=(style.panel_size * ncols, style.panel_size * nrows))
         for ax, idx in zip(axes.ravel(), indices):
             _render_panel(ax, polynomials[idx], degree, scale, grid_size, extent, style)
-            if style.show_mass_label and masses is not None:
-                ax.set_title(f"mass = {float(masses[idx]):.2f}",
-                            fontsize=style.mass_label_size, family="serif")
         fig.tight_layout(pad=0.6)
 
     if save_path is not None:
@@ -108,8 +103,8 @@ def plot_constraint_grid(polynomials: torch.Tensor, masses: torch.Tensor | None 
     return fig, indices
 
 
-def render_constraint_grid_variants(polynomials: torch.Tensor, masses: torch.Tensor | None,
-                                    out_dir, num_variants: int, nrows: int = 2, ncols: int = 5,
+def render_constraint_grid_variants(polynomials: torch.Tensor, out_dir, num_variants: int,
+                                    nrows: int = 2, ncols: int = 5,
                                     seed_start: int = 0, **kwargs) -> list[Path]:
     """Renders ``num_variants`` grids, one seed apart, so the caller can pick one for the paper."""
     out_dir = Path(out_dir)
@@ -117,7 +112,7 @@ def render_constraint_grid_variants(polynomials: torch.Tensor, masses: torch.Ten
     for i in range(num_variants):
         seed = seed_start + i
         save_path = out_dir / f"constraint_grid_seed{seed}"
-        plot_constraint_grid(polynomials, masses, nrows=nrows, ncols=ncols, seed=seed,
+        plot_constraint_grid(polynomials, nrows=nrows, ncols=ncols, seed=seed,
                              save_path=save_path, show=False, **kwargs)
         paths.append(save_path)
     return paths

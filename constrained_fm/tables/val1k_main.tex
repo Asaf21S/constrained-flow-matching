@@ -3,19 +3,19 @@
 \centering
 \small
 \setlength{\tabcolsep}{4pt}
-\begin{tabular}{lrrrr}
+\begin{tabular}{lrrrrr}
 \toprule
-Metric (median) & Coefficients \textbf{(ours)} & Functa \textbf{(ours)} & ECI & HardFlow \\
+Metric (median) & Coefficients \textbf{(ours)} & Few-shot, $N{=}2000$ & Functa \textbf{(ours)} & ECI & HardFlow \\
 \midrule
-Acceptance Rate (\%) & 98.61 & 97.92 & \textbf{100.00} & \textbf{100.00} \\
-SWD & \textbf{0.0617} & 0.0706 & 0.5218 & 0.4204 \\
-MMD & \textbf{0.0007} & 0.0008 & 0.0469 & 0.0326 \\
-KLD & \textbf{0.0275} & 0.0461 & n/a & n/a \\
+Acceptance Rate (\%) & 98.61 & 97.39 & 97.92 & \textbf{100.00} & \textbf{100.00} \\
+SWD & \textbf{0.0617} & 0.1124 & 0.0706 & 0.5218 & 0.4204 \\
+MMD & \textbf{0.00069} & 0.00230 & 0.00083 & 0.04686 & 0.03259 \\
+KLD & \textbf{0.0275} & 0.0827 & 0.0461 & n/a & n/a \\
 \midrule
-constraint supplied as & coefficients & 512-dim latent & exact $P(x)$ at sampling & exact $P(x)$ at sampling \\
-constraint seen during training & yes & yes & \textbf{no} & \textbf{no} \\
-models trained & 1 & 1 & 1 & 1 \\
-unseen constraint without retraining & yes & yes & yes & yes \\
+constraint supplied as & coefficients & $N$ valid samples & 512-dim latent & exact $P(x)$ at sampling & exact $P(x)$ at sampling \\
+constraint seen during training & yes & yes & yes & \textbf{no} & \textbf{no} \\
+models trained & 1 & 1000 (one per constraint) & 1 & 1 & 1 \\
+unseen constraint without retraining & yes & \textbf{no} & yes & yes & yes \\
 \bottomrule
 \end{tabular}
 \caption{Median performance over the 1000-polynomial validation set. KLD is undefined for ECI and HardFlow, which alter the state outside the probability-flow ODE, so no density of theirs is defined.}

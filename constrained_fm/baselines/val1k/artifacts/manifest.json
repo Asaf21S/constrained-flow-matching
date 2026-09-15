@@ -149,10 +149,46 @@
         1000
       ],
       "dtype": "float32"
+    },
+    "fewshot__success_rate": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "fewshot__swd": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "fewshot__mmd": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "fewshot__jsd": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "fewshot__nll": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "fewshot__kld": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
     }
   },
-  "written_at": "2026-09-14T17:13:36",
-  "git_commit": "d9386c851b4fa8080fd71b26c68e624512c4577d",
+  "written_at": "2026-09-15T18:34:34",
+  "git_commit": "a6bb6ef89085f41689959d6d3c2e8f26018a811f",
   "run_id": "val1k-c540c646",
   "method": "val1k",
   "validation_set": "v1k",
@@ -161,6 +197,7 @@
   "methods": [
     "coeff",
     "eci",
+    "fewshot",
     "functa",
     "gt",
     "hardflow"

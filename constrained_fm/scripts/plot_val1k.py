@@ -58,6 +58,18 @@ GMM_REFERENCE_LABEL = "Unconstrained Target GMM"
 # On a ground-truth x axis the parity line *is* the ground truth, so no empirical series is drawn.
 GT_REFERENCE_LABEL = "Ground Truth"
 
+# The paper sets SWD beside MMD and Acceptance Rate beside KLD. Only the left panel of each
+# pair carries the legend; its neighbour shares the same colours and would only lose curve
+# area to a duplicate. (show, ncol, loc)
+LEGEND_SPEC = {
+    "swd": (True, 2, "lower right"),
+    "mmd": (False, 1, "lower right"),
+    "jsd": (True, 2, "lower right"),
+    "success_rate": (True, 1, "lower right"),
+    "kld": (False, 1, "upper right"),
+    "nll": (True, 1, "upper right"),
+}
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Render the v1k comparison figure suite.")
@@ -144,10 +156,12 @@ def render_trends(by_method: dict[str, dict[str, np.ndarray]], mass: np.ndarray,
     def acceptance(include_fewshot: bool):
         series = {n: (mass_pct, by_method[n]["success_rate"])
                   for n in pick(ACCEPTANCE_TREND_METHODS, include_fewshot, "success_rate")}
+        show, ncol, loc = LEGEND_SPEC["success_rate"]
         return plot_metric_trend(series, MASS_AXIS_LABEL, ACCEPTANCE_AXIS_LABEL, "",
                                  window=window, step=step, identity=True,
                                  identity_label=GMM_REFERENCE_LABEL,
-                                 identity_color=METHOD_COLORS["gt"], labels=labels)
+                                 identity_color=METHOD_COLORS["gt"], labels=labels,
+                                 legend=show, legend_ncol=ncol, legend_loc=loc)
 
     if pick(ACCEPTANCE_TREND_METHODS, True, "success_rate"):
         written += save_both_variants(acceptance, figure_dir, "trend_success_rate", has_fewshot)
@@ -163,10 +177,12 @@ def render_trends(by_method: dict[str, dict[str, np.ndarray]], mass: np.ndarray,
                     axis_label=axis_label, log=log):
             series = {n: (gt_metrics[metric], by_method[n][metric])
                       for n in pick(TREND_ALL_METHODS, include_fewshot, metric)}
+            show, ncol, loc = LEGEND_SPEC[metric]
             return plot_metric_trend(series, f"Ground truth {short} (noise floor)", axis_label,
                                      "", logx=log, logy=log, window=window, step=step,
                                      identity=True, identity_label=GT_REFERENCE_LABEL,
-                                     identity_color=METHOD_COLORS["gt"], labels=labels)
+                                     identity_color=METHOD_COLORS["gt"], labels=labels,
+                                     legend=show, legend_ncol=ncol, legend_loc=loc)
 
         written += save_both_variants(gt_axis, figure_dir, f"trend_{metric}", has_fewshot)
 
@@ -179,8 +195,10 @@ def render_trends(by_method: dict[str, dict[str, np.ndarray]], mass: np.ndarray,
         def density(include_fewshot: bool, metric=metric, axis_label=axis_label, log=log):
             series = {n: (mass_pct, by_method[n][metric])
                       for n in pick(DENSITY_TREND_METHODS, include_fewshot, metric)}
+            show, ncol, loc = LEGEND_SPEC[metric]
             return plot_metric_trend(series, MASS_AXIS_LABEL, axis_label, "",
-                                     logy=log, window=window, step=step, labels=labels)
+                                     logy=log, window=window, step=step, labels=labels,
+                                     legend=show, legend_ncol=ncol, legend_loc=loc)
 
         written += save_both_variants(density, figure_dir, f"trend_{metric}", has_fewshot)
 

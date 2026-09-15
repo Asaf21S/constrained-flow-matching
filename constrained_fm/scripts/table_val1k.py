@@ -50,7 +50,7 @@ QUALITATIVE = (
         "eci": r"\textbf{no}", "hardflow": r"\textbf{no}",
     }),
     ("models trained", {
-        "coeff": "1", "fewshot": "one per constraint", "functa": "1",
+        "coeff": "1", "fewshot": "{num} (one per constraint)", "functa": "1",
         "eci": "1", "hardflow": "1",
     }),
     ("unseen constraint without retraining", {
@@ -118,7 +118,8 @@ def build_table(payload: dict, label: str) -> str:
 
     lines.append(r"\midrule")
     for row_label, mapping in QUALITATIVE:
-        cells = [mapping.get(key, "--") for key, _ in present]
+        # Literal replacement, not str.format: these cells contain LaTeX braces.
+        cells = [mapping.get(key, "--").replace("{num}", str(num)) for key, _ in present]
         lines.append(f"{row_label} & " + " & ".join(cells) + r" \\")
 
     lines += [

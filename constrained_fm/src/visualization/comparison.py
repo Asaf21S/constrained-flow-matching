@@ -137,11 +137,14 @@ def plot_metric_trend(series: dict[str, tuple[np.ndarray, np.ndarray]], xlabel: 
                       identity_label: str = "parity ($y = x$)",
                       identity_color: str = "#9ca3af",
                       labels: dict[str, str] | None = None,
+                      legend: bool = True, legend_loc: str = "lower right",
+                      legend_ncol: int = 1,
                       figsize: tuple[float, float] = (8.4, 5.8)) -> Figure:
     """One rolling-median line with an interquartile band per method, on shared axes.
 
     ``series`` maps a method name to its (x, y) arrays; methods are drawn in METHOD_ORDER so
     the legend reads the same on every figure. ``labels`` overrides legend text per method.
+    Pass ``legend=False`` for a panel that borrows its neighbour's legend in the paper.
     """
     fig, ax = plt.subplots(figsize=figsize)
     ordered = [m for m in METHOD_ORDER if m in series] + \
@@ -176,7 +179,9 @@ def plot_metric_trend(series: dict[str, tuple[np.ndarray, np.ndarray]], xlabel: 
     ax.set_ylabel(ylabel)
     ax.grid(True, which="both", **GRID_STYLE)
     ax.set_axisbelow(True)
-    ax.legend(loc="lower right", frameon=False)
+    if legend:
+        ax.legend(loc=legend_loc, ncol=legend_ncol, frameon=False, columnspacing=1.2,
+                  handlelength=2.0, labelspacing=0.35)
     fig.tight_layout()
     return fig
 

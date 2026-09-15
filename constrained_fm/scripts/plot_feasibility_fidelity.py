@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
@@ -79,7 +80,7 @@ METHOD_LABELS = {
     "gt": "Ground Truth\n(rejection sampling)",
     "eci": "ECI\n(inference projection)",
     "hardflow": "HardFlow\n(inference guidance)",
-    "coeff": "Constraint Amortization (Ours)",
+    "coeff": "Constraint Amortization\n(Ours)",
     "functa": "Functa (ours)",
 }
 
@@ -333,6 +334,7 @@ def render(samples_by_method: dict[str, np.ndarray], metrics_by_method: dict[str
     for style_name in args.style:
         style = resolve_style(args, style_name)
         for variant in args.variants:
+            variant_style = replace(style, legend_size=8.0) if variant == "4panel_coeff" else style
             methods = PANEL_VARIANTS[variant]
             missing = [m for m in methods if m not in samples_by_method]
             if missing:
@@ -343,7 +345,7 @@ def render(samples_by_method: dict[str, np.ndarray], metrics_by_method: dict[str
                                  metrics=metrics_by_method.get(m),
                                  highlight=(m in args.highlight))
                       for m in methods]
-            fig = feas.plot_feasibility_row(panels, coeffs, style=style, degree=args.degree,
+            fig = feas.plot_feasibility_row(panels, coeffs, style=variant_style, degree=args.degree,
                                             scale=args.scale, show_profile=args.boundary_profile)
 
             stem = f"feasibility_fidelity_{variant}_poly{args.poly_id}"

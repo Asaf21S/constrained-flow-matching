@@ -65,13 +65,14 @@ class FeasibilityStyle:
     boundary_linewidth: float = 1.6
     boundary_alpha: float = 0.6
     boundary_resolution: int = 400
-    boundary_label: str = "constraint boundary  $P(x) = 0$"
+    boundary_label: str = "constraint boundary"
     boundary_zorder: float = 3.0
 
     # --- layout / typography ---
     panel_size: float = 3.1
     title_size: float = 15.0
     metric_size: float = 11.0
+    legend_size: float = 9.0
     text_color: str = "black"
     highlight_color: str = "#1a7f37"
     highlight_linewidth: float = 2.2
@@ -321,7 +322,7 @@ def plot_feasibility_row(panels: Sequence[Panel], coeffs: torch.Tensor,
                                           lw=style.boundary_linewidth + 0.7,
                                           linestyle=style.boundary_linestyle,
                                           label=style.boundary_label)],
-                          loc="lower left", fontsize=style.metric_size + 0.5,
+                          loc="lower left", fontsize=style.legend_size,
                           framealpha=0.75, handlelength=2.6, borderpad=0.4)
 
         if show_profile:

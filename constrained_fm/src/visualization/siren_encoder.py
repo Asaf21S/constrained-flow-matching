@@ -55,8 +55,8 @@ class EncoderStyle:
 
     # --- layout ---
     panel_size: float = 4.4
-    tick_size: float = 16.0
-    title_size: float = 22.0
+    tick_size: float = 18.0
+    title_size: float = 26.0
     show_ticks: bool = True
     spine_color: str | None = None
 
@@ -65,14 +65,14 @@ class EncoderStyle:
     colorbar_label: str = r"$f_\theta(x, z)$"
     colorbar_fraction: float = 0.046
     colorbar_pad: float = 0.04
-    label_size: float = 20.0
+    label_size: float = 22.0
 
     # --- legend ---
     show_legend: bool = False
     gt_label: str = r"ground truth  $P(x) = 0$"
     pred_label: str = r"decoded  $f_\theta(x, z) = 0$"
     legend_loc: str = "upper right"
-    legend_size: float = 16.0
+    legend_size: float = 18.0
 
 
 STYLE_PRESETS: dict[str, EncoderStyle] = {
@@ -138,8 +138,13 @@ def _finish_axes(ax, style: EncoderStyle, scale: float):
             spine.set_color(style.spine_color)
 
 
-def _add_colorbar(fig, mappable, ax, style: EncoderStyle):
-    cbar = fig.colorbar(mappable, ax=ax, fraction=style.colorbar_fraction, pad=style.colorbar_pad)
+def _add_colorbar(fig, mappable, ax, style: EncoderStyle, cax: bool = False):
+    """``cax=True`` treats ``ax`` as a dedicated colorbar axis instead of one to steal from."""
+    if cax:
+        cbar = fig.colorbar(mappable, cax=ax)
+    else:
+        cbar = fig.colorbar(mappable, ax=ax, fraction=style.colorbar_fraction,
+                            pad=style.colorbar_pad)
     cbar.set_label(style.colorbar_label, fontsize=style.label_size, family="serif")
     cbar.ax.tick_params(labelsize=style.tick_size)
     for label in cbar.ax.get_yticklabels():
@@ -243,7 +248,7 @@ def plot_boundary_grid(pred_fields: np.ndarray, true_fields: np.ndarray, rows: i
     with plt.rc_context(PAPER_RC):
         fig, axs = plt.subplots(rows, cols, figsize=(style.panel_size * cols,
                                                       style.panel_size * rows), squeeze=False,
-                                constrained_layout=True)
+                                sharex=True, sharey=True)
         mappable = None
         for ax, pred_field, true_field in zip(axs.flat, pred_fields, true_fields):
             mappable = _draw_field(ax, pred_field, vmin, vmax, style, scale)
@@ -253,8 +258,16 @@ def plot_boundary_grid(pred_fields: np.ndarray, true_fields: np.ndarray, rows: i
                            style.pred_linewidth, zorder=4, sigma=style.smooth_sigma)
             _finish_axes(ax, style, scale)
 
+        # sharex/sharey keeps every panel's ticks in sync; label_outer collapses the
+        # redundant labels down to the grid's bottom row and left column.
+        for ax in axs.flat:
+            ax.label_outer()
+
+        fig.subplots_adjust(wspace=0.05, hspace=0.05)
         if style.show_colorbar and mappable is not None:
-            _add_colorbar(fig, mappable, list(axs.flat), style)
+            fig.subplots_adjust(right=0.9)
+            cax = fig.add_axes((0.92, 0.12, 0.02, 0.76))
+            _add_colorbar(fig, mappable, cax, style, cax=True)
         if style.show_legend:
             axs.flat[0].legend(handles=[
                 Line2D([0], [0], color=style.gt_color, lw=style.gt_linewidth,

@@ -1,0 +1,74 @@
+{
+  "arrays": {
+    "n_values": {
+      "shape": [
+        7
+      ],
+      "dtype": "int64"
+    },
+    "mass": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "jsd": {
+      "shape": [
+        7,
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "success_rate": {
+      "shape": [
+        7,
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "swd": {
+      "shape": [
+        7,
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "extraction_mse": {
+      "shape": [
+        7,
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "mmd": {
+      "shape": [
+        7,
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "mass_iou": {
+      "shape": [
+        7,
+        1000
+      ],
+      "dtype": "float32"
+    }
+  },
+  "written_at": "2026-09-15T22:19:26",
+  "git_commit": "3c4f914b203fe1225b9b5c5f91645c5896025128",
+  "run_id": "query_budget-dee3227e",
+  "method": "query_budget",
+  "validation_set": "v1k",
+  "poly_digest": "b139c109225e1cc1",
+  "num_constraints": 1000,
+  "n_values": [
+    10,
+    25,
+    50,
+    100,
+    300,
+    1000,
+    2000
+  ]
+}

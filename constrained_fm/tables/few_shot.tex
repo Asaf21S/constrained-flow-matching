@@ -6,18 +6,14 @@
 \toprule
 $N$ & Acceptance Rate (\%) & SWD & MMD & KLD \\
 \midrule
-\multicolumn{5}{l}{\emph{100-polynomial benchmark}} \\
 50 & 97.13 & 0.2414 & 0.01323 & 0.3781 \\
 100 & 96.95 & 0.1710 & 0.00653 & 0.2221 \\
 300 & 97.10 & 0.1378 & 0.00349 & 0.1171 \\
 500 & 97.02 & 0.1288 & 0.00312 & 0.1006 \\
 1000 & 97.54 & \textbf{0.1114} & 0.00237 & 0.0895 \\
 2000 & \textbf{97.67} & 0.1212 & \textbf{0.00235} & \textbf{0.0815} \\
-\midrule
-\multicolumn{5}{l}{\emph{1000-polynomial validation set}} \\
-2000 & 97.39 & 0.1124 & 0.00230 & 0.0827 \\
 \bottomrule
 \end{tabular}
-\caption{Few-shot unconstrained baseline as a function of the number of valid training samples $N$. For each constraint, $N$ points satisfying $P(x) \le 0$ are rejection-sampled and an unconditional flow matcher is trained from scratch on them, so every row represents one independently trained model per constraint. Values are medians over the benchmark. Training length is chosen by early stopping against 10{,}000 held-out constraint-satisfying points, far more data than the model is allowed to train on; this removes training length as a confound but makes these numbers an optimistic upper bound on the baseline.}
+\caption{Few-shot unconstrained baseline as a function of the number of valid training samples $N$. For each constraint, $N$ points satisfying $P(x) \le 0$ are rejection-sampled and an unconditional flow matcher is trained from scratch on them, so every row is one independently trained model per constraint of the 100-polynomial benchmark. Values are medians. Training length is chosen by early stopping against 10{,}000 held-out constraint-satisfying points, far more data than the model is allowed to train on; this removes training length as a confound but makes these numbers an optimistic upper bound on the baseline.}
 \label{tab:few-shot}
 \end{table}

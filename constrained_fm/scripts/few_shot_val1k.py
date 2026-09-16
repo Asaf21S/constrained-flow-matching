@@ -10,13 +10,16 @@ Everything a metric depends on is keyed off the *global* constraint index -- the
 seed, the rejection sampling, the early-stopping draw, the NLL subset and the RNG the SWD
 projections read -- so a constraint scores identically no matter which slice it lands in.
 
-Shards are written into the v1k shard directory under the method name ``fewshot``, which is
-all ``merge_val1k`` and ``plot_val1k`` need to pick the baseline up.
+Shards are written into the v1k shard directory under a method name, which is all
+``merge_val1k`` and ``plot_val1k`` need to pick the baseline up. Each shot budget must carry
+its own method name, since merge keys on it and two budgets sharing one name would be read
+as a single method covering each constraint twice.
 
 Per-constraint results are checkpointed to ``results/`` before the shard file is written, so
 a preempted job resumes instead of retraining what it already finished.
 
     sbatch scripts/run_val1k_fewshot.sh
+    N=100 METHOD=fewshot_N100 sbatch scripts/run_val1k_fewshot.sh
     python -m constrained_fm.scripts.few_shot_val1k --start-idx 0 --end-idx 50 --num-points 2000
     python -m constrained_fm.scripts.few_shot_val1k --start-idx 0 --end-idx 50 --assemble-only
 """
@@ -98,6 +101,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="v1k directory whose shards/ this baseline joins")
     parser.add_argument("--workdir", default=DEFAULT_WORKDIR,
                         help="per-constraint results and provenance for this baseline")
+    parser.add_argument("--method", default=METHOD,
+                        help="method name the shards carry; must be unique per shot budget")
     parser.add_argument("--assemble-only", action="store_true",
                         help="write the shard file from existing per-constraint results")
     parser.add_argument("--save-samples", action="store_true",
@@ -117,8 +122,8 @@ def result_path(workdir: Path, index: int, n_points: int) -> Path:
     return workdir / "results" / f"idx{index:05d}_N{n_points}.json"
 
 
-def shard_path(out: Path, start: int, end: int) -> Path:
-    return out / "shards" / f"{METHOD}__{start:05d}_{end:05d}.json"
+def shard_path(out: Path, method: str, start: int, end: int) -> Path:
+    return out / "shards" / f"{method}__{start:05d}_{end:05d}.json"
 
 
 # Which slice a job happens to run is not part of what the result is.
@@ -126,12 +131,13 @@ _SHARD_ARGS = ("start_idx", "end_idx", "assemble_only", "save_samples", "outdir"
 
 
 def pin_once(workdir: Path, args) -> str:
-    """One run id for the whole sweep, reused so concurrent shards agree on provenance."""
-    provenance = workdir / "provenance.json"
+    """One run id per shot budget, reused so concurrent shards agree on provenance."""
+    budget_dir = workdir / args.method
+    provenance = budget_dir / "provenance.json"
     if provenance.exists():
         return json.loads(provenance.read_text())["run_id"]
     settings = {k: v for k, v in vars(args).items() if k not in _SHARD_ARGS}
-    return pin_baseline_run(workdir, "few_shot_val1k", settings)
+    return pin_baseline_run(budget_dir, "few_shot_val1k", settings)
 
 
 def run_item(index: int, C: torch.Tensor, gmm_pool: torch.Tensor, pool_features,
@@ -193,7 +199,7 @@ def assemble_shard(out: Path, workdir: Path, indices: list[int], run_id: str, di
 
     payload = {
         "run_id": run_id,
-        "method": METHOD,
+        "method": args.method,
         "validation_set": "v1k",
         "poly_digest": digest,
         "start_idx": indices[0],
@@ -208,7 +214,7 @@ def assemble_shard(out: Path, workdir: Path, indices: list[int], run_id: str, di
         "per_shape": per_shape,
         "summary": summarize(per_shape),
     }
-    path = shard_path(out, indices[0], indices[-1] + 1)
+    path = shard_path(out, args.method, indices[0], indices[-1] + 1)
     path.write_text(json.dumps(payload, indent=2))
     return path
 
@@ -250,7 +256,7 @@ def main(argv: list[str] | None = None) -> int:
     nll_set = load_nll_eval_set_v1k(num_points=args.nll_points, degree=args.degree,
                                     scale=args.scale, device="cpu")
 
-    for index in tqdm(indices, desc=f"{METHOD} N={args.num_points}"):
+    for index in tqdm(indices, desc=f"{args.method} N={args.num_points}"):
         path = result_path(workdir, index, args.num_points)
         if path.exists():
             continue

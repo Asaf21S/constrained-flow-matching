@@ -1,0 +1,10 @@
+{
+  "run_id": "feasibility_fidelity-37e15ff4",
+  "method": "feasibility_fidelity",
+  "fingerprint": "37e15ff43ba9f6f4d597c9cd9b8f2f80b0a173c59a4f27f354475c70bfa5aecc",
+  "git_commit": "b0d7318c50796ce2d1cdd7882a7f086c430df6c8",
+  "created_at": "2026-09-16T08:54:11",
+  "base_ckpt": "constrained_fm/baselines/base_fm/ckpt.pt",
+  "poly_ckpt": "constrained_fm/baselines/poly_fm/ckpt.pt",
+  "functa_run": "runs/siren-uniform-8d6375ab"
+}

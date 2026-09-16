@@ -1,0 +1,36 @@
+{
+  "run_id": "feasibility_fidelity-88c3a3a7",
+  "poly_id": 0,
+  "evaluated_at": "2026-09-16T08:53:35",
+  "num_samples": 100000,
+  "metric_samples": 100000,
+  "functa_source": "resample",
+  "scored_against": "an independent 100000-point rejection-sampled draw from the same truncated GMM; MMD uses every point of both sets",
+  "metrics": {
+    "gt": {
+      "success_rate": 100.0,
+      "swd": 0.008484792374613503,
+      "mmd": 2.6603063255803416e-05
+    },
+    "eci": {
+      "success_rate": 100.0,
+      "swd": 0.4646150470132789,
+      "mmd": 0.06570959410331528
+    },
+    "hardflow": {
+      "success_rate": 100.0,
+      "swd": 0.44461133532014296,
+      "mmd": 0.06119496852359624
+    },
+    "functa": {
+      "success_rate": 98.18599820137024,
+      "swd": 0.05412682438725144,
+      "mmd": 0.0010254262615101428
+    },
+    "coeff": {
+      "success_rate": 99.12499785423279,
+      "swd": 0.03927661919394912,
+      "mmd": 0.00027802264168313995
+    }
+  }
+}

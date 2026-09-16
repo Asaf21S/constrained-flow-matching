@@ -1,0 +1,59 @@
+{
+  "arrays": {
+    "polynomial": {
+      "shape": [
+        4,
+        4
+      ],
+      "dtype": "float32"
+    },
+    "samples_gt": {
+      "shape": [
+        100000,
+        2
+      ],
+      "dtype": "float32"
+    },
+    "samples_eci": {
+      "shape": [
+        100000,
+        2
+      ],
+      "dtype": "float32"
+    },
+    "samples_hardflow": {
+      "shape": [
+        100000,
+        2
+      ],
+      "dtype": "float32"
+    },
+    "samples_functa": {
+      "shape": [
+        100000,
+        2
+      ],
+      "dtype": "float32"
+    },
+    "samples_coeff": {
+      "shape": [
+        100000,
+        2
+      ],
+      "dtype": "float32"
+    }
+  },
+  "written_at": "2026-09-16T08:54:00",
+  "git_commit": "b0d7318c50796ce2d1cdd7882a7f086c430df6c8",
+  "run_id": "feasibility_fidelity-a5977f66",
+  "poly_id": 60,
+  "degree": 3,
+  "scale": 4.5,
+  "methods": [
+    "gt",
+    "eci",
+    "hardflow",
+    "functa",
+    "coeff"
+  ]
+}

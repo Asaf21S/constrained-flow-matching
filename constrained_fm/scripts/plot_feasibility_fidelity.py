@@ -336,12 +336,15 @@ def render(samples_by_method: dict[str, np.ndarray], metrics_by_method: dict[str
         for variant in args.variants:
             variant_style = replace(style, legend_size=8.0) if variant == "4panel_coeff" else style
             methods = PANEL_VARIANTS[variant]
+            labels = METHOD_LABELS
+            if variant == "5panel_all":
+                labels = {**METHOD_LABELS, "coeff": "Explicit (ours)", "functa": "Implicit (ours)"}
             missing = [m for m in methods if m not in samples_by_method]
             if missing:
                 print(f"[skip] {variant}: no samples for {missing}")
                 continue
 
-            panels = [feas.Panel(label=METHOD_LABELS[m], samples=samples_by_method[m],
+            panels = [feas.Panel(label=labels[m], samples=samples_by_method[m],
                                  metrics=metrics_by_method.get(m),
                                  highlight=(m in args.highlight))
                       for m in methods]

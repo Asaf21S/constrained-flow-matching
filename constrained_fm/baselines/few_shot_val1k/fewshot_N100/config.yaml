@@ -1,0 +1,22 @@
+method: few_shot_val1k
+run_id: few_shot_val1k-a002ae99
+settings:
+  batch_size: 256
+  degree: 3
+  eval_every: 250
+  gmm_pool_size: 100000
+  hidden_dim: 1024
+  iterations: 20000
+  lr: 0.001
+  method: fewshot_N100
+  nll_points: 5000
+  num_blocks: 4
+  num_points: 100
+  num_x0: 10000
+  patience: 12
+  scale: 4.5
+  seed: 0
+  step_size: 0.05
+  time_dim: 128
+  val_points: 10000
+  workdir: constrained_fm/baselines/few_shot_val1k

@@ -63,6 +63,7 @@ from constrained_fm.src.inference.evaluator import (evaluate_single_configuratio
 from constrained_fm.src.metrics.functa_fidelity import true_region_mask
 from constrained_fm.src.models.constrained_poly import PolynomialConstrainedFM
 from constrained_fm.src.models.unconstrained import UnconstrainedFM
+from constrained_fm.src.problems.gmm_poly import PolynomialConstraint
 from constrained_fm.src.visualization import feasibility as feas
 
 BASE_CKPT = "constrained_fm/baselines/base_fm/ckpt.pt"
@@ -401,13 +402,14 @@ def main(argv: list[str] | None = None) -> int:
     print(f"device {device} | poly {args.poly_id} | {args.num_samples} samples per panel")
 
     samples: dict[str, np.ndarray] = {}
+    constraint = PolynomialConstraint(coeffs, degree=args.degree, scale=args.scale)
     samples["gt"] = rejection_sample(coeffs, args.num_samples, args, device).cpu().numpy()
-    samples["eci"] = sample_eci(model, x0, coeffs, degree=args.degree, scale=args.scale,
+    samples["eci"] = sample_eci(model, x0, constraint,
                                 steps=args.steps, correction_loops=args.correction_loops,
                                 margin=args.margin, projection_iters=args.projection_iters,
                                 chunk_size=args.chunk_size).detach().cpu().numpy()
-    samples["hardflow"] = sample_hardflow(model, x0, coeffs, degree=args.degree,
-                                          scale=args.scale, steps=args.steps,
+    samples["hardflow"] = sample_hardflow(model, x0, constraint,
+                                          steps=args.steps,
                                           guidance_scale=args.guidance_scale,
                                           margin=args.margin,
                                           chunk_size=args.chunk_size).detach().cpu().numpy()

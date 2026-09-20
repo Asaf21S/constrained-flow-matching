@@ -51,6 +51,8 @@ def main(argv: list[str] | None = None) -> int:
             run = run_dir(cfg.run_id)
             print(f"{path}")
             print(f"  run_id     {cfg.run_id}")
+            print(f"  problem    {cfg.problem.name}"
+                  f"{'  ' + str(cfg.problem.params) if cfg.problem.params else ''}")
             print(f"  run dir    {run}  [{'exists' if run.exists() else 'new'}]")
             print(f"  siren      {cfg.siren_path().name}  sha {cfg.siren_digest()[:10]}")
             print(f"  pool       {pool.name}  [{'cached' if pool.exists() else 'MISSING'}]")

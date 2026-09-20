@@ -1,5 +1,9 @@
 import os
 
+# Registered dataset/constraint problems, duplicated here so configs validate without torch.
+DEFAULT_PROBLEM = "gmm_poly"
+PROBLEM_NAMES = ("gmm_poly",)
+
 
 GMM_MEANS = [
     [-1.5, -1.5],

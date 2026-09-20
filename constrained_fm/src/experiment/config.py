@@ -14,9 +14,21 @@ from typing import Any
 
 import yaml
 
-from constrained_fm.src.consts import POLYNOMIAL_DEGREE, PLANE_SCALE
+from constrained_fm.src.consts import DEFAULT_PROBLEM, POLYNOMIAL_DEGREE, PLANE_SCALE, PROBLEM_NAMES
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+@dataclass(frozen=True)
+class ProblemConfig:
+    """Selects the dataset and constraint family; ``params`` are forwarded to its factory."""
+
+    name: str = DEFAULT_PROBLEM
+    params: dict = field(default_factory=dict)
+
+    def __post_init__(self):
+        if self.name not in PROBLEM_NAMES:
+            raise ValueError(f"unknown problem '{self.name}'; known: {PROBLEM_NAMES}")
 
 
 @dataclass(frozen=True)
@@ -103,6 +115,7 @@ class EvalConfig:
 class ExperimentConfig:
     name: str = "baseline"
     description: str = ""
+    problem: ProblemConfig = field(default_factory=ProblemConfig)
     degree: int = POLYNOMIAL_DEGREE
     scale: float = PLANE_SCALE
     siren: SirenConfig = field(default_factory=SirenConfig)
@@ -153,14 +166,22 @@ class ExperimentConfig:
 
     def pool_fingerprint(self) -> str:
         """Identifies a pool by everything that changes its contents, SIREN weights included."""
-        return _sha({
+        return _sha(self._identity_payload())
+
+    def _identity_payload(self) -> dict[str, Any]:
+        """The `problem` key is omitted while it holds its default, so run ids that predate the
+        problem registry keep resolving to the same fingerprint."""
+        payload = {
             "degree": self.degree,
             "scale": self.scale,
             "siren": dataclasses.asdict(self.siren),
             "siren_digest": self.siren_digest(),
             "extraction": dataclasses.asdict(self.extraction),
             "pool": dataclasses.asdict(self.pool),
-        })
+        }
+        if self.problem != ProblemConfig():
+            payload["problem"] = dataclasses.asdict(self.problem)
+        return payload
 
     def pool_path(self) -> Path:
         return (REPO_ROOT / "constrained_fm" / "functa_dataset" / "pools" /
@@ -168,16 +189,10 @@ class ExperimentConfig:
 
     def fingerprint(self) -> str:
         """Covers everything that changes the trained checkpoint; evaluation knobs do not."""
-        return _sha({
-            "degree": self.degree,
-            "scale": self.scale,
-            "siren": dataclasses.asdict(self.siren),
-            "siren_digest": self.siren_digest(),
-            "extraction": dataclasses.asdict(self.extraction),
-            "pool": dataclasses.asdict(self.pool),
-            "fm": dataclasses.asdict(self.fm),
-            "train": dataclasses.asdict(self.train),
-        })
+        payload = self._identity_payload()
+        payload["fm"] = dataclasses.asdict(self.fm)
+        payload["train"] = dataclasses.asdict(self.train)
+        return _sha(payload)
 
     @property
     def run_id(self) -> str:
@@ -188,6 +203,7 @@ class ExperimentConfig:
             "run_id": self.run_id,
             "name": self.name,
             "description": self.description,
+            "problem": dataclasses.asdict(self.problem),
             "fingerprint": self.fingerprint(),
             "siren_checkpoint": str(self.siren_path()),
             "siren_digest": self.siren_digest(),
@@ -286,5 +302,5 @@ def _build(cls, data: dict[str, Any], path: str):
     return cls(**kwargs)
 
 
-__all__ = ["ExperimentConfig", "SirenConfig", "ExtractionConfig", "PoolConfig",
+__all__ = ["ExperimentConfig", "ProblemConfig", "SirenConfig", "ExtractionConfig", "PoolConfig",
            "FMConfig", "TrainConfig", "EvalConfig", "REPO_ROOT", "file_digest", "git_commit"]

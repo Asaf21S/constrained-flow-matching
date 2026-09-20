@@ -45,6 +45,7 @@ from constrained_fm.src.inference.constraint_projection import DEFAULT_MARGIN
 from constrained_fm.src.inference.evaluator import evaluate_validation_set_metrics
 from constrained_fm.src.metrics.functa_fidelity import constraint_masses
 from constrained_fm.src.models.unconstrained import UnconstrainedFM
+from constrained_fm.src.problems.gmm_poly import PolynomialConstraint
 from constrained_fm.src.visualization import diagnostics as diag
 
 BASE_CKPT = "constrained_fm/baselines/base_fm/ckpt.pt"
@@ -113,13 +114,14 @@ def generate(method: str, model, x0: torch.Tensor, polys: torch.Tensor, args) ->
     """Samples every validation constraint with one method; returns (C, N, 2)."""
     per_shape = []
     for i in tqdm(range(polys.shape[0]), desc=f"{method} sampling"):
+        constraint = PolynomialConstraint(polys[i], degree=args.degree, scale=args.scale)
         if method == "eci":
-            samples = sample_eci(model, x0, polys[i], degree=args.degree, scale=args.scale,
+            samples = sample_eci(model, x0, constraint,
                                  steps=args.steps, correction_loops=args.correction_loops,
                                  margin=args.margin, projection_iters=args.projection_iters,
                                  chunk_size=args.chunk_size)
         else:
-            samples = sample_hardflow(model, x0, polys[i], degree=args.degree, scale=args.scale,
+            samples = sample_hardflow(model, x0, constraint,
                                       steps=args.steps, guidance_scale=args.guidance_scale,
                                       margin=args.margin, chunk_size=args.chunk_size)
         per_shape.append(samples.detach())

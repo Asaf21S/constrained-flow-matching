@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """ECI and HardFlow: inference-time constraint enforcement on an *unconstrained* flow matcher.
 
-Both take a velocity field trained on the full GMM with no knowledge of constraints, and
-alter the Euler integration of dx/dt = v(x, t) so the terminal sample satisfies P(x) <= 0.
+Both take a velocity field trained on the full target with no knowledge of constraints, and
+alter the Euler integration of dx/dt = v(x, t) so the terminal sample satisfies C(x) <= 0.
 They differ in how the constraint enters:
 
   * **ECI** rewrites the **state**. At each step it extrapolates to the endpoint
@@ -23,28 +23,27 @@ They differ in how the constraint enters:
 Neither method leaves the model's probability-flow ODE intact, so likelihoods computed by
 integrating the original field no longer describe the sampled distribution. Callers must
 report NLL/KLD as undefined for these samplers.
+
+Both are written against the :class:`Constraint` interface, so they are independent of the
+constraint family and of the dimension of the state.
 """
 
 from __future__ import annotations
 
 import torch
 
-from constrained_fm.src.consts import PLANE_SCALE, POLYNOMIAL_DEGREE
 from constrained_fm.src.inference.constraint_projection import (DEFAULT_MARGIN,
-                                                                project_onto_polynomial_region,
-                                                                violation_penalty)
+                                                                project_onto_feasible_region)
+from constrained_fm.src.problems.base import Constraint
 
 DEFAULT_STEPS = 100
 # HardFlow backprops through the network at every step, so activations scale with the chunk.
 DEFAULT_CHUNK = 20_000
 
 
-def _as_matrix(coeffs: torch.Tensor, degree: int) -> torch.Tensor:
-    return coeffs.reshape(degree + 1, degree + 1)
-
-
-def _eci_chunk(model, x0: torch.Tensor, C: torch.Tensor, degree: int, scale: float, steps: int,
-               correction_loops: int, margin: float, projection_iters: int) -> torch.Tensor:
+def _eci_chunk(model, x0: torch.Tensor, constraint: Constraint, steps: int,
+               correction_loops: int, margin: float, projection_iters: int,
+               projection_damping: float) -> torch.Tensor:
     dt = 1.0 / steps
     x = x0
 
@@ -59,9 +58,10 @@ def _eci_chunk(model, x0: torch.Tensor, C: torch.Tensor, degree: int, scale: flo
         for loop in range(correction_loops):
             with torch.no_grad():
                 v = model(x_work, t_batch)
-            x1_projected = project_onto_polynomial_region(x_work + remaining * v, C, degree=degree,
-                                                          scale=scale, margin=margin,
-                                                          max_iters=projection_iters)
+            x1_projected = project_onto_feasible_region(x_work + remaining * v, constraint,
+                                                        margin=margin,
+                                                        max_iters=projection_iters,
+                                                        damping=projection_damping)
             if loop < correction_loops - 1:
                 x_work = x + step_fraction * (x1_projected - x)
 
@@ -70,8 +70,8 @@ def _eci_chunk(model, x0: torch.Tensor, C: torch.Tensor, degree: int, scale: flo
     return x
 
 
-def _hardflow_chunk(model, x0: torch.Tensor, C: torch.Tensor, degree: int, scale: float,
-                    steps: int, guidance_scale: float, margin: float) -> torch.Tensor:
+def _hardflow_chunk(model, x0: torch.Tensor, constraint: Constraint, steps: int,
+                    guidance_scale: float, margin: float) -> torch.Tensor:
     dt = 1.0 / steps
     x = x0
 
@@ -83,7 +83,7 @@ def _hardflow_chunk(model, x0: torch.Tensor, C: torch.Tensor, degree: int, scale
             x_leaf = x.detach().requires_grad_(True)
             v = model(x_leaf, t_batch)
             x1_hat = x_leaf + (1.0 - t) * v
-            penalty = violation_penalty(x1_hat, C, degree=degree, scale=scale, margin=margin).sum()
+            penalty = constraint.penalty(x1_hat, margin=margin).sum()
             (grad,) = torch.autograd.grad(penalty, x_leaf)
 
         v_guided = v.detach() - guidance_scale * grad
@@ -92,51 +92,49 @@ def _hardflow_chunk(model, x0: torch.Tensor, C: torch.Tensor, degree: int, scale
     return x
 
 
-def sample_eci(model, x0: torch.Tensor, coeffs: torch.Tensor,
-               degree: int = POLYNOMIAL_DEGREE, scale: float = PLANE_SCALE,
+def sample_eci(model, x0: torch.Tensor, constraint: Constraint,
                steps: int = DEFAULT_STEPS, correction_loops: int = 1,
                margin: float = DEFAULT_MARGIN, projection_iters: int = 16,
+               projection_damping: float = 1.0,
                chunk_size: int = DEFAULT_CHUNK) -> torch.Tensor:
-    """Exact Constraint Injection sampling of ``x0`` under a single polynomial constraint.
+    """Exact Constraint Injection sampling of ``x0`` under a single constraint.
 
     Args:
         model: unconstrained velocity field with signature ``model(x, t)``.
-        x0: (N, 2) prior draws.
-        coeffs: (degree+1, degree+1) or flat coefficient matrix of the constraint.
+        x0: (N, dim) prior draws.
+        constraint: the feasible set to inject.
         correction_loops: extrapolate/project/interpolate repetitions per integration step.
         margin: how far strictly inside the boundary the projection aims.
+        projection_damping: Newton step scale; below 1 for non-convex feasible sets.
 
     Returns:
-        (N, 2) terminal samples.
+        (N, dim) terminal samples.
     """
     model.eval()
-    C = _as_matrix(coeffs, degree)
-    chunks = [_eci_chunk(model, x0[i:i + chunk_size], C, degree, scale, steps, correction_loops,
-                         margin, projection_iters)
+    chunks = [_eci_chunk(model, x0[i:i + chunk_size], constraint, steps, correction_loops,
+                         margin, projection_iters, projection_damping)
               for i in range(0, x0.shape[0], chunk_size)]
     return torch.cat(chunks, dim=0)
 
 
-def sample_hardflow(model, x0: torch.Tensor, coeffs: torch.Tensor,
-                    degree: int = POLYNOMIAL_DEGREE, scale: float = PLANE_SCALE,
+def sample_hardflow(model, x0: torch.Tensor, constraint: Constraint,
                     steps: int = DEFAULT_STEPS, guidance_scale: float = 5.0,
                     margin: float = DEFAULT_MARGIN,
                     chunk_size: int = DEFAULT_CHUNK) -> torch.Tensor:
-    """HardFlow gradient-guided sampling of ``x0`` under a single polynomial constraint.
+    """HardFlow gradient-guided sampling of ``x0`` under a single constraint.
 
     Args:
         model: unconstrained velocity field with signature ``model(x, t)``.
-        x0: (N, 2) prior draws.
-        coeffs: (degree+1, degree+1) or flat coefficient matrix of the constraint.
+        x0: (N, dim) prior draws.
+        constraint: the feasible set whose hinge penalty is differentiated.
         guidance_scale: weight on the endpoint-penalty gradient subtracted from the velocity.
         margin: how far strictly inside the boundary the penalty stays active.
 
     Returns:
-        (N, 2) terminal samples.
+        (N, dim) terminal samples.
     """
     model.eval()
-    C = _as_matrix(coeffs, degree)
-    chunks = [_hardflow_chunk(model, x0[i:i + chunk_size], C, degree, scale, steps,
+    chunks = [_hardflow_chunk(model, x0[i:i + chunk_size], constraint, steps,
                               guidance_scale, margin)
               for i in range(0, x0.shape[0], chunk_size)]
     return torch.cat(chunks, dim=0)
@@ -152,10 +150,10 @@ def sample_euler(model, x0: torch.Tensor, steps: int = DEFAULT_STEPS,
 
     Args:
         model: unconstrained velocity field with signature ``model(x, t)``.
-        x0: (N, 2) prior draws.
+        x0: (N, dim) prior draws.
 
     Returns:
-        (N, 2) terminal samples.
+        (N, dim) terminal samples.
     """
     model.eval()
     dt = 1.0 / steps

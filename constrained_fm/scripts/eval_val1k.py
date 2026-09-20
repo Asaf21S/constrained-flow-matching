@@ -51,6 +51,7 @@ from constrained_fm.src.metrics.eval_points import load_nll_eval_set_v1k
 from constrained_fm.src.metrics.functa_fidelity import true_region_mask
 from constrained_fm.src.models.constrained_poly import PolynomialConstrainedFM
 from constrained_fm.src.models.unconstrained import UnconstrainedFM
+from constrained_fm.src.problems.gmm_poly import PolynomialConstraint
 
 METHODS = ("gt", "coeff", "functa", "eci", "hardflow")
 # The two methods whose samples are the pushforward of the ODE whose density we integrate.
@@ -168,13 +169,14 @@ def sample_inference_hack(method: str, model, x0: torch.Tensor, polys: torch.Ten
     """ECI / HardFlow inject the constraint per constraint, so there is no batched form."""
     per_shape = []
     for i in tqdm(range(polys.shape[0]), desc=f"{method} sampling"):
+        constraint = PolynomialConstraint(polys[i], degree=args.degree, scale=args.scale)
         if method == "eci":
-            samples = sample_eci(model, x0, polys[i], degree=args.degree, scale=args.scale,
+            samples = sample_eci(model, x0, constraint,
                                  steps=args.steps, correction_loops=args.correction_loops,
                                  margin=args.margin, projection_iters=args.projection_iters,
                                  chunk_size=args.chunk_size)
         else:
-            samples = sample_hardflow(model, x0, polys[i], degree=args.degree, scale=args.scale,
+            samples = sample_hardflow(model, x0, constraint,
                                       steps=args.steps, guidance_scale=args.guidance_scale,
                                       margin=args.margin, chunk_size=args.chunk_size)
         per_shape.append(samples.detach())

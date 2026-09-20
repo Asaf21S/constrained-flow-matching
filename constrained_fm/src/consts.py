@@ -2,7 +2,7 @@ import os
 
 # Registered dataset/constraint problems, duplicated here so configs validate without torch.
 DEFAULT_PROBLEM = "gmm_poly"
-PROBLEM_NAMES = ("gmm_poly",)
+PROBLEM_NAMES = ("gmm_poly", "bump2d")
 
 
 GMM_MEANS = [
@@ -51,3 +51,19 @@ VAL1K_MC_POOL_SIZE = 1_000_000
 VAL1K_NUM_X0 = 10000
 VAL1K_SEED = 1000
 VAL1K_VERSION = 1
+
+# --- bump2d: a 1% Gaussian signal buried in a falling exponential background ---------------
+# The signal sits in the x1 bulk but the x2 tail. That split is deliberate: visibility in the
+# 1D x1 marginal is set by the background density at mu_1 alone, while purity inside a polygon
+# is set by the 2D background density, so placing mu_2 far out hides the bump in projection
+# while keeping it recoverable once a constraint cuts on x2.
+BUMP_DOMAIN = 10.0
+BUMP_BACKGROUND_SCALES = (2.2, 1.5)
+BUMP_SIGNAL_MEAN = (2.0, 6.5)
+BUMP_SIGNAL_SIGMA = 0.35
+BUMP_SIGNAL_WEIGHT = 0.01
+BUMP_POLY_MIN_VERTICES = 3
+BUMP_POLY_MAX_VERTICES = 7
+BUMP_POLY_RADIUS_RANGE = (0.35, 7.0)
+BUMP_POLY_MIN_MASS = 0.02
+BUMP_POLY_MAX_MASS = 0.98

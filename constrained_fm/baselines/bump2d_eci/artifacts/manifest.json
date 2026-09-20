@@ -1,0 +1,22 @@
+{
+  "arrays": {
+    "samples": {
+      "shape": [
+        100,
+        2000,
+        2
+      ],
+      "dtype": "float32"
+    },
+    "mass": {
+      "shape": [
+        100
+      ],
+      "dtype": "float32"
+    }
+  },
+  "written_at": "2026-09-20T22:47:08",
+  "git_commit": "32d3103b754fa1d250162ef531b88e2094684d26",
+  "run_id": "bump2d_eci-156cf7a8",
+  "method": "bump2d_eci"
+}

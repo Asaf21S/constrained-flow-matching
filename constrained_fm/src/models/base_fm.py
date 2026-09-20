@@ -22,7 +22,8 @@ class BaseFM(nn.Module):
         wrapped_vf = WrappedModel(self)
         solver = ODESolver(velocity_model=wrapped_vf)
 
-        x_init = torch.randn((num_points, 2), dtype=torch.float32, device=device)
+        x_init = torch.randn((num_points, getattr(self, "input_dim", 2)), dtype=torch.float32,
+                             device=device)
         T = torch.linspace(0, 1, 10).to(device)
 
         kwargs = {}
@@ -54,6 +55,9 @@ class BaseFM(nn.Module):
                                 degree=POLYNOMIAL_DEGREE, scale=PLANE_SCALE, grid_size=200, step_size=0.05,
                                 eval_batch_size=4000, device=None):
         self.eval()
+        if getattr(self, "input_dim", 2) != 2:
+            raise ValueError("the likelihood grid is a plot of the plane and has no meaning "
+                             f"for input_dim={self.input_dim}")
 
         wrapped_vf = WrappedModel(self)
         solver = ODESolver(velocity_model=wrapped_vf)

@@ -1,0 +1,19 @@
+method: bump2d_eci
+run_id: bump2d_eci-156cf7a8
+settings:
+  chunk_size: 20000
+  ckpt: constrained_fm/baselines/bump2d_base_fm/ckpt.pt
+  correction_loops: 1
+  guidance_scale: 100.0
+  hidden_dim: 1024
+  margin: 0.001
+  num_blocks: 4
+  num_polys: 100
+  num_x0: 10000
+  pool_size: 200000
+  projection_damping: 1.0
+  projection_iters: 16
+  seed: 0
+  steps: 100
+  time_dim: 128
+base_ckpt: constrained_fm/baselines/bump2d_base_fm/ckpt.pt

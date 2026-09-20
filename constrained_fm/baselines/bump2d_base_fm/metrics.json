@@ -1,0 +1,39 @@
+{
+  "run_id": "bump2d_base_fm-471d306f",
+  "problem": "bump2d",
+  "model": "UnconstrainedFM",
+  "evaluated_at": "2026-09-20T19:59:26",
+  "frame": {
+    "mean": [
+      2.091780662536621,
+      1.5373849868774414
+    ],
+    "std": [
+      1.9285537004470825,
+      1.53335440158844
+    ]
+  },
+  "train": {
+    "iterations": 15001,
+    "batch_size": 4096,
+    "lr": 0.001,
+    "hidden_dim": 1024,
+    "num_blocks": 4,
+    "time_dim": 128,
+    "seed": 0
+  },
+  "eval": {
+    "num_eval_samples": 100000,
+    "pool_size": 100000,
+    "step_size": 0.05
+  },
+  "unconditional": {
+    "swd": 0.019429341070309754,
+    "mmd": 0.0004025697708129883,
+    "jsd": 0.00044247798172272236,
+    "in_domain_fraction": 0.9912499785423279,
+    "mean_abs_error": 0.015070676803588867,
+    "std_rel_error": 0.013687707483768463
+  },
+  "final_loss": 1.421854376554489
+}

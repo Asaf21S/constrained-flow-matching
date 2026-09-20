@@ -59,6 +59,18 @@ class Constraint(abc.ABC):
         """Explicit conditioning vector (P,), or None when the constraint is encoded implicitly."""
         return None
 
+    @property
+    def interior_point(self) -> torch.Tensor | None:
+        """A strictly feasible reference point (dim,), or None if the family cannot supply one.
+
+        Only meaningful for a *convex* feasible set, where the segment from such a point to an
+        outside point crosses the boundary exactly once, so a bisection along it lands on the
+        boundary. That gives the projection an exact escape from the configurations its local
+        Newton step cannot resolve, at the cost of moving along this ray rather than along the
+        constraint normal. A non-convex family must leave this None.
+        """
+        return None
+
 
 class Target(abc.ABC):
     """The unconstrained data distribution the flow matcher learns, in physical coordinates."""
@@ -124,4 +136,31 @@ class Problem(abc.ABC):
         return AffineNormalizer.identity(self.dim)
 
 
-__all__ = ["Constraint", "Target", "Problem", "AffineNormalizer"]
+class NormalizedConstraint(Constraint):
+    """The same feasible set seen from the normalised frame: ``C_u(u) = C(inverse(u))``.
+
+    Lets the inference-time samplers run entirely in the frame the model was trained in
+    without any constraint family having to know that a normaliser exists. The map is affine
+    and autograd-transparent, so the projection's Newton steps and HardFlow's penalty
+    gradients come out correct by the chain rule rather than by a hand-written rescaling.
+    """
+
+    def __init__(self, constraint: Constraint, normalizer: AffineNormalizer):
+        self.constraint = constraint
+        self.normalizer = normalizer
+        self.dim = constraint.dim
+
+    def value(self, u: torch.Tensor) -> torch.Tensor:
+        return self.constraint.value(self.normalizer.inverse(u))
+
+    @property
+    def params(self) -> torch.Tensor | None:
+        return self.constraint.params
+
+    @property
+    def interior_point(self) -> torch.Tensor | None:
+        inner = self.constraint.interior_point
+        return None if inner is None else self.normalizer.forward(inner)
+
+
+__all__ = ["Constraint", "Target", "Problem", "AffineNormalizer", "NormalizedConstraint"]

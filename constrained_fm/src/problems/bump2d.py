@@ -48,12 +48,18 @@ class PolygonConstraint(Constraint):
 
     dim = 2
 
-    def __init__(self, normals: torch.Tensor, offsets: torch.Tensor):
+    def __init__(self, normals: torch.Tensor, offsets: torch.Tensor,
+                 interior: torch.Tensor | None = None):
         self.normals = normals
         self.offsets = offsets
+        self.interior = interior
 
     def value(self, x: torch.Tensor) -> torch.Tensor:
         return (x @ self.normals.transpose(-1, -2) - self.offsets).amax(dim=-1)
+
+    @property
+    def interior_point(self) -> torch.Tensor | None:
+        return self.interior
 
     @property
     def half_planes(self) -> torch.Tensor:
@@ -61,7 +67,8 @@ class PolygonConstraint(Constraint):
         return torch.cat([self.normals, self.offsets.unsqueeze(-1)], dim=-1)
 
     def to(self, device: torch.device | str) -> "PolygonConstraint":
-        return PolygonConstraint(self.normals.to(device), self.offsets.to(device))
+        interior = None if self.interior is None else self.interior.to(device)
+        return PolygonConstraint(self.normals.to(device), self.offsets.to(device), interior)
 
 
 class BumpTarget(Target):
@@ -235,7 +242,13 @@ def sample_polygons(num_constraints: int, pool: torch.Tensor,
                     max_mass: float = BUMP_POLY_MAX_MASS,
                     batch_size: int = 256, max_rounds: int = 1000
                     ) -> tuple[list[PolygonConstraint], torch.Tensor]:
-    """Polygons whose target mass, estimated on *pool*, lies in ``[min_mass, max_mass]``."""
+    """Polygons whose target mass, estimated on *pool*, lies in ``[min_mass, max_mass]``.
+
+    Each kept polygon also carries the deepest pool point inside it, a discrete stand-in for
+    the Chebyshev centre. The projection needs a reference that is strictly interior and, for
+    a sliver, as far from every face as the pool allows; the feasible centroid would sit much
+    closer to a wall.
+    """
     device = pool.device
     kept: list[PolygonConstraint] = []
     masses: list[float] = []
@@ -253,7 +266,9 @@ def sample_polygons(num_constraints: int, pool: torch.Tensor,
             if len(kept) >= num_constraints:
                 break
             rows = active[i]
-            kept.append(PolygonConstraint(normals[i][rows].clone(), offsets[i][rows].clone()))
+            faces, shifts = normals[i][rows].clone(), offsets[i][rows].clone()
+            deepest = (pool @ faces.T - shifts).amax(dim=-1).argmin()
+            kept.append(PolygonConstraint(faces, shifts, pool[deepest].clone()))
             masses.append(float(mass[i]))
 
     if len(kept) < num_constraints:

@@ -30,3 +30,24 @@ class ResBlock(nn.Module):
 
     def forward(self, x):
         return self.act(x + self.net(x))
+
+
+class FourierFeatures(nn.Module):
+    """Geometric-frequency sin/cos lift of a few conditioning scalars.
+
+    Two raw numbers concatenated onto a 1024-wide trunk are swamped by the state, and the
+    network would have to resolve neighbouring constraints from a single unit of input each.
+    The lift spreads every scalar over ``2 * num_frequencies`` channels, so inputs differing
+    in the third decimal already separate at the top frequency.
+    """
+
+    def __init__(self, num_inputs: int, num_frequencies: int = 16,
+                 max_frequency: float = 128.0):
+        super().__init__()
+        self.out_dim = num_inputs * num_frequencies * 2
+        self.register_buffer(
+            "freqs", torch.logspace(0.0, math.log10(max_frequency), num_frequencies))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        scaled = x.unsqueeze(-1) * self.freqs
+        return torch.cat((scaled.sin(), scaled.cos()), dim=-1).flatten(start_dim=1)

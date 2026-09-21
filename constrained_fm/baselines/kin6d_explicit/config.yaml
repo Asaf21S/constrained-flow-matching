@@ -1,0 +1,19 @@
+method: kin6d_explicit
+run_id: kin6d_explicit-7ee66fcd
+settings:
+  eval_pool_size: 500000
+  hidden_dim: 1024
+  iterations: 120001
+  log_every: 2000
+  lr: 0.001
+  lr_min: 1.0e-05
+  num_blocks: 4
+  num_eval_samples: 10000
+  num_frequencies: 16
+  num_shells: 100
+  points_per_shell: 64
+  seed: 0
+  shells_per_batch: 64
+  step_size: 0.05
+  time_dim: 128
+  train_pool_size: 2000000

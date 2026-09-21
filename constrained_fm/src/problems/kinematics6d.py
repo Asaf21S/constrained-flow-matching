@@ -170,7 +170,13 @@ class KinematicsTarget(Target):
 
 
 class MassWindowConstraint(Constraint):
-    r"""``{x : |M(x) - M_\mathrm{target}| - \epsilon \le 0}``, a shell in invariant mass.
+    r"""``{x : (|M(x) - M_\mathrm{target}| - \epsilon) / s \le 0}``, a shell in invariant mass.
+
+    Reported in units of ``s = \sqrt{E[M^2]}`` rather than in GeV. Dividing by a positive
+    constant leaves the feasible set untouched but puts ``C`` on the same O(1) scale as the
+    polygon and polynomial families, so ``margin``, ``step_clip`` and ``guidance_scale`` keep
+    the meaning they have everywhere else; in GeV the hinge gradient HardFlow subtracts from
+    the velocity would be larger than the velocity itself by two orders of magnitude.
 
     Non-convex, so :attr:`interior_point` stays None and the projection must rely on its
     damped Newton loop alone. The absolute value is non-smooth only at ``M = M_target``, which
@@ -185,9 +191,11 @@ class MassWindowConstraint(Constraint):
         self.target = target
         self.mass_target = float(mass_target)
         self.epsilon = float(epsilon)
+        self.scale = target.mass_scale()
 
     def value(self, x: torch.Tensor) -> torch.Tensor:
-        return (self.target.invariant_mass(x) - self.mass_target).abs() - self.epsilon
+        return (((self.target.invariant_mass(x) - self.mass_target).abs() - self.epsilon)
+                / self.scale)
 
     @property
     def params(self) -> torch.Tensor:
@@ -196,8 +204,8 @@ class MassWindowConstraint(Constraint):
         The width spans two decades across the benchmark, so it enters logarithmically; a raw
         ``\epsilon`` would let the widest shells dominate the conditioning input's scale.
         """
-        scale = self.target.mass_scale()
-        return torch.tensor([self.mass_target / scale, math.log(self.epsilon / scale)])
+        return torch.tensor([self.mass_target / self.scale,
+                             math.log(self.epsilon / self.scale)])
 
 
 def shell_fraction(sorted_mass: torch.Tensor, centre: torch.Tensor,

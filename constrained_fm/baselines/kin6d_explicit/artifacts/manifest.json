@@ -1,0 +1,22 @@
+{
+  "arrays": {
+    "samples": {
+      "shape": [
+        100,
+        2000,
+        6
+      ],
+      "dtype": "float32"
+    },
+    "mass": {
+      "shape": [
+        100
+      ],
+      "dtype": "float32"
+    }
+  },
+  "written_at": "2026-09-21T11:45:27",
+  "git_commit": "2791162d397f3d056bf6c81c6761e488e15fd84b",
+  "run_id": "kin6d_explicit-7ee66fcd",
+  "method": "kin6d_explicit"
+}

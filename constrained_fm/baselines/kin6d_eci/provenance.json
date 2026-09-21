@@ -1,0 +1,8 @@
+{
+  "run_id": "kin6d_eci-3f976dc5",
+  "method": "kin6d_eci",
+  "fingerprint": "3f976dc529866f422dc5867d387d688796e824d5c3477b804050b1bbdaa9e5e9",
+  "git_commit": "2791162d397f3d056bf6c81c6761e488e15fd84b",
+  "created_at": "2026-09-21T11:33:21",
+  "base_ckpt": "constrained_fm/baselines/kin6d_base_fm/ckpt.pt"
+}

@@ -16,7 +16,7 @@ class BaseFM(nn.Module):
     def forward(self, t, x, **kwargs):
         raise NotImplementedError("Child classes must implement the forward() method!")
 
-    def sample(self, num_points: int, bounds=None, coeffs=None, z=None, step_size: float = 0.05, return_intermediates: bool = False, device=None):
+    def sample(self, num_points: int, bounds=None, coeffs=None, z=None, params=None, step_size: float = 0.05, return_intermediates: bool = False, device=None):
         self.eval()
 
         wrapped_vf = WrappedModel(self)
@@ -35,6 +35,8 @@ class BaseFM(nn.Module):
             kwargs['coeffs'] = coeffs_flat.expand(num_points, -1)
         elif z is not None:
             kwargs['z'] = z.view(1, -1).expand(num_points, -1)
+        elif params is not None:
+            kwargs['params'] = params.view(1, -1).expand(num_points, -1)
 
         with torch.no_grad():
             samples = solver.sample(

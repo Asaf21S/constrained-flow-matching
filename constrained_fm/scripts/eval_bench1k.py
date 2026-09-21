@@ -27,19 +27,24 @@ from pathlib import Path
 
 import numpy as np
 import torch
+import yaml
 from tqdm import tqdm
 
-from constrained_fm.src.consts import KIN_MMD_GAMMA
+from constrained_fm.src.consts import BUMP_SIREN_CHECKPOINT, KIN_MMD_GAMMA
 from constrained_fm.src.datasets.benchmark_1k import (PROBLEM_NAMES, constraints_from,
                                                       load_benchmark_1k)
+from constrained_fm.src.datasets.bump_conditioning import sample_query_points, to_siren_coords
 from constrained_fm.src.experiment.registry import pin_baseline_run, summarize
 from constrained_fm.src.experiment.runtime import resolve_device
 from constrained_fm.src.inference.constrained_samplers import (DEFAULT_CHUNK, DEFAULT_STEPS,
                                                                sample_eci, sample_hardflow)
+from constrained_fm.src.inference.latent_extractor import extract_latents_batched
 from constrained_fm.src.metrics.distributional import (compute_jsd, compute_jsd_1d, compute_mmd,
                                                        compute_swd)
 from constrained_fm.src.metrics.likelihood import conditional_nll
 from constrained_fm.src.models.constrained_mass import MassWindowConstrainedFM
+from constrained_fm.src.models.constrained_functa import ConstrainedFlowMatcher
+from constrained_fm.src.models.functa_siren import build_modulated_siren
 from constrained_fm.src.models.unconstrained import UnconstrainedFM
 from constrained_fm.src.problems.base import NormalizedConstraint
 from constrained_fm.src.problems.bump2d import BumpProblem
@@ -49,7 +54,7 @@ from constrained_fm.src.problems.kinematics6d import KinematicsProblem
 # kinematics6d feeds the shell parameters straight in. Both are "the model that was trained
 # on the constraint", as opposed to the two that bolt it on at inference time.
 PROBLEM_METHODS = {
-    "bump2d": ("gt", "eci", "hardflow"),
+    "bump2d": ("gt", "functa", "eci", "hardflow"),
     "kinematics6d": ("gt", "eci", "hardflow", "explicit"),
 }
 BASE_CKPT = {
@@ -57,6 +62,7 @@ BASE_CKPT = {
     "kinematics6d": "constrained_fm/baselines/kin6d_base_fm/ckpt.pt",
 }
 EXPLICIT_CKPT = "constrained_fm/baselines/kin6d_explicit/ckpt.pt"
+FUNCTA_DIR = "constrained_fm/baselines/bump2d_functa"
 DEFAULT_OUTDIR = "constrained_fm/baselines/bench1k"
 
 METRIC_KEYS = ("success_rate", "swd", "mmd", "jsd", "nll", "kld", "in_support_fraction",
@@ -65,7 +71,7 @@ METRIC_KEYS = ("success_rate", "swd", "mmd", "jsd", "nll", "kld", "in_support_fr
 # ECI and HardFlow alter the trajectory outside the probability-flow ODE, so no density of
 # theirs exists and their NLL/KLD stay NaN; rejection sampling's KLD is identically zero and
 # is left NaN rather than reported as a result.
-NLL_METHODS = {"bump2d": (), "kinematics6d": ("explicit",)}
+NLL_METHODS = {"bump2d": ("functa",), "kinematics6d": ("explicit",)}
 # The divergence trace costs two backward passes per step per point, so the NLL is a mean
 # over a subset of the same reference points the distributional metrics already use.
 NLL_POINTS = 4000
@@ -89,6 +95,7 @@ PROJECTION_ITERS = {"bump2d": 16, "kinematics6d": 32}
 # Independent RNG streams, so seeding one never shifts another.
 REFERENCE_POOL_SEED = 20_000
 GT_SAMPLE_SEED = 30_000
+QUERY_POINT_SEED = 40_000
 METRIC_SEED = 50_000
 
 
@@ -124,6 +131,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--guidance-scale", type=float, default=100.0)
     parser.add_argument("--margin", type=float, default=None)
     parser.add_argument("--chunk-size", type=int, default=DEFAULT_CHUNK)
+    parser.add_argument("--functa-dir", default=FUNCTA_DIR)
     parser.add_argument("--outdir", default=DEFAULT_OUTDIR)
     return parser
 
@@ -197,17 +205,45 @@ def rejection_sample(constraint, problem, num_samples: int, index: int, args,
     return torch.cat(kept, dim=0)[:num_samples]
 
 
+def seeded_query_points(problem, index: int, cfg: dict, device: torch.device) -> torch.Tensor:
+    """CAVIA query coordinates for one constraint, keyed to its global index."""
+    with torch.random.fork_rng(devices=[] if device.type == "cpu" else [device]):
+        torch.manual_seed(QUERY_POINT_SEED + index)
+        return sample_query_points(problem.target(), 1, cfg["points_per_shape"],
+                                   problem.domain, cfg["target_fraction"], device)[0]
+
+
+def conditioning(method: str, models: dict, constraint, index: int, problem,
+                 device: torch.device) -> dict:
+    """The per-constraint conditioning a method needs, as kwargs shared by sampling and NLL.
+
+    Extracted once rather than per consumer: the Functa latent costs a CAVIA inner loop, and
+    re-running it would also have to reproduce the same query points to stay consistent.
+    """
+    if method == "explicit":
+        return {"params": constraint.params.to(device)}
+    if method != "functa":
+        return {}
+
+    cfg = models["functa_cfg"]
+    points = seeded_query_points(problem, index, cfg, device)
+    labels = torch.tanh(constraint.value(points) / cfg["tau"])
+    z, _ = extract_latents_batched(models["siren"],
+                                   to_siren_coords(points, problem.domain).unsqueeze(0),
+                                   labels.unsqueeze(0))
+    return {"z": z[0]}
+
+
 def generate(method: str, models: dict, constraint, index: int, x0: torch.Tensor, problem,
-             normalizer, args, device: torch.device) -> torch.Tensor:
+             normalizer, args, device: torch.device, cond: dict) -> torch.Tensor:
     """Samples for one constraint, always returned in the normalised frame."""
     if method == "gt":
         physical = rejection_sample(constraint, problem, x0.shape[0], index, args, device)
         return normalizer.forward(physical)
 
-    if method == "explicit":
-        return models["explicit"].sample(num_points=x0.shape[0],
-                                         params=constraint.params.to(device),
-                                         step_size=args.step_size, device=device, x_init=x0)
+    if method in ("explicit", "functa"):
+        return models[method].sample(num_points=x0.shape[0], step_size=args.step_size,
+                                     device=device, x_init=x0, **cond)
 
     wrapped = NormalizedConstraint(constraint, normalizer)
     if method == "eci":
@@ -247,7 +283,7 @@ def in_support_fraction(target, normalizer, samples: torch.Tensor) -> float:
 
 
 def likelihood_row(method: str, models: dict, constraint, truth_u: torch.Tensor, normalizer,
-                   target, mass: float, args, device) -> dict[str, float]:
+                   target, mass: float, args, device, cond: dict) -> dict[str, float]:
     """Exact NLL and ``KL(p_true || p_model)`` for the methods that own a density."""
     if method not in NLL_METHODS[args.problem]:
         return {}
@@ -256,8 +292,7 @@ def likelihood_row(method: str, models: dict, constraint, truth_u: torch.Tensor,
     log_p_true = target.log_prob(normalizer.inverse(u_true).double())
     return conditional_nll(models[method], u_true, log_p_true, mass,
                            float(normalizer.log_det_forward),
-                           params=constraint.params.to(device),
-                           step_size=NLL_STEP_SIZE, device=device)
+                           step_size=NLL_STEP_SIZE, device=device, **cond)
 
 
 def score_one(problem_name: str, samples: torch.Tensor, truth: torch.Tensor, wrapped,
@@ -325,7 +360,44 @@ def load_models(args, problem, device: torch.device) -> dict:
         model.load_state_dict(torch.load(path, map_location=device, weights_only=True))
         models["explicit"] = model.eval()
 
+    if "functa" in args.methods:
+        models.update(load_functa(args, problem, device))
+
     return models
+
+
+def load_functa(args, problem, device: torch.device) -> dict:
+    """Rebuilds the Functa pair from the trained run's own ``config.yaml``.
+
+    The architecture, tau and query-point mixture are read back rather than re-declared as
+    eval defaults: a CAVIA latent is only meaningful under the exact extraction budget and
+    label convention it was meta-trained with, so a drifting default here would be silent.
+    """
+    out = Path(args.functa_dir)
+    ckpt = out / "ckpt.pt"
+    if not ckpt.exists():
+        raise FileNotFoundError(f"{ckpt} not found -- run scripts/run_bump_functa.sh")
+    cfg = yaml.safe_load((out / "config.yaml").read_text())["settings"]
+
+    siren = build_modulated_siren(latent_dim=cfg["latent_dim"], hidden_dim=cfg["siren_hidden_dim"],
+                                  n_layers=cfg["siren_layers"], w0=cfg["w0"]).to(device)
+    siren.load_state_dict(torch.load(cfg.get("siren", BUMP_SIREN_CHECKPOINT),
+                                     map_location=device, weights_only=True))
+    siren.eval()
+    for parameter in siren.parameters():
+        parameter.requires_grad_(False)
+
+    normalizer = problem.normalizer().to(device)
+    model = ConstrainedFlowMatcher(
+        siren=None if cfg["no_siren_feature"] else siren,
+        spatial_dim=problem.dim, latent_dim=cfg["latent_dim"],
+        time_emb_dim=cfg["time_emb_dim"], hidden_dim=cfg["hidden_dim"],
+        num_blocks=cfg["num_blocks"],
+        plane_scale=problem.domain / (2.0 * normalizer.std),
+        coord_shift=2.0 * normalizer.mean / problem.domain - 1.0).to(device)
+    # The SIREN is shared, not owned, so training wrote the checkpoint without its weights.
+    model.load_state_dict(torch.load(ckpt, map_location=device, weights_only=True), strict=False)
+    return {"functa": model.eval(), "siren": siren, "functa_cfg": cfg}
 
 
 # --- shards -------------------------------------------------------------------------------
@@ -388,15 +460,16 @@ def main(argv: list[str] | None = None) -> int:
             wrapped = NormalizedConstraint(constraint, normalizer)
 
             seed_metric_rng(index)
+            cond = conditioning(method, models, constraint, index, problem, device)
             samples = generate(method, models, constraint, index, x0, problem, normalizer,
-                               args, device)
+                               args, device, cond)
             truth = pool_u[wrapped.is_feasible(pool_u)]
 
             seed_metric_rng(index)
             row = score_one(args.problem, samples.detach(), truth, wrapped, normalizer,
                             target, MMD_GAMMA[args.problem], METRIC_SEED + index)
             row.update(likelihood_row(method, models, constraint, truth, normalizer, target,
-                                      float(benchmark["mass"][index]), args, device))
+                                      float(benchmark["mass"][index]), args, device, cond))
             for key in METRIC_KEYS:
                 per_shape[key].append(row[key])
 

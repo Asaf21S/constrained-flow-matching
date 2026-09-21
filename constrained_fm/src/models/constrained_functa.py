@@ -99,10 +99,16 @@ class ConstrainedFlowMatcher(BaseFM):
 
     def __init__(self, siren: Optional[nn.Module] = None, spatial_dim: int = 2, latent_dim: int = 512,
                  time_emb_dim: int = 128, hidden_dim: int = 1024, num_blocks: int = 4,
-                 plane_scale: float = PLANE_SCALE):
+                 plane_scale: float | torch.Tensor = PLANE_SCALE,
+                 coord_shift: float | torch.Tensor = 0.0):
         super().__init__()
 
-        self.plane_scale = plane_scale
+        # Non-persistent so the SIREN's coordinate frame never enters a checkpoint: it is a
+        # property of the problem, and older runs must keep loading with an unchanged key set.
+        self.register_buffer("plane_scale",
+                             torch.as_tensor(plane_scale, dtype=torch.float32), persistent=False)
+        self.register_buffer("coord_shift",
+                             torch.as_tensor(coord_shift, dtype=torch.float32), persistent=False)
         self.use_siren_feature = siren is not None
 
         if self.use_siren_feature:
@@ -167,7 +173,7 @@ class ConstrainedFlowMatcher(BaseFM):
         # parameters are already frozen in __init__, and x_t/z carry no graph during training,
         # so keeping the graph costs nothing there.
         if self.use_siren_feature:
-            x_normalized = (x / self.plane_scale).unsqueeze(1)  # (B, 1, 2) for per-example z
+            x_normalized = (x / self.plane_scale + self.coord_shift).unsqueeze(1)  # (B, 1, 2)
             siren_val = self.siren(x_normalized, z).squeeze(1)  # (B, 1)
             x = torch.cat([x, siren_val], dim=-1)
 

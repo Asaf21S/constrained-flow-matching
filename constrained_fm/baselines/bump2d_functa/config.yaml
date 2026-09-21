@@ -1,0 +1,31 @@
+method: bump2d_functa
+run_id: bump2d_functa-b5bd15d7
+settings:
+  batch_size: 1024
+  eval_pool_size: 200000
+  eval_samples: 4000
+  eval_shapes: 50
+  hidden_dim: 1024
+  iterations: 15001
+  latent_dim: 512
+  log_every: 500
+  lr: 0.001
+  lr_min: 1.0e-05
+  mass_pool_size: 20000
+  mass_weight_power: 0.0
+  max_weight: 20.0
+  no_siren_feature: false
+  num_blocks: 4
+  points_per_shape: 1000
+  pool: constrained_fm/functa_dataset/pools/bump_pool.pt
+  pool_rounds: 32
+  seed: 0
+  siren: constrained_fm/functa_dataset/bump_siren_best.pt
+  siren_hidden_dim: 512
+  siren_layers: 4
+  step_size: 0.05
+  target_fraction: 0.5
+  tau: 1.0
+  time_emb_dim: 128
+  w0: 30.0
+siren: constrained_fm/functa_dataset/bump_siren_best.pt

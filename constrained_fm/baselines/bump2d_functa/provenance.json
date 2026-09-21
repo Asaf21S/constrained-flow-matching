@@ -1,0 +1,8 @@
+{
+  "run_id": "bump2d_functa-b5bd15d7",
+  "method": "bump2d_functa",
+  "fingerprint": "b5bd15d77c38c62574188d276994eb142e110b6318ebeb69d824b6fad0160f58",
+  "git_commit": "ce4583d0ebe22f14c13eb0e1f0b9a6d6eb3442e8",
+  "created_at": "2026-09-21T18:40:10",
+  "siren": "constrained_fm/functa_dataset/bump_siren_best.pt"
+}

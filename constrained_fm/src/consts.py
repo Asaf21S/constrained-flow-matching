@@ -99,3 +99,8 @@ KIN_SHELL_MIN_MASS = 0.01
 KIN_SHELL_MAX_MASS = 0.5
 KIN_SHELL_MASS_BINS = 20
 KIN_MC_POOL_SIZE = 1_000_000
+# Median-heuristic RBF bandwidth for the normalised 6D frame, pinned rather than re-estimated
+# so MMD stays comparable across samplers. The measured median squared distance is 7.66, well
+# under the Gaussian 2 * dim = 12, because the normalised frame stays heavy-tailed along p_z.
+# The 2D problems keep the legacy gamma = 1.0, degenerate here at exp(-7.66) ~ 5e-4.
+KIN_MMD_GAMMA = 0.13

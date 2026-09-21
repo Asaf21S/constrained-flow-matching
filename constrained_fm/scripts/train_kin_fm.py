@@ -26,6 +26,7 @@ from flow_matching.path import AffineProbPath
 from flow_matching.path.scheduler import CondOTScheduler
 from tqdm import tqdm
 
+from constrained_fm.src.consts import KIN_MMD_GAMMA
 from constrained_fm.src.experiment import artifacts
 from constrained_fm.src.experiment.registry import pin_baseline_run
 from constrained_fm.src.experiment.runtime import resolve_device, set_seed
@@ -94,6 +95,12 @@ def train(args, problem: KinematicsProblem,
     return model, losses
 
 
+def median_sq_distance(x: torch.Tensor, num_points: int = 4096) -> float:
+    """Median pairwise squared distance, the usual RBF bandwidth scale."""
+    subset = x[torch.randperm(x.shape[0], device=x.device)[:num_points]]
+    return float(torch.cdist(subset, subset).pow(2).median())
+
+
 def score(model, problem: KinematicsProblem, args, device) -> tuple[dict, np.ndarray]:
     """Distributional agreement in the normalised frame plus physical-unit sanity checks.
 
@@ -108,18 +115,29 @@ def score(model, problem: KinematicsProblem, args, device) -> tuple[dict, np.nda
     reference = normalizer.forward(target.sample(args.pool_size, device=device))
     physical = normalizer.inverse(samples)
 
+    # Two independent draws from the target bound what any sampler can achieve at this sample
+    # count, so the raw SWD and MMD only mean something next to them.
+    floor_a = normalizer.forward(target.sample(args.num_eval_samples, device=device))
+    floor_b = normalizer.forward(target.sample(args.pool_size, device=device))
+
     mass_gen = target.invariant_mass(physical)
     mass_ref = target.invariant_mass(normalizer.inverse(reference))
     mean, std = target.mean_std(device=device)
 
     metrics = {
-        "swd": compute_swd(samples, reference, n_projections=SWD_PROJECTIONS),
-        "mmd": compute_mmd(samples, reference),
+        "swd": compute_swd(samples, reference, num_projections=SWD_PROJECTIONS),
+        "swd_noise_floor": compute_swd(floor_a, floor_b, num_projections=SWD_PROJECTIONS),
+        "mmd": compute_mmd(samples, reference, gamma=KIN_MMD_GAMMA),
+        "mmd_noise_floor": compute_mmd(floor_a, floor_b, gamma=KIN_MMD_GAMMA),
+        "mmd_gamma_median_heuristic": 1.0 / median_sq_distance(reference),
         "in_support_fraction": target.in_support(physical).float().mean().item(),
         "mean_abs_error": (physical.mean(dim=0) - mean).abs().max().item(),
         "std_rel_error": ((physical.std(dim=0) - std) / std).abs().max().item(),
         "mass_median_rel_error": abs(float(mass_gen.median() / mass_ref.median()) - 1.0),
         "mass_swd": compute_swd(mass_gen.unsqueeze(-1), mass_ref.unsqueeze(-1)),
+        "mass_swd_noise_floor": compute_swd(
+            target.invariant_mass(normalizer.inverse(floor_a)).unsqueeze(-1),
+            target.invariant_mass(normalizer.inverse(floor_b)).unsqueeze(-1)),
     }
     return metrics, physical[:SAVED_SAMPLES].detach().cpu().numpy()
 
@@ -163,7 +181,8 @@ def main(argv: list[str] | None = None) -> int:
                   "hidden_dim": args.hidden_dim, "num_blocks": args.num_blocks,
                   "time_dim": args.time_dim, "seed": args.seed},
         "eval": {"num_eval_samples": args.num_eval_samples, "pool_size": args.pool_size,
-                 "step_size": args.step_size, "swd_projections": SWD_PROJECTIONS},
+                 "step_size": args.step_size, "swd_projections": SWD_PROJECTIONS,
+                 "mmd_gamma": KIN_MMD_GAMMA},
         "unconditional": {k: float(v) for k, v in metrics.items()},
         "final_loss": float(np.mean(losses[-1000:])) if losses else None,
     }, indent=2))

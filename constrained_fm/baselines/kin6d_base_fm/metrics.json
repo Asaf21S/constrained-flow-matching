@@ -1,0 +1,55 @@
+{
+  "run_id": "kin6d_base_fm-0e4d7ac9",
+  "problem": "kinematics6d",
+  "model": "UnconstrainedFM",
+  "evaluated_at": "2026-09-21T10:33:52",
+  "frame": {
+    "mean": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "std": [
+      45.269287109375,
+      45.269287109375,
+      169.15492248535156,
+      45.269287109375,
+      45.269287109375,
+      169.15492248535156
+    ]
+  },
+  "mass_scale": 157.7221136352317,
+  "train": {
+    "iterations": 30001,
+    "batch_size": 4096,
+    "lr": 0.001,
+    "hidden_dim": 1024,
+    "num_blocks": 4,
+    "time_dim": 128,
+    "seed": 0
+  },
+  "eval": {
+    "num_eval_samples": 100000,
+    "pool_size": 100000,
+    "step_size": 0.05,
+    "swd_projections": 200,
+    "mmd_gamma": 0.13
+  },
+  "unconditional": {
+    "swd": 0.02211018105569609,
+    "swd_noise_floor": 0.021293364444932426,
+    "mmd": 0.000253140926361084,
+    "mmd_noise_floor": 0.0001850724220275879,
+    "mmd_gamma_median_heuristic": 0.13109991608838206,
+    "in_support_fraction": 0.9866799712181091,
+    "mean_abs_error": 1.277795672416687,
+    "std_rel_error": 0.013708606362342834,
+    "mass_median_rel_error": 0.00708770751953125,
+    "mass_swd": 3.129511457574445,
+    "mass_swd_noise_floor": 2.107545382104574
+  },
+  "final_loss": null
+}

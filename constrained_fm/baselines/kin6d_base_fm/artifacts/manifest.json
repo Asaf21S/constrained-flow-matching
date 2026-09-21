@@ -1,0 +1,15 @@
+{
+  "arrays": {
+    "samples": {
+      "shape": [
+        50000,
+        6
+      ],
+      "dtype": "float32"
+    }
+  },
+  "written_at": "2026-09-21T10:33:52",
+  "git_commit": "aad6c4e9903141b9897843b7a2f2b7729792ff1d",
+  "run_id": "kin6d_base_fm-0e4d7ac9",
+  "method": "kin6d_base_fm"
+}

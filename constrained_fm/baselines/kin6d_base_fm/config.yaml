@@ -1,0 +1,15 @@
+method: kin6d_base_fm
+run_id: kin6d_base_fm-0e4d7ac9
+settings:
+  batch_size: 4096
+  hidden_dim: 1024
+  iterations: 30001
+  log_every: 1000
+  lr: 0.001
+  lr_min: 1.0e-05
+  num_blocks: 4
+  num_eval_samples: 100000
+  pool_size: 100000
+  seed: 0
+  step_size: 0.05
+  time_dim: 128

@@ -9,6 +9,8 @@
 *.env
 
 !constrained_fm/benchmark/validation_set.pt
+!constrained_fm/benchmark/benchmark_1k_bump2d.pt
+!constrained_fm/benchmark/benchmark_1k_kinematics6d.pt
 
 dummy_script.py
 logs/

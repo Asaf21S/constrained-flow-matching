@@ -52,6 +52,18 @@ VAL1K_NUM_X0 = 10000
 VAL1K_SEED = 1000
 VAL1K_VERSION = 1
 
+# --- bench1k: the same stratified protocol, applied to bump2d and kinematics6d ------------
+# One frozen file per problem rather than one shared file, because the two constraint
+# families have nothing in common to serialise, and because rebuilding one must never
+# invalidate the other's already-reported numbers.
+BENCH1K_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "benchmark"))
+BENCH1K_NUM_CONSTRAINTS = 1000
+BENCH1K_MASS_BINS = 20
+BENCH1K_MC_POOL_SIZE = 1_000_000
+BENCH1K_NUM_X0 = 10000
+BENCH1K_SEED = 1000
+BENCH1K_VERSION = 1
+
 # --- bump2d: a 1% Gaussian signal buried in a falling exponential background ---------------
 # The signal sits in the x1 bulk but the x2 tail. That split is deliberate: visibility in the
 # 1D x1 marginal is set by the background density at mu_1 alone, while purity inside a polygon

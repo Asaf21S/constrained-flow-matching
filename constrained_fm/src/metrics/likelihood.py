@@ -27,7 +27,8 @@ from constrained_fm.src.solvers.ode_wrapper import WrappedModel
 
 
 def exact_log_likelihood(model, x_1: torch.Tensor, bounds=None, coeffs: torch.Tensor | None = None,
-                         z: torch.Tensor | None = None, step_size: float = 0.05,
+                         z: torch.Tensor | None = None, params: torch.Tensor | None = None,
+                         step_size: float = 0.05,
                          chunk_size: int = 4000, device=None) -> torch.Tensor:
     """log p(x) under the model for each row of x_1, via the backward augmented ODE.
 
@@ -55,6 +56,8 @@ def exact_log_likelihood(model, x_1: torch.Tensor, bounds=None, coeffs: torch.Te
         cond_key, cond = "z", z.view(1, -1).expand(num_points, -1)
     elif coeffs is not None:
         cond_key, cond = "coeffs", coeffs.reshape(1, -1).expand(num_points, -1)
+    elif params is not None:
+        cond_key, cond = "params", params.reshape(1, -1).expand(num_points, -1)
     else:
         cond_key, cond = None, None
 
@@ -120,4 +123,39 @@ def constraint_nll(model, x_true_valid: torch.Tensor, mass: float, bounds=None,
     return {"nll": nll, "kld": nll - ideal_nll}
 
 
-__all__ = ["exact_log_likelihood", "truncated_gmm_log_likelihood", "constraint_nll"]
+def conditional_nll(model, u_true: torch.Tensor, log_p_true: torch.Tensor, mass: float,
+                    log_det_forward: float, params: torch.Tensor | None = None,
+                    z: torch.Tensor | None = None, step_size: float = 0.05,
+                    chunk_size: int = 4000, device=None) -> dict[str, float]:
+    r"""``constraint_nll`` for any problem that can supply its own exact reference density.
+
+    ``u_true`` are constraint-satisfying ground-truth points in the model's normalized frame
+    and ``log_p_true`` is the *untruncated* reference log-density of the same points in
+    physical units. The truncated reference is ``log p(x) - log(mass)``, and the model's
+    physical-frame density is ``log p_u(u) + log|det du/dx|``, so both sides of
+
+    .. math:: \mathrm{KL}(p_{\mathrm{true}} \Vert p_{\mathrm{model}})
+              = \mathbb{E}_{p_{\mathrm{true}}}[\log p_{\mathrm{true}} - \log p_{\mathrm{model}}]
+
+    are measured in the same units and the frame cancels out of the difference.
+
+    Scoring at ground-truth points rather than generated ones is what keeps this finite: the
+    reverse direction would evaluate the reference at generated points, and any sample landing
+    outside a hard support gives ``log p = -inf`` and an infinite divergence.
+    """
+    if u_true.shape[0] == 0 or not mass > 0.0:
+        return {"nll": float("nan"), "kld": float("nan")}
+
+    log_p_model = exact_log_likelihood(model, u_true, params=params, z=z, step_size=step_size,
+                                       chunk_size=chunk_size, device=device) + log_det_forward
+    finite = torch.isfinite(log_p_model) & torch.isfinite(log_p_true)
+    if not bool(finite.any()):
+        return {"nll": float("inf"), "kld": float("inf")}
+
+    nll = float(-log_p_model[finite].mean())
+    ideal_nll = float(-(log_p_true[finite] - math.log(mass)).mean())
+    return {"nll": nll, "kld": nll - ideal_nll}
+
+
+__all__ = ["exact_log_likelihood", "truncated_gmm_log_likelihood", "constraint_nll",
+           "conditional_nll"]

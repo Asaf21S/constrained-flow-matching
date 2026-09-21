@@ -1,0 +1,8 @@
+{
+  "run_id": "bench1k_kinematics6d-5b392e85",
+  "method": "bench1k_kinematics6d",
+  "fingerprint": "5b392e850e671cb724f187e4400b2507d7a7ec9c9713062664baed7e4fce3646",
+  "git_commit": "e6fcc6acddde8a922404d20d1f29f53e28948bce",
+  "created_at": "2026-09-21T12:54:27",
+  "benchmark_digest": "924ea44c1aec69d7"
+}

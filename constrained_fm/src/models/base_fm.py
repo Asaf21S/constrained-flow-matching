@@ -16,14 +16,16 @@ class BaseFM(nn.Module):
     def forward(self, t, x, **kwargs):
         raise NotImplementedError("Child classes must implement the forward() method!")
 
-    def sample(self, num_points: int, bounds=None, coeffs=None, z=None, params=None, step_size: float = 0.05, return_intermediates: bool = False, device=None):
+    def sample(self, num_points: int, bounds=None, coeffs=None, z=None, params=None, step_size: float = 0.05, return_intermediates: bool = False, device=None, x_init=None):
         self.eval()
 
         wrapped_vf = WrappedModel(self)
         solver = ODESolver(velocity_model=wrapped_vf)
 
-        x_init = torch.randn((num_points, getattr(self, "input_dim", 2)), dtype=torch.float32,
-                             device=device)
+        # Supplied so a benchmark can integrate every method from one shared noise draw.
+        if x_init is None:
+            x_init = torch.randn((num_points, getattr(self, "input_dim", 2)),
+                                 dtype=torch.float32, device=device)
         T = torch.linspace(0, 1, 10).to(device)
 
         kwargs = {}

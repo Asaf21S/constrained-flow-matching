@@ -1,0 +1,22 @@
+method: bench1k_bump2d
+run_id: bench1k_bump2d-aa41bcdb
+settings:
+  base_ckpt: constrained_fm/baselines/bump2d_base_fm/ckpt.pt
+  chunk_size: 20000
+  correction_loops: 1
+  explicit_ckpt: constrained_fm/baselines/kin6d_explicit/ckpt.pt
+  gt_batch: 500000
+  guidance_scale: 100.0
+  hidden_dim: 1024
+  margin: 0.001
+  num_blocks: 4
+  num_frequencies: 16
+  num_x0: null
+  pool_size: 1000000
+  problem: bump2d
+  projection_damping: 1.0
+  projection_iters: 16
+  step_size: 0.05
+  steps: 100
+  time_dim: 128
+benchmark_digest: 0a207ab7332ab583

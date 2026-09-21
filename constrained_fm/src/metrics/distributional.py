@@ -34,8 +34,15 @@ def _finite_rows(samples: torch.Tensor) -> np.ndarray:
     return arr[np.isfinite(arr).all(axis=1)]
 
 
-def compute_swd(samples_gen: torch.Tensor, samples_true: torch.Tensor, num_projections=50) -> float:
-    """Wrapper for Sliced Wasserstein Distance using the POT library."""
+def compute_swd(samples_gen: torch.Tensor, samples_true: torch.Tensor, num_projections=50,
+                seed=None) -> float:
+    """Wrapper for Sliced Wasserstein Distance using the POT library.
+
+    ``seed`` is threaded through because POT builds its own ``np.random.RandomState(seed)``,
+    which draws from OS entropy when seed is None and so ignores ``np.random.seed`` entirely.
+    Left None by default, which is the historical behaviour every existing number was
+    produced under.
+    """
     if len(samples_gen) == 0 or len(samples_true) == 0:
         return float('inf')
 
@@ -44,7 +51,7 @@ def compute_swd(samples_gen: torch.Tensor, samples_true: torch.Tensor, num_proje
     if len(X) == 0 or len(Y) == 0:
         return float('inf')
 
-    swd = ot.sliced_wasserstein_distance(X, Y, n_projections=num_projections)
+    swd = ot.sliced_wasserstein_distance(X, Y, n_projections=num_projections, seed=seed)
     return float(swd)
 
 
@@ -69,6 +76,33 @@ def compute_mmd(samples_gen: torch.Tensor, samples_true: torch.Tensor, gamma=1.0
 
     mmd = K_XX.mean() + K_YY.mean() - 2 * K_XY.mean()
     return max(0.0, float(mmd))
+
+
+def compute_jsd_1d(values_gen: torch.Tensor, values_true: torch.Tensor, bins: int = 100) -> float:
+    """Jensen-Shannon divergence between two scalar samples, on a shared histogram grid.
+
+    The KDE route in :func:`compute_jsd` is hard-wired to two dimensions, so a problem whose
+    state does not live on the plane is compared through a scalar summary statistic instead.
+    Binned rather than smoothed because the quantity of interest here carries hard edges --
+    a mass shell truncates its own histogram -- which a kernel would blur across.
+    """
+    X = np.asarray(values_gen.detach().cpu(), dtype=np.float64).ravel()
+    Y = np.asarray(values_true.detach().cpu(), dtype=np.float64).ravel()
+    X, Y = X[np.isfinite(X)], Y[np.isfinite(Y)]
+    if len(X) < 10 or len(Y) < 10:
+        return float('inf')
+
+    lo = min(X.min(), Y.min())
+    hi = max(X.max(), Y.max())
+    if not np.isfinite(lo) or not np.isfinite(hi) or hi <= lo:
+        return float('inf')
+
+    edges = np.linspace(lo, hi, bins + 1)
+    P = np.histogram(X, bins=edges)[0].astype(np.float64)
+    Q = np.histogram(Y, bins=edges)[0].astype(np.float64)
+
+    js_distance = jensenshannon(P / P.sum(), Q / Q.sum())
+    return float(js_distance ** 2)
 
 
 def compute_jsd(samples_gen: torch.Tensor, samples_true: torch.Tensor, grid_size=100) -> float:

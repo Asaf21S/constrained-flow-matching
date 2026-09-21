@@ -1,0 +1,22 @@
+method: bench1k_kinematics6d
+run_id: bench1k_kinematics6d-5b392e85
+settings:
+  base_ckpt: constrained_fm/baselines/kin6d_base_fm/ckpt.pt
+  chunk_size: 20000
+  correction_loops: 1
+  explicit_ckpt: constrained_fm/baselines/kin6d_explicit/ckpt.pt
+  gt_batch: 500000
+  guidance_scale: 100.0
+  hidden_dim: 1024
+  margin: 0.0001
+  num_blocks: 4
+  num_frequencies: 16
+  num_x0: null
+  pool_size: 3000000
+  problem: kinematics6d
+  projection_damping: 1.0
+  projection_iters: 32
+  step_size: 0.05
+  steps: 100
+  time_dim: 128
+benchmark_digest: 924ea44c1aec69d7

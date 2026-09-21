@@ -1,0 +1,8 @@
+{
+  "run_id": "bench1k_bump2d-aa41bcdb",
+  "method": "bench1k_bump2d",
+  "fingerprint": "aa41bcdba656e26593ad40c04df49e55b54864ad19eb3438d1cef128ffd48e68",
+  "git_commit": "e6fcc6acddde8a922404d20d1f29f53e28948bce",
+  "created_at": "2026-09-21T15:28:01",
+  "benchmark_digest": "0a207ab7332ab583"
+}

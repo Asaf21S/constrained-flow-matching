@@ -1,0 +1,316 @@
+{
+  "arrays": {
+    "mass": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "eci__success_rate": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "eci__swd": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "eci__mmd": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "eci__jsd": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "eci__in_support_fraction": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "eci__swd_noise_floor": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "eci__mmd_noise_floor": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "eci__jsd_noise_floor": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "eci__truth_count": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "eci__compared_count": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "explicit__success_rate": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "explicit__swd": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "explicit__mmd": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "explicit__jsd": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "explicit__nll": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "explicit__kld": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "explicit__in_support_fraction": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "explicit__swd_noise_floor": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "explicit__mmd_noise_floor": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "explicit__jsd_noise_floor": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "explicit__truth_count": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "explicit__compared_count": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "gt__success_rate": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "gt__swd": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "gt__mmd": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "gt__jsd": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "gt__in_support_fraction": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "gt__swd_noise_floor": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "gt__mmd_noise_floor": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "gt__jsd_noise_floor": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "gt__truth_count": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "gt__compared_count": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "hardflow__success_rate": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "hardflow__swd": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "hardflow__mmd": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "hardflow__jsd": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "hardflow__in_support_fraction": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "hardflow__swd_noise_floor": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "hardflow__mmd_noise_floor": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "hardflow__jsd_noise_floor": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "hardflow__truth_count": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "hardflow__compared_count": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "shell_window": {
+      "shape": [
+        2
+      ],
+      "dtype": "float32"
+    },
+    "shell_index": {
+      "shape": [
+        1
+      ],
+      "dtype": "int64"
+    },
+    "shell_mass_target": {
+      "shape": [
+        20000
+      ],
+      "dtype": "float32"
+    },
+    "shell_mass_truth": {
+      "shape": [
+        20000
+      ],
+      "dtype": "float32"
+    },
+    "shell_mass_explicit": {
+      "shape": [
+        20000
+      ],
+      "dtype": "float32"
+    },
+    "shell_mass_eci": {
+      "shape": [
+        20000
+      ],
+      "dtype": "float32"
+    },
+    "shell_mass_hardflow": {
+      "shape": [
+        20000
+      ],
+      "dtype": "float32"
+    }
+  },
+  "written_at": "2026-09-21T20:26:34",
+  "git_commit": "73241c6771032c7554300830979e4ab482083437",
+  "method": "bench1k",
+  "problem": "kinematics6d",
+  "benchmark_digest": "924ea44c1aec69d7",
+  "num_constraints": 1000,
+  "methods": [
+    "eci",
+    "explicit",
+    "gt",
+    "hardflow"
+  ]
+}

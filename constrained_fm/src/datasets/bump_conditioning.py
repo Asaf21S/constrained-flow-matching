@@ -22,11 +22,32 @@ from tqdm.auto import tqdm
 from constrained_fm.src.consts import (BUMP_DOMAIN, BUMP_POLY_MAX_MASS, BUMP_POLY_MAX_VERTICES,
                                        BUMP_POLY_MIN_MASS, BUMP_POLY_MIN_VERTICES,
                                        BUMP_POLY_RADIUS_RANGE, BUMP_QUERY_TARGET_FRACTION,
+                                       BUMP_SIGNAL_MEAN, BUMP_SIGNAL_SIGMA, BUMP_SIGNAL_WEIGHT,
                                        BUMP_SIREN_TAU)
 from constrained_fm.src.inference.latent_extractor import extract_latents_batched
 from constrained_fm.src.problems.bump2d import BumpTarget, polygon_mass, propose_polygons
 
 POOL_KEYS = ("normals", "offsets", "active", "mass")
+
+
+def signal_fraction(target: BumpTarget, x: torch.Tensor) -> float:
+    """Share of ``x`` attributable to the signal component, in percent.
+
+    Estimated as the mean posterior responsibility of the signal under the true mixture,
+
+    .. math::
+        \\hat{w} = \\frac{1}{N} \\sum_n
+            \\frac{w\\,\\mathcal{N}(x_n; \\mu_s, \\Sigma_s)}{p(x_n)},
+
+    which needs neither a binning choice nor a fit, and is exact in expectation whenever the
+    samples are drawn from the mixture itself.
+    """
+    mu = torch.as_tensor(BUMP_SIGNAL_MEAN, device=x.device, dtype=x.dtype)
+    sigma = torch.as_tensor(BUMP_SIGNAL_SIGMA, device=x.device, dtype=x.dtype)
+    log_signal = (-0.5 * ((x - mu) / sigma).pow(2).sum(-1)
+                  - torch.log(2.0 * torch.pi * sigma * sigma))
+    weight = BUMP_SIGNAL_WEIGHT * torch.exp(log_signal - target.log_prob(x))
+    return float(weight.clamp(0.0, 1.0).mean()) * 100.0
 
 
 def to_siren_coords(x: torch.Tensor, domain: float = BUMP_DOMAIN) -> torch.Tensor:

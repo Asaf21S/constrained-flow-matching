@@ -29,12 +29,13 @@ from constrained_fm.src.visualization.style import PAPER_RC
 
 plt.rcParams.update(PAPER_RC)
 
-METHOD_ORDER = ("gt", "coeff", "functa", "fewshot", "eci", "hardflow")
+METHOD_ORDER = ("gt", "coeff", "functa", "explicit", "fewshot", "eci", "hardflow")
 
 METHOD_LABELS = {
     "gt": "Ground Truth (rejection sampling)",
     "coeff": "Coefficients (ours)",
     "functa": "Functa (ours)",
+    "explicit": "Explicit conditioning (ours)",
     "fewshot": "Few-Shot",
     "eci": "ECI",
     "hardflow": "HardFlow",
@@ -45,6 +46,7 @@ METHOD_SHORT = {
     "gt": "Ground Truth",
     "coeff": "Coefficients",
     "functa": "Functa (ours)",
+    "explicit": "Explicit (ours)",
     "fewshot": "Few-Shot",
     "eci": "ECI",
     "hardflow": "HardFlow",
@@ -54,13 +56,14 @@ METHOD_COLORS = {
     "gt": "#111827",
     "coeff": "#2563eb",
     "functa": "#dc2626",
+    "explicit": "#dc2626",
     "fewshot": "#7c3aed",
     "eci": "#0d9488",
     "hardflow": "#d97706",
 }
 
-METHOD_STYLES = {"gt": (0, (6, 4)), "coeff": "-", "functa": "-", "fewshot": "-",
-                 "eci": "-", "hardflow": "-"}
+METHOD_STYLES = {"gt": (0, (6, 4)), "coeff": "-", "functa": "-", "explicit": "-",
+                 "fewshot": "-", "eci": "-", "hardflow": "-"}
 
 # label, axis title, log scale. SWD/MMD/JSD span orders of magnitude across the mass range;
 # NLL and KLD do not, and KLD dips below zero on the finite-sample estimate.
@@ -136,6 +139,8 @@ def plot_metric_trend(series: dict[str, tuple[np.ndarray, np.ndarray]], xlabel: 
                       window: int = 100, step: int = 25, identity: bool = False,
                       identity_label: str = "parity ($y = x$)",
                       identity_color: str = "#9ca3af",
+                      hline: float | None = None,
+                      hline_label: str = "noise floor",
                       labels: dict[str, str] | None = None,
                       legend: bool = True, legend_loc: str = "lower right",
                       legend_ncol: int = 1,
@@ -145,6 +150,7 @@ def plot_metric_trend(series: dict[str, tuple[np.ndarray, np.ndarray]], xlabel: 
     ``series`` maps a method name to its (x, y) arrays; methods are drawn in METHOD_ORDER so
     the legend reads the same on every figure. ``labels`` overrides legend text per method.
     Pass ``legend=False`` for a panel that borrows its neighbour's legend in the paper.
+    ``hline`` draws a constant reference, for axes already expressed as a ratio to a floor.
     """
     fig, ax = plt.subplots(figsize=figsize)
     ordered = [m for m in METHOD_ORDER if m in series] + \
@@ -169,6 +175,10 @@ def plot_metric_trend(series: dict[str, tuple[np.ndarray, np.ndarray]], xlabel: 
         ax.plot(span, span, color=identity_color, linestyle=(0, (5, 5)), linewidth=1.9,
                 zorder=0, label=identity_label)
         ax.set_xlim(lo, hi)
+
+    if hline is not None:
+        ax.axhline(hline, color=METHOD_COLORS["gt"], linestyle=(0, (5, 5)), linewidth=1.9,
+                   zorder=0, label=hline_label)
 
     if logx:
         ax.set_xscale("log")

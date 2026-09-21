@@ -1,0 +1,305 @@
+{
+  "arrays": {
+    "mass": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "eci__success_rate": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "eci__swd": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "eci__mmd": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "eci__jsd": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "eci__swd_noise_floor": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "eci__mmd_noise_floor": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "eci__jsd_noise_floor": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "eci__truth_count": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "eci__compared_count": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "functa__success_rate": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "functa__swd": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "functa__mmd": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "functa__jsd": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "functa__nll": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "functa__kld": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "functa__swd_noise_floor": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "functa__mmd_noise_floor": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "functa__jsd_noise_floor": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "functa__truth_count": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "functa__compared_count": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "gt__success_rate": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "gt__swd": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "gt__mmd": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "gt__jsd": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "gt__swd_noise_floor": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "gt__mmd_noise_floor": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "gt__jsd_noise_floor": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "gt__truth_count": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "gt__compared_count": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "hardflow__success_rate": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "hardflow__swd": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "hardflow__mmd": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "hardflow__jsd": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "hardflow__swd_noise_floor": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "hardflow__mmd_noise_floor": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "hardflow__jsd_noise_floor": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "hardflow__truth_count": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "hardflow__compared_count": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "log_density": {
+      "shape": [
+        400,
+        400
+      ],
+      "dtype": "float32"
+    },
+    "band_edges": {
+      "shape": [
+        61
+      ],
+      "dtype": "float32"
+    },
+    "band_mass": {
+      "shape": [
+        1
+      ],
+      "dtype": "float32"
+    },
+    "band_target": {
+      "shape": [
+        60
+      ],
+      "dtype": "float32"
+    },
+    "band_filtered": {
+      "shape": [
+        60
+      ],
+      "dtype": "float32"
+    },
+    "band_generated": {
+      "shape": [
+        60
+      ],
+      "dtype": "float32"
+    },
+    "band_truth": {
+      "shape": [
+        60
+      ],
+      "dtype": "float32"
+    },
+    "band_eci": {
+      "shape": [
+        60
+      ],
+      "dtype": "float32"
+    },
+    "band_hardflow": {
+      "shape": [
+        60
+      ],
+      "dtype": "float32"
+    }
+  },
+  "written_at": "2026-09-21T20:26:06",
+  "git_commit": "73241c6771032c7554300830979e4ab482083437",
+  "method": "bench1k",
+  "problem": "bump2d",
+  "benchmark_digest": "0a207ab7332ab583",
+  "num_constraints": 1000,
+  "methods": [
+    "eci",
+    "functa",
+    "gt",
+    "hardflow"
+  ]
+}

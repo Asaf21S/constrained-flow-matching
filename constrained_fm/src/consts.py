@@ -2,7 +2,7 @@ import os
 
 # Registered dataset/constraint problems, duplicated here so configs validate without torch.
 DEFAULT_PROBLEM = "gmm_poly"
-PROBLEM_NAMES = ("gmm_poly", "bump2d")
+PROBLEM_NAMES = ("gmm_poly", "bump2d", "kinematics6d")
 
 
 GMM_MEANS = [
@@ -67,3 +67,35 @@ BUMP_POLY_MAX_VERTICES = 7
 BUMP_POLY_RADIUS_RANGE = (0.35, 7.0)
 BUMP_POLY_MIN_MASS = 0.02
 BUMP_POLY_MAX_MASS = 0.98
+
+# The SIREN regresses tanh(C / tau), so tau sets the width of the transition band around the
+# boundary in domain units. C has unit normals, so tau is a length. Swept over {0.3, 1.0, 3.0}
+# at 120 epochs: mass-IoU p5 came out 0.867 / 0.921 / 0.882. Narrower is not better, because a
+# w0=30 sine basis on [-1, 1] coordinates cannot resolve the ramp and overshoots it; wider fits
+# to a lower MSE but places the zero level set less precisely, which is what the IoU sees.
+# Meta-training and extraction must use the same value, or CAVIA adapts a latent for a
+# function it was never trained on.
+BUMP_SIREN_TAU = 1.0
+# Unlike the GMM, the bump background is concentrated in one corner, so uniform query points
+# spend the fixed 15-step budget resolving boundary far from any probability mass.
+BUMP_QUERY_TARGET_FRACTION = 0.5
+BUMP_SIREN_CHECKPOINT = "constrained_fm/functa_dataset/bump_siren_best.pt"
+BUMP_POOL_PATH = "constrained_fm/functa_dataset/pools/bump_pool.pt"
+
+# --- kinematics6d: two massless particles, constrained by their pair invariant mass --------
+# Generated in (pT, eta, phi) because that is where the physics factorises, then mapped to the
+# Cartesian momenta the flow matcher sees. The map is a diffeomorphism with |J| = pT^2 cosh eta,
+# so the Cartesian log-density stays exact and KLD remains well defined.
+KIN_PT_RANGE = (10.0, 500.0)
+KIN_PT_SCALE = 40.0
+KIN_ETA_RANGE = (-3.0, 3.0)
+KIN_ETA_SIGMA = 1.5
+# M^2 = 2 pT1 pT2 (cosh d_eta - cos d_phi) vanishes for collinear pairs, where d(sqrt)/d(M^2)
+# is unbounded; the floor keeps HardFlow's guidance gradient finite there.
+KIN_MASS_FLOOR = 1e-6
+# Shell probability mass, the analogue of polygon mass: the fraction of pairs inside the
+# window. Log-spaced because the interesting regime is the narrow end.
+KIN_SHELL_MIN_MASS = 0.01
+KIN_SHELL_MAX_MASS = 0.5
+KIN_SHELL_MASS_BINS = 20
+KIN_MC_POOL_SIZE = 1_000_000

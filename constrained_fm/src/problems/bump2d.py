@@ -55,7 +55,9 @@ class PolygonConstraint(Constraint):
         self.interior = interior
 
     def value(self, x: torch.Tensor) -> torch.Tensor:
-        return (x @ self.normals.transpose(-1, -2) - self.offsets).amax(dim=-1)
+        # Not a matmul: TF32 GEMMs err by ~6e-3 here, which flips feasibility of interior points.
+        products = (x.unsqueeze(-2) * self.normals).sum(dim=-1)
+        return (products - self.offsets).amax(dim=-1)
 
     @property
     def interior_point(self) -> torch.Tensor | None:

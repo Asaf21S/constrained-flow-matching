@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
 """Stage 5 for kinematics6d: the spectrum, marginal and correlation panels.
 
-Three figures, all for one showcase shell:
+Three figures, all for one showcase mass window:
 
-* ``mass_spectrum`` -- the invariant-mass spectra with the requested window shaded.
+* ``mass_spectrum`` -- the invariant-mass spectra, full range and zoomed on the window.
 * ``kinematic_marginals`` -- the leading particle's :math:`(p_T, \\eta, \\phi)`.
 * ``corner`` -- the six Cartesian momentum components.
 
 The window pins one scalar function of six coordinates. The last two figures are what
 separates a method that respects the conditional distribution from one that merely lands
-inside the shell, which the acceptance rate alone cannot distinguish.
+inside the window, which the success rate alone cannot distinguish.
 
     sbatch scripts/run_bumphunt_plots.sh
 """
@@ -40,6 +40,8 @@ PANEL_METHODS = ("explicit", "eci", "hardflow")
 # The correlation panel takes the exact conditional, our method, and the baseline that
 # distorts this geometry most; four contour sets per axis is unreadable.
 CORNER_SERIES = ("truth", "explicit", "hardflow")
+# The showcase is picked by mass alone, a rule that looks at no method's output.
+SHOWCASE_MASS = 0.10
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -49,7 +51,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--figure-dir", default=DEFAULT_FIGURE_DIR)
     parser.add_argument("--budget", type=int, default=20000)
     parser.add_argument("--showcase", type=int, default=None,
-                        help="benchmark constraint to draw (default: the tightest shell)")
+                        help="benchmark constraint to draw (default: the one whose mass is "
+                             "closest to 10%%)")
     return parser
 
 
@@ -95,7 +98,8 @@ def main() -> None:
     benchmark = load_benchmark_1k("kinematics6d", device=device)
     constraints = constraints_from(benchmark, problem, device=device)
     masses = benchmark["mass"].cpu().numpy()
-    index = int(np.argmin(masses)) if args.showcase is None else int(args.showcase)
+    index = (int(np.argmin(np.abs(masses - SHOWCASE_MASS))) if args.showcase is None
+             else int(args.showcase))
     constraint = constraints[index]
 
     draws = {"target": target.sample(args.budget, device=device),
@@ -107,8 +111,10 @@ def main() -> None:
     window = (constraint.mass_target - constraint.epsilon,
               constraint.mass_target + constraint.epsilon)
     mass = {name: target.invariant_mass(values).cpu().numpy() for name, values in draws.items()}
-    print(f"showcase shell {index} | M* {constraint.mass_target:.2f} GeV | "
+    print(f"showcase window {index} | M* {constraint.mass_target:.2f} GeV | "
           f"epsilon {constraint.epsilon:.3f} GeV | mass {masses[index] * 100:.2f}%")
+    for method in PANEL_METHODS:
+        print(f"  {method:<10} SR {constraint.success_rate(draws[method]):.2f}%")
 
     artifacts.save_arrays(out, shell_window=np.asarray(window),
                           shell_index=np.asarray([index]),

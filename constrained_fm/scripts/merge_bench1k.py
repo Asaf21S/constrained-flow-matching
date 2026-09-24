@@ -23,7 +23,7 @@ DEFAULT_OUTDIR = "constrained_fm/baselines/bench1k"
 PROBLEM_NAMES = ("bump2d", "kinematics6d")
 METRIC_KEYS = ("success_rate", "swd", "mmd", "jsd", "nll", "kld", "in_support_fraction",
                "swd_noise_floor", "mmd_noise_floor", "jsd_noise_floor",
-               "truth_count", "compared_count", "mass")
+               "truth_count", "compared_count", "signal_fraction", "mass")
 
 
 def build_parser() -> argparse.ArgumentParser:

@@ -64,31 +64,66 @@ def _label(name: str) -> str:
 
 
 def plot_mass_spectrum(mass: dict[str, np.ndarray], window: tuple[float, float],
-                       bins: int = 120, log: bool = True,
-                       figsize: tuple[float, float] = (8.6, 5.4)) -> Figure:
-    """Invariant-mass spectra with the requested window shaded.
+                       bins: int = 120, zoom_bins: int = 60, zoom_halfwidth: float = 2.0,
+                       zoom_headroom: float = 2.5,
+                       figsize: tuple[float, float] = (15.0, 5.4)) -> Figure:
+    """Invariant-mass spectra: the full range on a log axis, and a linear zoom on the window.
 
-    The unconstrained spectrum is drawn on the same axes as the conditional ones, which is
-    what makes the window's mass fraction legible: the shaded band is the only region the
-    conditional samplers are allowed to occupy.
+    Every histogram is normalised by its own sample count, so the height of a bar is
+    comparable across methods and panels regardless of how many points fall in view. The
+    zoom spans the window centre :math:`\\pm` ``zoom_halfwidth`` half-widths and drops the
+    unconstrained target, whose density there is negligible; the exact conditional is drawn
+    as a filled black line so the methods can be read against it. The zoom's vertical axis
+    stops at ``zoom_headroom`` times the exact conditional's tallest bar, and any method
+    exceeding it is labelled with its clipped peak height.
     """
-    fig, ax = plt.subplots(figsize=figsize)
-    finite = np.concatenate([values[np.isfinite(values)] for values in mass.values()])
-    edges = np.linspace(0.0, float(np.quantile(finite, 0.995)), bins + 1)
+    fig, (full, zoom) = plt.subplots(1, 2, figsize=figsize)
+    finite = {name: values[np.isfinite(values)] for name, values in mass.items()}
+    pooled = np.concatenate(list(finite.values()))
+    centre, half = 0.5 * (window[0] + window[1]), 0.5 * (window[1] - window[0])
+    ranges = {"full": np.linspace(0.0, float(np.quantile(pooled, 0.995)), bins + 1),
+              "zoom": np.linspace(centre - zoom_halfwidth * half,
+                                  centre + zoom_halfwidth * half, zoom_bins + 1)}
 
-    ax.axvspan(window[0], window[1], color=WINDOW_FACE, alpha=0.45, zorder=0,
-               label="requested window")
-    for name, values in mass.items():
-        ax.hist(values[np.isfinite(values)], bins=edges, density=True, histtype="step",
-                linewidth=2.2, color=_color(name), label=_label(name))
+    peaks: dict[str, float] = {}
+    for ax, key in ((full, "full"), (zoom, "zoom")):
+        edges = ranges[key]
+        width = float(edges[1] - edges[0])
+        ax.axvspan(window[0], window[1], color=WINDOW_FACE, alpha=0.45, zorder=0,
+                   label="requested window")
+        for name, values in finite.items():
+            if key == "zoom" and name == "target":
+                continue
+            weights = np.full(values.shape, 1.0 / (max(values.size, 1) * width))
+            if key == "zoom" and name == "truth":
+                heights, _, _ = ax.hist(values, bins=edges, weights=weights, color=_color(name),
+                                        histtype="stepfilled", alpha=0.15, linewidth=0.0)
+                ax.hist(values, bins=edges, weights=weights, color=_color(name),
+                        histtype="step", linewidth=2.6, zorder=4)
+            else:
+                heights, _, _ = ax.hist(values, bins=edges, weights=weights,
+                                        color=_color(name), label=_label(name),
+                                        histtype="step", linewidth=2.2)
+            if key == "zoom":
+                peaks[name] = float(np.max(heights, initial=0.0))
+        ax.set_xlabel("Invariant mass $M$ [GeV]")
+        ax.grid(True, which="both", **GRID_STYLE)
+        ax.set_axisbelow(True)
 
-    if log:
-        ax.set_yscale("log")
-    ax.set_xlabel("Invariant mass $M$ [GeV]")
-    ax.set_ylabel("density")
-    ax.grid(True, which="both", **GRID_STYLE)
-    ax.set_axisbelow(True)
-    ax.legend(loc="upper right", frameon=False, labelspacing=0.35)
+    full.set_yscale("log")
+    full.set_ylabel("density")
+    full.set_title("full range (log scale)", fontsize=15)
+    zoom.set_xlim(ranges["zoom"][0], ranges["zoom"][-1])
+    if peaks.get("truth", 0.0) > 0.0:
+        top = zoom_headroom * peaks["truth"]
+        zoom.set_ylim(0.0, top)
+        clipped = [f"{_label(name)} peak {peak:.2f} (clipped)"
+                   for name, peak in peaks.items() if peak > top]
+        if clipped:
+            zoom.text(0.02, 0.97, "\n".join(clipped), transform=zoom.transAxes, va="top",
+                      ha="left", fontsize=12)
+    zoom.set_title("zoom on the window (linear scale)", fontsize=15)
+    full.legend(loc="upper right", frameon=False, labelspacing=0.35)
     fig.tight_layout()
     return fig
 

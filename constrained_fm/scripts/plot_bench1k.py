@@ -9,7 +9,7 @@ Reads only the merged metrics.json, persists the arrays the figures consume unde
   pool, one seed), so the ratio is the only scale on which two constraints of different mass
   are comparable at all: a raw distance shrinks with the feasible region regardless of how
   well a method tracks it. Unity is a perfect sampler.
-* **Acceptance rate** against the true constraint mass, with ground truth drawn as the
+* **Success rate** against the true constraint mass, with ground truth drawn as the
   attainable ceiling rather than assumed to be 100%.
 * **Density metrics** -- only the method whose probability-flow ODE is left intact reports
   NLL and KLD. The projection baselines move the state off the ODE, so no density of theirs
@@ -44,10 +44,11 @@ BASELINES = ("eci", "hardflow")
 # Metrics that only mean something relative to the finite-sample floor at that constraint.
 RATIO_METRICS = ("swd", "mmd", "jsd")
 DENSITY_METRICS = ("nll", "kld")
-# Acceptance is tabulated separately as a median and a 5th percentile, so it is absent here.
+# Success rate is tabulated separately as a median and a 5th percentile, so it is absent here.
 TABLE_METRICS = ("swd", "mmd", "jsd", "kld", "in_support_fraction")
 
 MASS_AXIS_LABEL = "True constraint mass (%)"
+SUCCESS_AXIS_LABEL = "Success Rate (%)"
 FLOOR_LABEL = "Ground truth (noise floor)"
 
 
@@ -132,8 +133,7 @@ def render_acceptance(by_method: dict[str, dict[str, np.ndarray]], mass: np.ndar
               for method, metrics in by_method.items() if "success_rate" in metrics}
     if not series:
         return []
-    _, axis_label, _ = METRIC_SPECS["success_rate"]
-    fig = plot_metric_trend(series, MASS_AXIS_LABEL, axis_label, "", window=window,
+    fig = plot_metric_trend(series, MASS_AXIS_LABEL, SUCCESS_AXIS_LABEL, "", window=window,
                             step=step, legend_loc="lower right")
     return [save_figure(fig, figure_dir / "trend_success_rate.png")]
 
@@ -191,7 +191,7 @@ def summary_table(payload: dict, by_method: dict[str, dict[str, np.ndarray]],
                if any(key in by_method[m] and np.isfinite(by_method[m][key]).any()
                       for m in order)]
 
-    header = ["method", "AR median", "AR p5"]
+    header = ["method", "SR median", "SR 5th percentile"]
     for key in present:
         if key in RATIO_METRICS:
             short, _, _ = METRIC_SPECS[key]

@@ -1,6 +1,6 @@
 ### kinematics6d -- 1000 constraints
 
-| method | AR median | AR p5 | SWD (x floor) | MMD (x floor) | JSD (x floor) | KLD median | in support (%) |
+| method | SR median | SR 5th percentile | SWD (x floor) | MMD (x floor) | JSD (x floor) | KLD median | in support (%) |
 |:---|:---|:---|:---|:---|:---|:---|:---|
 | Ground Truth | 100.000 | 100.000 | 0.04565 (1.0x) | 0.0002106 (1.0x) | 0.002489 (1.0x) | -- | 100.0000 |
 | Explicit (ours) | 94.505 | 52.000 | 0.04607 (1.0x) | 0.0002403 (1.1x) | 0.03149 (13.6x) | 0.1179 | 96.6700 |

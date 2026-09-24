@@ -97,7 +97,7 @@ def sample_eci(model, x0: torch.Tensor, constraint: Constraint,
                margin: float = DEFAULT_MARGIN, projection_iters: int = 16,
                projection_damping: float = 1.0,
                chunk_size: int = DEFAULT_CHUNK) -> torch.Tensor:
-    """Exact Constraint Injection sampling of ``x0`` under a single constraint.
+    """Extrapolation-Correction-Interpolation (ECI; Cheng et al., 2024) sampling of ``x0``.
 
     Args:
         model: unconstrained velocity field with signature ``model(x, t)``.

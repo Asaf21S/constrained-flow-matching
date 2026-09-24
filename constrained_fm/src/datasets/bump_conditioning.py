@@ -63,7 +63,8 @@ def polygon_values(x: torch.Tensor, normals: torch.Tensor, offsets: torch.Tensor
     with different face counts. Every polygon keeps the four box faces, so at least one entry
     per row is always finite.
     """
-    residual = torch.einsum("bnd,bkd->bnk", x, normals) - offsets.unsqueeze(1)
+    residual = ((x.unsqueeze(2) * normals.unsqueeze(1)).sum(dim=-1)
+                - offsets.unsqueeze(1))
     return residual.masked_fill(~active.unsqueeze(1), float("-inf")).amax(dim=-1)
 
 

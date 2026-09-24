@@ -301,8 +301,8 @@
       "dtype": "float32"
     }
   },
-  "written_at": "2026-09-21T20:26:34",
-  "git_commit": "73241c6771032c7554300830979e4ab482083437",
+  "written_at": "2026-09-24T07:52:04",
+  "git_commit": "8d72006bfb4aead8ad84f94075951b97f6cc9036",
   "method": "bench1k",
   "problem": "kinematics6d",
   "benchmark_digest": "924ea44c1aec69d7",

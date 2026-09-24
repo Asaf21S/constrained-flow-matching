@@ -1,8 +1,0 @@
-{
-  "run_id": "kin6d_hardflow-7da69208",
-  "method": "kin6d_hardflow",
-  "fingerprint": "7da6920892f2637902955d83cccaca76a15261516745d53d9cf24c1781903855",
-  "git_commit": "2791162d397f3d056bf6c81c6761e488e15fd84b",
-  "created_at": "2026-09-21T11:50:21",
-  "base_ckpt": "constrained_fm/baselines/kin6d_base_fm/ckpt.pt"
-}

@@ -288,10 +288,81 @@
         60
       ],
       "dtype": "float32"
+    },
+    "eci__signal_fraction": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "functa__signal_fraction": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "gt__signal_fraction": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "hardflow__signal_fraction": {
+      "shape": [
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "signal_region_extent": {
+      "shape": [
+        4
+      ],
+      "dtype": "float32"
+    },
+    "signal_region_mass": {
+      "shape": [
+        1
+      ],
+      "dtype": "float32"
+    },
+    "signal_region_truth": {
+      "shape": [
+        48,
+        48
+      ],
+      "dtype": "float32"
+    },
+    "signal_region_filtered": {
+      "shape": [
+        48,
+        48
+      ],
+      "dtype": "float32"
+    },
+    "signal_region_functa": {
+      "shape": [
+        48,
+        48
+      ],
+      "dtype": "float32"
+    },
+    "signal_region_eci": {
+      "shape": [
+        48,
+        48
+      ],
+      "dtype": "float32"
+    },
+    "signal_region_hardflow": {
+      "shape": [
+        48,
+        48
+      ],
+      "dtype": "float32"
     }
   },
-  "written_at": "2026-09-21T20:26:06",
-  "git_commit": "73241c6771032c7554300830979e4ab482083437",
+  "written_at": "2026-09-24T07:51:29",
+  "git_commit": "8d72006bfb4aead8ad84f94075951b97f6cc9036",
   "method": "bench1k",
   "problem": "bump2d",
   "benchmark_digest": "0a207ab7332ab583",

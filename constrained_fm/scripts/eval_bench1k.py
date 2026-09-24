@@ -33,7 +33,8 @@ from tqdm import tqdm
 from constrained_fm.src.consts import BUMP_SIREN_CHECKPOINT, KIN_MMD_GAMMA
 from constrained_fm.src.datasets.benchmark_1k import (PROBLEM_NAMES, constraints_from,
                                                       load_benchmark_1k)
-from constrained_fm.src.datasets.bump_conditioning import sample_query_points, to_siren_coords
+from constrained_fm.src.datasets.bump_conditioning import (sample_query_points, signal_fraction,
+                                                        to_siren_coords)
 from constrained_fm.src.experiment.registry import pin_baseline_run, summarize
 from constrained_fm.src.experiment.runtime import resolve_device
 from constrained_fm.src.inference.constrained_samplers import (DEFAULT_CHUNK, DEFAULT_STEPS,
@@ -67,7 +68,7 @@ DEFAULT_OUTDIR = "constrained_fm/baselines/bench1k"
 
 METRIC_KEYS = ("success_rate", "swd", "mmd", "jsd", "nll", "kld", "in_support_fraction",
                "swd_noise_floor", "mmd_noise_floor", "jsd_noise_floor",
-               "truth_count", "compared_count")
+               "truth_count", "compared_count", "signal_fraction")
 # ECI and HardFlow alter the trajectory outside the probability-flow ODE, so no density of
 # theirs exists and their NLL/KLD stay NaN; rejection sampling's KLD is identically zero and
 # is left NaN rather than reported as a result.
@@ -282,6 +283,16 @@ def in_support_fraction(target, normalizer, samples: torch.Tensor) -> float:
     return float(inside.double().mean()) * 100.0
 
 
+def feasible_signal_fraction(target, normalizer, samples: torch.Tensor, wrapped) -> float:
+    """Signal share of the samples that satisfy the constraint, in percent; bump2d only."""
+    if not hasattr(target, "signal_weight"):
+        return float("nan")
+    kept = samples[wrapped.is_feasible(samples)]
+    if kept.shape[0] == 0:
+        return float("nan")
+    return signal_fraction(target, normalizer.inverse(kept))
+
+
 def likelihood_row(method: str, models: dict, constraint, truth_u: torch.Tensor, normalizer,
                    target, mass: float, args, device, cond: dict) -> dict[str, float]:
     """Exact NLL and ``KL(p_true || p_model)`` for the methods that own a density."""
@@ -317,6 +328,7 @@ def score_one(problem_name: str, samples: torch.Tensor, truth: torch.Tensor, wra
     row = {
         "success_rate": wrapped.success_rate(samples),
         "in_support_fraction": in_support_fraction(target, normalizer, samples),
+        "signal_fraction": feasible_signal_fraction(target, normalizer, samples, wrapped),
         "swd": compute_swd(generated, reference, num_projections=SWD_PROJECTIONS, seed=seed),
         "mmd": compute_mmd(generated, reference, gamma=gamma),
         "jsd": jensen_shannon(problem_name, generated, reference, normalizer, target),

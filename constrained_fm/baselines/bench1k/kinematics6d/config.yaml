@@ -1,14 +1,16 @@
 method: bench1k_kinematics6d
-run_id: bench1k_kinematics6d-5b392e85
+run_id: bench1k_kinematics6d-b54c7180
 settings:
   base_ckpt: constrained_fm/baselines/kin6d_base_fm/ckpt.pt
   chunk_size: 20000
   correction_loops: 1
   explicit_ckpt: constrained_fm/baselines/kin6d_explicit/ckpt.pt
+  functa_dir: constrained_fm/baselines/bump2d_functa
   gt_batch: 500000
   guidance_scale: 100.0
   hidden_dim: 1024
   margin: 0.0001
+  no_tuned: false
   num_blocks: 4
   num_frequencies: 16
   num_x0: null
@@ -16,7 +18,22 @@ settings:
   problem: kinematics6d
   projection_damping: 1.0
   projection_iters: 32
+  settings:
+    gt: {}
+    eci:
+      steps: 50
+      correction_loops: 1
+      projection_iters: 32
+      projection_damping: 1.0
+      margin: 0.001
+    hardflow:
+      steps: 100
+      guidance_scale: 10.0
+      margin: 0.001
+    explicit:
+      step_size: 0.1
   step_size: 0.05
   steps: 100
   time_dim: 128
+  tuned: constrained_fm/baselines/tuning/kinematics6d/selected.json
 benchmark_digest: 924ea44c1aec69d7

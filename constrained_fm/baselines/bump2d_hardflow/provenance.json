@@ -1,8 +1,0 @@
-{
-  "run_id": "bump2d_hardflow-207b59fd",
-  "method": "bump2d_hardflow",
-  "fingerprint": "207b59fdc49a38261d95d8828c5fc934652c921c10fb4c63915a8926cd63179c",
-  "git_commit": "32d3103b754fa1d250162ef531b88e2094684d26",
-  "created_at": "2026-09-20T23:09:48",
-  "base_ckpt": "constrained_fm/baselines/bump2d_base_fm/ckpt.pt"
-}

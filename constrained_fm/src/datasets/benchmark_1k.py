@@ -42,8 +42,8 @@ POLYGON_BATCH = 512
 POLYGON_MAX_ROUNDS = 2000
 
 
-def benchmark_path(problem: str) -> str:
-    return os.path.join(BENCH1K_DIR, f"benchmark_1k_{problem}.pt")
+def benchmark_path(problem: str, split: str = "1k") -> str:
+    return os.path.join(BENCH1K_DIR, f"benchmark_{split}_{problem}.pt")
 
 
 def _digest(*tensors: torch.Tensor) -> str:
@@ -223,8 +223,8 @@ def build_benchmark_1k(problem_name: str, num_constraints: int = BENCH1K_NUM_CON
     }
 
 
-def save_benchmark_1k(benchmark: dict) -> str:
-    path = benchmark_path(benchmark["problem"])
+def save_benchmark_1k(benchmark: dict, split: str = "1k") -> str:
+    path = benchmark_path(benchmark["problem"], split)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp = f"{path}.tmp"
     torch.save(benchmark, tmp)
@@ -232,9 +232,9 @@ def save_benchmark_1k(benchmark: dict) -> str:
     return path
 
 
-def load_benchmark_1k(problem_name: str, device=None) -> dict:
+def load_benchmark_1k(problem_name: str, device=None, split: str = "1k") -> dict:
     """Loads a frozen benchmark; never generates it, since the build costs a GPU job."""
-    path = benchmark_path(problem_name)
+    path = benchmark_path(problem_name, split)
     if not os.path.exists(path):
         raise FileNotFoundError(
             f"{problem_name} benchmark missing: {path}\n"

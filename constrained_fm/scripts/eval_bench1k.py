@@ -65,6 +65,13 @@ BASE_CKPT = {
 EXPLICIT_CKPT = "constrained_fm/baselines/kin6d_explicit/ckpt.pt"
 FUNCTA_DIR = "constrained_fm/baselines/bump2d_functa"
 DEFAULT_OUTDIR = "constrained_fm/baselines/bench1k"
+TUNING_DIR = "constrained_fm/baselines/tuning"
+# The inference-time hyperparameters each method samples with; selected per problem on the
+# held-out tuning set by scripts/tune_bench1k.py and read back from its selected.json.
+SAMPLER_KEYS = {"gt": (), "functa": ("step_size",), "explicit": ("step_size",),
+                "eci": ("steps", "correction_loops", "projection_iters",
+                        "projection_damping", "margin"),
+                "hardflow": ("steps", "guidance_scale", "margin")}
 
 METRIC_KEYS = ("success_rate", "swd", "mmd", "jsd", "nll", "kld", "in_support_fraction",
                "swd_noise_floor", "mmd_noise_floor", "jsd_noise_floor",
@@ -134,7 +141,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--chunk-size", type=int, default=DEFAULT_CHUNK)
     parser.add_argument("--functa-dir", default=FUNCTA_DIR)
     parser.add_argument("--outdir", default=DEFAULT_OUTDIR)
+    parser.add_argument("--tuned", default=None,
+                        help="selected.json whose per-method sampler settings override the "
+                             "flags above (default: the problem's tuning output, if present)")
+    parser.add_argument("--no-tuned", action="store_true",
+                        help="sample with the flags above even if a tuning selection exists")
     return parser
+
+
+def tuned_path(problem: str) -> Path:
+    return Path(TUNING_DIR) / problem / "selected.json"
 
 
 def resolve_defaults(args) -> None:
@@ -153,6 +169,17 @@ def resolve_defaults(args) -> None:
         args.pool_size = POOL_SIZE[args.problem]
     if args.projection_iters is None:
         args.projection_iters = PROJECTION_ITERS[args.problem]
+
+    args.settings = {method: {key: getattr(args, key) for key in SAMPLER_KEYS[method]}
+                     for method in PROBLEM_METHODS[args.problem]}
+    path = None if args.no_tuned else Path(args.tuned or tuned_path(args.problem))
+    if path is not None and path.exists():
+        for method, values in json.loads(path.read_text())["selected"].items():
+            if method in args.settings:
+                args.settings[method].update(values)
+        args.tuned = str(path)
+    else:
+        args.tuned = None
 
 
 def seed_metric_rng(index: int) -> None:
@@ -242,20 +269,14 @@ def generate(method: str, models: dict, constraint, index: int, x0: torch.Tensor
         physical = rejection_sample(constraint, problem, x0.shape[0], index, args, device)
         return normalizer.forward(physical)
 
+    settings = args.settings[method]
     if method in ("explicit", "functa"):
-        return models[method].sample(num_points=x0.shape[0], step_size=args.step_size,
-                                     device=device, x_init=x0, **cond)
+        return models[method].sample(num_points=x0.shape[0], device=device, x_init=x0,
+                                     **settings, **cond)
 
     wrapped = NormalizedConstraint(constraint, normalizer)
-    if method == "eci":
-        return sample_eci(models["base"], x0, wrapped, steps=args.steps,
-                          correction_loops=args.correction_loops, margin=args.margin,
-                          projection_iters=args.projection_iters,
-                          projection_damping=args.projection_damping,
-                          chunk_size=args.chunk_size)
-    return sample_hardflow(models["base"], x0, wrapped, steps=args.steps,
-                           guidance_scale=args.guidance_scale, margin=args.margin,
-                           chunk_size=args.chunk_size)
+    sampler = sample_eci if method == "eci" else sample_hardflow
+    return sampler(models["base"], x0, wrapped, chunk_size=args.chunk_size, **settings)
 
 
 # --- scoring ------------------------------------------------------------------------------
@@ -499,11 +520,8 @@ def main(argv: list[str] | None = None) -> int:
             "frame": "metrics in the normalised frame; success rate is frame-invariant",
             "eval": {"num_x0": x0.shape[0], "pool_size": args.pool_size,
                      "swd_projections": SWD_PROJECTIONS,
-                     "mmd_gamma": MMD_GAMMA[args.problem], "step_size": args.step_size,
-                     "steps": args.steps, "margin": args.margin,
-                     "projection_iters": args.projection_iters,
-                     "projection_damping": args.projection_damping,
-                     "guidance_scale": args.guidance_scale},
+                     "mmd_gamma": MMD_GAMMA[args.problem],
+                     "sampler": args.settings[method], "tuned_from": args.tuned},
             "per_shape": per_shape,
             "summary": summarize(per_shape),
         }

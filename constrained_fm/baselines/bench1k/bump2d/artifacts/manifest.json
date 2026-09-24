@@ -361,8 +361,8 @@
       "dtype": "float32"
     }
   },
-  "written_at": "2026-09-24T07:51:29",
-  "git_commit": "8d72006bfb4aead8ad84f94075951b97f6cc9036",
+  "written_at": "2026-09-24T20:18:35",
+  "git_commit": "89fa8920be3ded2719d5d13019d6c39324827596",
   "method": "bench1k",
   "problem": "bump2d",
   "benchmark_digest": "0a207ab7332ab583",

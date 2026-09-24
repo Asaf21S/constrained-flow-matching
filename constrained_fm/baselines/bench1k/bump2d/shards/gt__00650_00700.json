@@ -1,7 +1,7 @@
 {
   "method": "gt",
   "problem": "bump2d",
-  "run_id": "bench1k_bump2d-aa41bcdb",
+  "run_id": "bench1k_bump2d-6c3e2481",
   "benchmark_digest": "0a207ab7332ab583",
   "start_idx": 650,
   "end_idx": 700,
@@ -57,19 +57,15 @@
     698,
     699
   ],
-  "scored_at": "2026-09-24T00:08:48",
+  "scored_at": "2026-09-24T14:52:49",
   "frame": "metrics in the normalised frame; success rate is frame-invariant",
   "eval": {
     "num_x0": 10000,
     "pool_size": 1000000,
     "swd_projections": 200,
     "mmd_gamma": 1.0,
-    "step_size": 0.05,
-    "steps": 100,
-    "margin": 0.001,
-    "projection_iters": 16,
-    "projection_damping": 1.0,
-    "guidance_scale": 100.0
+    "sampler": {},
+    "tuned_from": "constrained_fm/baselines/tuning/bump2d/selected.json"
   },
   "per_shape": {
     "success_rate": [

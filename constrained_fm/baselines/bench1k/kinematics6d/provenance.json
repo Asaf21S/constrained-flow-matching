@@ -1,8 +1,8 @@
 {
-  "run_id": "bench1k_kinematics6d-5b392e85",
+  "run_id": "bench1k_kinematics6d-b54c7180",
   "method": "bench1k_kinematics6d",
-  "fingerprint": "5b392e850e671cb724f187e4400b2507d7a7ec9c9713062664baed7e4fce3646",
-  "git_commit": "e6fcc6acddde8a922404d20d1f29f53e28948bce",
-  "created_at": "2026-09-21T12:54:27",
+  "fingerprint": "b54c71803d53e9551e38d858e873ab20bac5da7274c0094c32d55adb0dd54ce0",
+  "git_commit": "89fa8920be3ded2719d5d13019d6c39324827596",
+  "created_at": "2026-09-24T18:44:42",
   "benchmark_digest": "924ea44c1aec69d7"
 }

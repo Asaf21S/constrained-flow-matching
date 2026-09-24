@@ -14,6 +14,7 @@
 # bins and paired with the start points every method integrates from.
 #
 #   sbatch scripts/run_bench1k_build.sh
+#   sbatch scripts/run_bench1k_build.sh --split tune
 #   sbatch scripts/run_bench1k_build.sh --problem bump2d --rebuild
 
 set -eo pipefail

@@ -63,6 +63,11 @@ BENCH1K_MC_POOL_SIZE = 1_000_000
 BENCH1K_NUM_X0 = 10000
 BENCH1K_SEED = 1000
 BENCH1K_VERSION = 1
+# Held-out constraints the sampler hyperparameters are selected on; a disjoint seed, so no
+# benchmark constraint or start point is ever seen during selection.
+TUNE_NUM_CONSTRAINTS = 100
+TUNE_NUM_X0 = 5000
+TUNE_SEED = 7000
 
 # --- bump2d: a 1% Gaussian signal buried in a falling exponential background ---------------
 # The signal sits in the x1 bulk but the x2 tail. That split is deliberate: visibility in the

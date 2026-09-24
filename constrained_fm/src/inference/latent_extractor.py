@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from typing import Callable
+
 import torch
 import torch.nn as nn
 
@@ -91,4 +93,44 @@ def extract_latent(
     return z_opt, per_shape_mse[0].item()
 
 
-__all__ = ["extract_latent", "extract_latents_batched"]
+def refine_latents(
+        siren: nn.Module,
+        z_init: torch.Tensor,
+        query_fn: Callable[[], tuple[torch.Tensor, torch.Tensor]],
+        steps: int,
+        lr: float,
+        anchor_weight: float = 0.0,
+) -> tuple[torch.Tensor, list[float]]:
+    """Test-time Adam on the latents alone, the SIREN weights stay frozen.
+
+    Minimises ``sum_b [ mean_m (f(x_bm, z_b) - y_bm)^2 + lambda ||z_b - z_b^0||^2 ]`` with a
+    fresh query batch every step; the anchor keeps ``z`` near the CAVIA solution the flow
+    matcher was trained on.
+
+    Args:
+        siren: frozen ModulatedSIREN.
+        z_init: (B, latent_dim) starting latents, also the anchor ``z^0``.
+        query_fn: returns ``(X, Y)`` of shapes (B, M, 2) normalised and (B, M) targets.
+        steps, lr: Adam budget.
+        anchor_weight: ``lambda``; 0 disables the anchor.
+
+    Returns:
+        z: (B, latent_dim) refined latents.
+        history: per-step mean-over-shapes MSE.
+    """
+    anchor = z_init.detach()
+    z = anchor.clone().requires_grad_(True)
+    optimizer = torch.optim.Adam([z], lr=lr)
+    history = []
+    for _ in range(steps):
+        X, Y = query_fn()
+        mse = ((siren(X, z).squeeze(-1) - Y) ** 2).mean(dim=1)
+        loss = mse.sum() + anchor_weight * ((z - anchor) ** 2).sum()
+        optimizer.zero_grad(set_to_none=True)
+        loss.backward()
+        optimizer.step()
+        history.append(float(mse.mean()))
+    return z.detach(), history
+
+
+__all__ = ["extract_latent", "extract_latents_batched", "refine_latents"]

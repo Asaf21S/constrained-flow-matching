@@ -165,6 +165,14 @@ def polynomial_grid(coeffs: torch.Tensor, resolution: int = 400,
     return gx.cpu().numpy(), gy.cpu().numpy(), P.detach().cpu().numpy()
 
 
+def field_contour(field: np.ndarray, scale: float = PLANE_SCALE
+                  ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Wraps a precomputed (R, R) lattice field, ``field[i, j]`` at ``(axis[j], axis[i])``."""
+    axis = np.linspace(-scale, scale, field.shape[0])
+    gx, gy = np.meshgrid(axis, axis, indexing="xy")
+    return gx, gy, np.asarray(field)
+
+
 def signed_boundary_distance(points: Any, coeffs: torch.Tensor,
                              degree: int = POLYNOMIAL_DEGREE,
                              scale: float = PLANE_SCALE) -> np.ndarray:
@@ -259,10 +267,11 @@ def _frame(ax, color: str, linewidth: float) -> None:
         spine.set_linewidth(linewidth)
 
 
-def plot_feasibility_row(panels: Sequence[Panel], coeffs: torch.Tensor,
+def plot_feasibility_row(panels: Sequence[Panel], coeffs: torch.Tensor | None = None,
                          style: FeasibilityStyle | None = None,
                          degree: int = POLYNOMIAL_DEGREE, scale: float = PLANE_SCALE,
-                         show_profile: bool = False, legend: bool = True) -> Figure:
+                         show_profile: bool = False, legend: bool = True,
+                         boundary_field: np.ndarray | None = None) -> Figure:
     """A 1 x len(panels) row of boundary-preserving density maps for one constraint.
 
     Args:
@@ -271,11 +280,19 @@ def plot_feasibility_row(panels: Sequence[Panel], coeffs: torch.Tensor,
         coeffs: (degree+1, degree+1) coefficients of the shared constraint.
         show_profile: append a second row histogramming the signed distance to the
             boundary, which turns the visual pile-up into a readable spike.
+        boundary_field: (R, R) lattice field whose zero level set replaces the polynomial's.
     """
     style = style or STYLE_PRESETS["light"]
     num = len(panels)
-    contour = polynomial_grid(coeffs, resolution=style.boundary_resolution,
-                              degree=degree, scale=scale)
+    if boundary_field is not None:
+        contour = field_contour(boundary_field, scale)
+    elif coeffs is not None:
+        contour = polynomial_grid(coeffs, resolution=style.boundary_resolution,
+                                  degree=degree, scale=scale)
+    else:
+        raise ValueError("plot_feasibility_row needs coeffs or boundary_field")
+    if show_profile and coeffs is None:
+        raise ValueError("the boundary-distance profile row needs polynomial coeffs")
 
     hists = [_histogram(p.samples, style.bins, scale) for p in panels]
     vmaxes = _resolve_vmax(hists, style)
@@ -330,6 +347,52 @@ def plot_feasibility_row(panels: Sequence[Panel], coeffs: torch.Tensor,
                 ax = fig.add_subplot(gs[1, col])
                 _draw_profile(ax, data, style, profile_top, profile_xlim, first=col == 0)
 
+        fig.tight_layout()
+    return fig
+
+
+def plot_feasibility_grid(columns: Sequence[Sequence[Panel]],
+                          boundary_fields: Sequence[np.ndarray],
+                          column_titles: Sequence[str] | None = None,
+                          style: FeasibilityStyle | None = None,
+                          scale: float = PLANE_SCALE) -> Figure:
+    """Methods-by-constraints grid: one column per constraint, one row per method.
+
+    Each column is scaled by its own first panel under ``vmax_mode="reference"``, so the
+    ground-truth row sets the colour range of its column.
+
+    Args:
+        columns: per constraint, the same-ordered list of :class:`Panel` (one per row).
+        boundary_fields: per constraint, an (R, R) lattice field whose zero set is drawn.
+        column_titles: per constraint label above the top row.
+    """
+    style = style or STYLE_PRESETS["light"]
+    num_cols, num_rows = len(columns), len(columns[0])
+
+    with plt.rc_context(PAPER_RC):
+        fig, axs = plt.subplots(num_rows, num_cols, squeeze=False,
+                                figsize=(style.panel_size * num_cols,
+                                         style.panel_size * num_rows + 0.4))
+        for col, (panels, field) in enumerate(zip(columns, boundary_fields)):
+            contour = field_contour(field, scale)
+            hists = [_histogram(p.samples, style.bins, scale) for p in panels]
+            for row, (panel, H, vmax) in enumerate(zip(panels, hists,
+                                                       _resolve_vmax(hists, style))):
+                ax = axs[row, col]
+                _draw_map(ax, H, vmax, contour, style, scale)
+                if row == 0 and column_titles is not None:
+                    ax.set_title(column_titles[col], fontsize=style.title_size,
+                                 color=style.text_color)
+                if col == 0:
+                    ax.set_ylabel(panel.label, fontsize=style.title_size, color=style.text_color)
+                caption = panel.caption
+                if caption is None and style.show_metrics:
+                    caption = format_metrics(panel.metrics, style.metric_keys,
+                                             style.metric_separator)
+                if caption:
+                    ax.set_xlabel(caption, fontsize=style.metric_size, color=style.text_color,
+                                  labelpad=4)
+                _frame(ax, style.spine_color, 0.8)
         fig.tight_layout()
     return fig
 
@@ -410,4 +473,5 @@ def _draw_profile(ax, data: dict[str, Any], style: FeasibilityStyle, top: float 
 
 
 __all__ = ["FeasibilityStyle", "STYLE_PRESETS", "Panel", "get_style", "format_metrics",
-           "polynomial_grid", "signed_boundary_distance", "plot_feasibility_row", "to_numpy"]
+           "polynomial_grid", "field_contour", "signed_boundary_distance",
+           "plot_feasibility_row", "plot_feasibility_grid", "to_numpy"]

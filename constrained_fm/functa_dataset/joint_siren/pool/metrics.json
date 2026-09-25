@@ -1,0 +1,31 @@
+{
+  "run_id": "joint_pool-dc969a68",
+  "siren_run_id": "joint_siren-bcdeba79",
+  "checkpoint": "siren_best.pt",
+  "tau": 8.15508460390329,
+  "pool_size": 20000,
+  "polygon_fraction": 0.5,
+  "build_seconds": 113.2,
+  "families": {
+    "polynomial": {
+      "count": 10000,
+      "mass_min": 0.050200000405311584,
+      "mass_median": 0.5009999871253967,
+      "mass_max": 0.949999988079071,
+      "mse_pos_median": 9.154967119684443e-05,
+      "mse_neg_median": 9.122833580477163e-05,
+      "z_pos_norm_median": 0.012988526374101639,
+      "z_neg_norm_median": 0.012935186736285686
+    },
+    "polygon": {
+      "count": 10000,
+      "mass_min": 0.05009999871253967,
+      "mass_median": 0.37369999289512634,
+      "mass_max": 0.949999988079071,
+      "mse_pos_median": 0.00026920397067442536,
+      "mse_neg_median": 0.0002609864459373057,
+      "z_pos_norm_median": 0.010689295828342438,
+      "z_neg_norm_median": 0.009937978349626064
+    }
+  }
+}

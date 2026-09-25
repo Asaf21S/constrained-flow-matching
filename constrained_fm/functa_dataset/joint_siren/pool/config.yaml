@@ -1,0 +1,12 @@
+method: joint_pool
+run_id: joint_pool-dc969a68
+settings:
+  checkpoint: siren_best.pt
+  chunk_size: 128
+  polygon_fraction: 0.5
+  pool_size: 20000
+  proxy_points: 10000
+  seed: 0
+  siren_dir: constrained_fm/functa_dataset/joint_siren
+siren_run_id: joint_siren-bcdeba79
+tau: 8.15508460390329

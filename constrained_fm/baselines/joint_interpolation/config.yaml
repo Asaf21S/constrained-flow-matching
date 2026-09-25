@@ -1,0 +1,21 @@
+method: joint_interpolation
+run_id: joint_interpolation-69759c47
+settings:
+  checkpoint: siren_best.pt
+  chunk_size: 65536
+  colorbar: false
+  dpi: 300
+  formats:
+  - png
+  - pdf
+  iou_points: 100000
+  legend: false
+  num_pairs: 4
+  proxy_points: 10000
+  resolution: 400
+  seed: 0
+  siren_dir: constrained_fm/functa_dataset/joint_siren
+  steps: 9
+  style: strip
+siren_run_id: joint_siren-bcdeba79
+tau: 8.15508460390329

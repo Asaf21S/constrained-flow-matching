@@ -1,0 +1,29 @@
+method: joint_siren
+run_id: joint_siren-bcdeba79
+settings:
+  batch_size: 16
+  epochs: 3000
+  hidden_dim: 512
+  inner_lr: 0.000625
+  inner_steps: 15
+  iou_points: 20000
+  lambda_z: 0.0001
+  latent_dim: 512
+  max_mass: 0.95
+  min_delta: 0.0001
+  min_mass: 0.05
+  n_layers: 4
+  outer_lr: 0.0001
+  patience: 250
+  points_per_shape: 1000
+  polygon_fraction: 0.5
+  proxy_points: 10000
+  query_gmm_fraction: 0.0
+  seed: 0
+  steps_per_epoch: 400
+  tau: null
+  val_shapes: 200
+  validate_every: 10
+  w0: 30.0
+tau: 8.15508460390329
+boundary_slope: 0.12262288480997086

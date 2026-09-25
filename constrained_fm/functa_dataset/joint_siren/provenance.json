@@ -1,0 +1,9 @@
+{
+  "run_id": "joint_siren-bcdeba79",
+  "method": "joint_siren",
+  "fingerprint": "bcdeba79bf0a5fcedaa35137de575b3b7ad9009f554559807855fbcdda0d1e2e",
+  "git_commit": "89fa8920be3ded2719d5d13019d6c39324827596",
+  "created_at": "2026-09-24T17:53:24",
+  "tau": 8.15508460390329,
+  "boundary_slope": 0.12262288480997086
+}

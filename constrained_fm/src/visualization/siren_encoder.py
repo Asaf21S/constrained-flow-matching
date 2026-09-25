@@ -223,6 +223,66 @@ def plot_interpolation_row(fields: np.ndarray, times: Sequence[float],
     return fig
 
 
+def plot_interpolation_grid(fields: np.ndarray, times: Sequence[float],
+                            start_fields: np.ndarray, end_fields: np.ndarray,
+                            scale: float = PLANE_SCALE, style: EncoderStyle | None = None,
+                            row_labels: Sequence[str] | None = None) -> Figure:
+    """Rows of decoded fields along ``z(t) = (1 - t) z_a + t z_b``, one row per endpoint pair.
+
+    Every panel shows the decoded zero level set; the first and last columns also show their
+    endpoint's ground-truth boundary. One colour scale spans the whole grid.
+
+    Args:
+        fields: (P, T, R, R) decoded fields.
+        times: the T interpolation coefficients.
+        start_fields: (P, R, R) ground-truth fields at ``t = 0``.
+        end_fields: (P, R, R) ground-truth fields at ``t = 1``.
+        row_labels: optional P labels placed left of each row.
+    """
+    style = style or get_style()
+    fields = np.asarray(fields)
+    rows, cols = fields.shape[:2]
+    if cols != len(times):
+        raise ValueError(f"{cols} fields per row for {len(times)} interpolation times")
+    if len(start_fields) != rows or len(end_fields) != rows:
+        raise ValueError(f"{rows} rows need {rows} start and end fields")
+    vmin, vmax = field_limits(fields, style)
+
+    with plt.rc_context(PAPER_RC):
+        fig, axs = plt.subplots(rows, cols, figsize=(style.panel_size * cols,
+                                                      style.panel_size * rows), squeeze=False)
+        mappable = None
+        for r in range(rows):
+            for c, t in enumerate(times):
+                ax = axs[r, c]
+                mappable = _draw_field(ax, fields[r, c], vmin, vmax, style, scale)
+                for truth, show in ((start_fields[r], c == 0), (end_fields[r], c == cols - 1)):
+                    if show:
+                        _draw_boundary(ax, truth, scale, style.gt_color, style.gt_linestyle,
+                                       style.gt_linewidth, zorder=3)
+                _draw_boundary(ax, fields[r, c], scale, style.pred_color, style.pred_linestyle,
+                               style.pred_linewidth, zorder=4, sigma=style.smooth_sigma)
+                _finish_axes(ax, style, scale)
+                if r == 0:
+                    ax.set_title(rf"$t = {t:.3g}$", fontsize=style.title_size, family="serif")
+            if row_labels is not None:
+                axs[r, 0].set_ylabel(row_labels[r], fontsize=style.label_size, family="serif")
+
+        fig.subplots_adjust(wspace=0.05, hspace=0.05)
+        if style.show_colorbar and mappable is not None:
+            fig.subplots_adjust(right=0.9)
+            cax = fig.add_axes((0.92, 0.12, 0.02, 0.76))
+            _add_colorbar(fig, mappable, cax, style, cax=True)
+        if style.show_legend:
+            axs[0, 0].legend(handles=[
+                Line2D([0], [0], color=style.gt_color, lw=style.gt_linewidth,
+                       linestyle=style.gt_linestyle, label=style.gt_label),
+                Line2D([0], [0], color=style.pred_color, lw=style.pred_linewidth,
+                       linestyle=style.pred_linestyle, label=style.pred_label),
+            ], loc=style.legend_loc, fontsize=style.legend_size, framealpha=0.9)
+    return fig
+
+
 def plot_boundary_grid(pred_fields: np.ndarray, true_fields: np.ndarray, rows: int, cols: int,
                        scale: float = PLANE_SCALE,
                        style: EncoderStyle | None = None) -> Figure:
@@ -294,5 +354,5 @@ def save_encoder_figure(fig: Figure, stem: str | Path, formats: Sequence[str] = 
 
 
 __all__ = ["PAPER_RC", "EncoderStyle", "STYLE_PRESETS", "get_style", "field_limits",
-           "plot_encoder_panel", "plot_interpolation_row", "plot_boundary_grid",
-           "save_encoder_figure"]
+           "plot_encoder_panel", "plot_interpolation_row", "plot_interpolation_grid",
+           "plot_boundary_grid", "save_encoder_figure"]

@@ -35,6 +35,7 @@ constrained_fm/baselines/*/samples/
 !constrained_fm/functa_dataset/val_loss_history.npy
 !constrained_fm/functa_dataset/siren_gmmq05.pt
 !constrained_fm/functa_dataset/siren_uniform.pt
+!constrained_fm/functa_dataset/joint_siren/siren_best.pt
 
 constrained_fm/functa_dataset/pools/
 constrained_fm/improvements_docs/

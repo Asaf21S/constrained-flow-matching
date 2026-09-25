@@ -1,0 +1,31 @@
+{
+  "run_id": "constraint_discovery-44cd63d4",
+  "config_run_id": "siren-uniform-8d6375ab",
+  "iteration": 15001,
+  "param": "latent",
+  "exclude_mode": 2,
+  "target_modes": [
+    0,
+    1,
+    3
+  ],
+  "scale": 4.5,
+  "lr": 1e-05,
+  "steps": 40,
+  "batch_size": 512,
+  "z_reg_weight": 0.0,
+  "reference_z_norm": 0.012732142582535744,
+  "reference_mahalanobis": 0.03220272436738014,
+  "initial_eval_loss": 2.3953797817230225,
+  "final": {
+    "mode_inside": [
+      0.9800626635551453,
+      0.9971819519996643,
+      0.12533333897590637,
+      0.9956087470054626
+    ],
+    "eval_loss": 2.3146615028381348,
+    "z_norm": 0.002306594280526042,
+    "mahalanobis": 10.37126350402832
+  }
+}

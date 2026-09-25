@@ -1,0 +1,28 @@
+method: constraint_discovery
+run_id: constraint_discovery-44cd63d4
+settings:
+  batch_size: 512
+  chunk_size: 65536
+  cov_shrinkage: 0.001
+  dpi: 150
+  eval_batch_size: 1024
+  exclude_mode: 2
+  formats:
+  - png
+  init_seed: 0
+  lr: null
+  metric_points: 20000
+  param: latent
+  query_points: null
+  resolution: 120
+  run_id: siren-uniform-8d6375ab
+  scatter_points: 6000
+  seed: 0
+  smooth_sigma: 2.0
+  steps: 40
+  strip_panels: 6
+  target_pool_size: 50000
+  viz_every: 10
+  z_reg_weight: 0.0
+config_run_id: siren-uniform-8d6375ab
+lr_resolved: 1.0e-05

@@ -1,0 +1,76 @@
+{
+  "arrays": {
+    "snapshot_steps": {
+      "shape": [
+        31
+      ],
+      "dtype": "int64"
+    },
+    "latents": {
+      "shape": [
+        31,
+        512
+      ],
+      "dtype": "float32"
+    },
+    "fields": {
+      "shape": [
+        31,
+        300,
+        300
+      ],
+      "dtype": "float32"
+    },
+    "mode_inside": {
+      "shape": [
+        31,
+        4
+      ],
+      "dtype": "float32"
+    },
+    "eval_losses": {
+      "shape": [
+        31
+      ],
+      "dtype": "float32"
+    },
+    "z_norm": {
+      "shape": [
+        31
+      ],
+      "dtype": "float32"
+    },
+    "mahalanobis": {
+      "shape": [
+        31
+      ],
+      "dtype": "float32"
+    },
+    "losses": {
+      "shape": [
+        3000
+      ],
+      "dtype": "float32"
+    },
+    "scatter_points": {
+      "shape": [
+        6000,
+        2
+      ],
+      "dtype": "float32"
+    },
+    "scatter_labels": {
+      "shape": [
+        6000
+      ],
+      "dtype": "int64"
+    }
+  },
+  "written_at": "2026-09-25T13:17:42",
+  "git_commit": "135c92c36aaf346b4741fdb680b3ffbfd7a27407",
+  "run_id": "constraint_discovery-959c7a4b",
+  "config_run_id": "siren-uniform-8d6375ab",
+  "iteration": 15001,
+  "param": "latent",
+  "exclude_mode": 2
+}

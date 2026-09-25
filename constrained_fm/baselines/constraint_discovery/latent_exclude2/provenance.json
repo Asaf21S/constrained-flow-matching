@@ -1,0 +1,9 @@
+{
+  "run_id": "constraint_discovery-959c7a4b",
+  "method": "constraint_discovery",
+  "fingerprint": "959c7a4b3c46d09a774562a531e50351c3c0323490934f70f46472555cfa6b16",
+  "git_commit": "135c92c36aaf346b4741fdb680b3ffbfd7a27407",
+  "created_at": "2026-09-25T13:17:42",
+  "config_run_id": "siren-uniform-8d6375ab",
+  "lr_resolved": 1e-05
+}

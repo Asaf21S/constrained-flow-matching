@@ -1,0 +1,9 @@
+{
+  "run_id": "polygon_transfer-a4880d46",
+  "method": "polygon_transfer",
+  "fingerprint": "a4880d463847f8fd37d43b70339816f525c4c50848baad2217c36781c9754893",
+  "git_commit": "a8dc3e6d0803b743f4cacfa68bfb035ad9c15c6e",
+  "created_at": "2026-09-24T13:30:06",
+  "config_run_id": "siren-uniform-8d6375ab",
+  "field_gain": 0.12262288480997086
+}

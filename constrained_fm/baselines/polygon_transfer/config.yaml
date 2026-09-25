@@ -1,0 +1,23 @@
+method: polygon_transfer
+run_id: polygon_transfer-7e3cd705
+settings:
+  chunk_size: 65536
+  dpi: 300
+  encoder_style: paper
+  field_gain: null
+  formats:
+  - png
+  - pdf
+  grid_cols: 4
+  legend: false
+  mass_points: 1000000
+  metric_samples: 10000
+  no_captions: false
+  num_samples: 100000
+  resolution: 600
+  run_id: siren-uniform-8d6375ab
+  samples_style: light
+  seed: 0
+  shapes: null
+config_run_id: siren-uniform-8d6375ab
+field_gain: 0.12262288480997086

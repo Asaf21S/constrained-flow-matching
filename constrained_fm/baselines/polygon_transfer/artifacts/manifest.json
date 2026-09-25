@@ -1,0 +1,88 @@
+{
+  "arrays": {
+    "polygon_vertices": {
+      "shape": [
+        8,
+        10,
+        2
+      ],
+      "dtype": "float32"
+    },
+    "polygon_num_vertices": {
+      "shape": [
+        8
+      ],
+      "dtype": "int32"
+    },
+    "query_points": {
+      "shape": [
+        8,
+        1000,
+        2
+      ],
+      "dtype": "float32"
+    },
+    "query_targets": {
+      "shape": [
+        8,
+        1000
+      ],
+      "dtype": "float32"
+    },
+    "latents": {
+      "shape": [
+        8,
+        512
+      ],
+      "dtype": "float32"
+    },
+    "pred_fields": {
+      "shape": [
+        8,
+        600,
+        600
+      ],
+      "dtype": "float32"
+    },
+    "true_fields": {
+      "shape": [
+        8,
+        600,
+        600
+      ],
+      "dtype": "float32"
+    },
+    "samples": {
+      "shape": [
+        8,
+        100000,
+        2
+      ],
+      "dtype": "float32"
+    },
+    "gt_samples": {
+      "shape": [
+        8,
+        100000,
+        2
+      ],
+      "dtype": "float32"
+    }
+  },
+  "written_at": "2026-09-24T11:24:47",
+  "git_commit": "a8dc3e6d0803b743f4cacfa68bfb035ad9c15c6e",
+  "run_id": "polygon_transfer-7e3cd705",
+  "config_run_id": "siren-uniform-8d6375ab",
+  "iteration": 15001,
+  "names": [
+    "triangle",
+    "square",
+    "thin_rectangle",
+    "pentagon",
+    "hexagon",
+    "star",
+    "l_shape",
+    "chevron"
+  ],
+  "field_gain": 0.12262288480997086
+}

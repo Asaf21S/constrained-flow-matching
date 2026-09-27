@@ -354,7 +354,7 @@ def render(samples_by_method: dict[str, np.ndarray], metrics_by_method: dict[str
                       for m in methods]
             fig = feas.plot_feasibility_row(panels, coeffs, style=variant_style, degree=args.degree,
                                             scale=args.scale, show_profile=args.boundary_profile,
-                                            overlay_reference_profile=(variant == "4panel_coeff"))
+                                            overlay_reference_profile=True)
 
             stem = f"feasibility_fidelity_{variant}_poly{args.poly_id}"
             if style_name != "light":

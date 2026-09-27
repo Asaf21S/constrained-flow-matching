@@ -357,7 +357,6 @@ def plot_feasibility_row(panels: Sequence[Panel], coeffs: torch.Tensor | None = 
                 ax = fig.add_subplot(profile_grid[0, method_index])
                 if method_index == 0:
                     _draw_profile(ax, profiles[0], style, profile_top, profile_xlim, first=True)
-                    ax.set_title("Ground Truth", fontsize=style.metric_size)
                 else:
                     _draw_reference_profile(ax, profiles[0], profiles[method_index],
                                             panels[method_index], style,
@@ -489,7 +488,6 @@ def _draw_combined_profile(ax, profiles: Sequence[dict[str, Any]], panels: Seque
 def _draw_reference_profile(ax, reference: dict[str, Any], method: dict[str, Any],
                 panel: Panel, style: FeasibilityStyle, top: float | None,
                             xlim: tuple[float, float] | None) -> None:
-    method_name = panel.label.split("\n")[0]
     ax.fill_between(method["centers"], method["counts"], step="mid",
             color=style.profile_color, alpha=style.profile_fill_alpha)
     ax.step(method["centers"], method["counts"], where="mid",
@@ -511,7 +509,6 @@ def _draw_reference_profile(ax, reference: dict[str, Any], method: dict[str, Any
                 fontsize=style.metric_size - 0.5, color=style.text_color,
                 bbox=dict(facecolor="white", alpha=0.75, edgecolor="none",
                           boxstyle="round,pad=0.25"))
-    ax.set_title(method_name, fontsize=style.metric_size)
     ax.set_xlabel(style.profile_xlabel, fontsize=style.metric_size)
     ax.tick_params(axis="x", labelsize=style.metric_size)
     ax.tick_params(axis="y", left=True, labelleft=False)

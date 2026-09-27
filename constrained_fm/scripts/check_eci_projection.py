@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """Diagnoses why the ECI projection leaves points outside a polygon, and sweeps its budget.
 
-ECI's last integration step has ``step_fraction == 1``, so the returned sample *is* the
-projected endpoint and any infeasibility is a failure of the Newton loop alone. A polygon is
-a max of half-planes, so a point near a corner is projected onto one face and pushed off
-another; the loop then behaves like alternating projection, whose linear rate degrades as the
-corner sharpens. This script checks that picture by counting how many half-planes the failed
-points violate, and measures what projection budget clears the gate.
+ECI's last mixing iteration interpolates at ``t' = 1``, so the returned sample *is* the
+projected endpoint and any infeasibility is a failure of the projection alone. A polygon is
+a max of half-planes, so the SQP linearisation near a corner sees one face and ignores
+another; the iteration can then alternate between faces instead of converging to the
+corner. This script checks that picture by counting how many half-planes the failed points
+violate, and measures what projection budget clears the gate.
 
     python -m constrained_fm.scripts.check_eci_projection --num-polys 12
 """
@@ -19,8 +19,7 @@ import torch
 
 from constrained_fm.src.experiment.runtime import resolve_device, set_seed
 from constrained_fm.src.inference.constrained_samplers import DEFAULT_STEPS, sample_eci
-from constrained_fm.src.inference.constraint_projection import (DEFAULT_MARGIN,
-                                                                project_onto_feasible_region)
+from constrained_fm.src.inference.constraint_projection import DEFAULT_MARGIN
 from constrained_fm.src.models.unconstrained import UnconstrainedFM
 from constrained_fm.src.problems.base import NormalizedConstraint
 from constrained_fm.src.problems.bump2d import BumpProblem, sample_polygons
@@ -48,12 +47,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def trace(points: torch.Tensor, constraint: NormalizedConstraint, polygon, normalizer,
-          margin: float, iters: int) -> None:
-    """Replays the Newton loop one iteration at a time on points known to be infeasible.
+          margin: float, iters: int, eps: float = 1e-8) -> None:
+    """Replays the SQP loop of ``project_closest_point`` one iteration at a time, no fallback.
 
     Isolates the projection from the integrator: if the residual stalls here, the budget is
-    not the problem and the step-acceptance rule is.
+    not the problem and the linearisation is.
     """
+    anchor = points.clone()
     x = points.clone()
     for k in range(iters):
         residual = constraint.value(x) + margin
@@ -66,7 +66,10 @@ def trace(points: torch.Tensor, constraint: NormalizedConstraint, polygon, norma
             print(f"    iter {k:3d} | {int(bad.sum()):5d} bad | max res {residual.max():.5f} "
                   f"| mean res {residual[bad].mean():.5f} "
                   f"| {faces.sum(dim=-1).float().mean():.2f} faces")
-        x = project_onto_feasible_region(x, constraint, margin=margin, max_iters=1)
+        values, grads = constraint.value_and_grad(x)
+        denom = (grads * grads).sum(dim=-1).clamp_min(eps)
+        lam = ((values + margin + (grads * (anchor - x)).sum(dim=-1)) / denom).clamp_min(0.0)
+        x = anchor - lam.unsqueeze(-1) * grads
     print(f"    iter {iters:3d} | {int((constraint.value(x) + margin > 0).sum()):5d} still bad")
 
 

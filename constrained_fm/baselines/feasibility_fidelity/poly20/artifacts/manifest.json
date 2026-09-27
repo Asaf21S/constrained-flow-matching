@@ -43,9 +43,9 @@
       "dtype": "float32"
     }
   },
-  "written_at": "2026-09-16T08:53:42",
-  "git_commit": "b0d7318c50796ce2d1cdd7882a7f086c430df6c8",
-  "run_id": "feasibility_fidelity-db4ef947",
+  "written_at": "2026-09-27T18:01:28",
+  "git_commit": "3d167cf0283d868a1f0e60b2a3aa994a67bcd1fa",
+  "run_id": "feasibility_fidelity-9e45bc42",
   "poly_id": 20,
   "degree": 3,
   "scale": 4.5,

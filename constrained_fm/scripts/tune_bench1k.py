@@ -18,7 +18,7 @@ Selection rule, identical for every method:
 * selected: the lowest score among the eligible, ties going to the cheaper sampler.
 
     sbatch scripts/run_bench1k_build.sh --split tune
-    PROBLEM=kinematics6d sbatch --array=0-76%16 scripts/run_tune.sh
+    PROBLEM=kinematics6d sbatch --array=0-58%16 scripts/run_tune.sh
     PROBLEM=kinematics6d sbatch scripts/run_tune.sh --select
 """
 
@@ -50,12 +50,13 @@ from constrained_fm.src.problems.kinematics6d import KinematicsProblem
 
 OURS = {"bump2d": "functa", "kinematics6d": "explicit"}
 STEP_SIZES = (0.1, 0.05, 0.02, 0.01, 0.005)
-ECI_STEPS = (50, 100, 200)
-ECI_LOOPS = (1, 2, 3)
-# A polygon's faces are planes, so the undamped Newton step is already exact there.
+ECI_STEPS = (100,)
+ECI_MIXING_ITERS = (1, 2, 5, 10)
+ECI_RESAMPLE_INTERVALS = (1, 5, None)
+# A polygon's faces are planes, so the undamped SQP step is already exact there.
 ECI_DAMPING = {"bump2d": (1.0,), "kinematics6d": (1.0, 0.5)}
-HARDFLOW_SCALES = (1.0, 3.0, 10.0, 30.0, 100.0, 300.0)
-HARDFLOW_STEPS = (100, 200, 400)
+HARDFLOW_STEPS = (50, 100, 200)
+HARDFLOW_ACTIVE_FROM = (0.5,)
 MARGIN_FACTORS = (1.0, 10.0)
 
 SR_TARGET = 95.0
@@ -70,14 +71,18 @@ def grid(problem: str) -> list[tuple[str, dict]]:
     """Every (method, sampler settings) pair tried; the array task id indexes this list."""
     margin, iters = MARGIN[problem], PROJECTION_ITERS[problem]
     configs = [(OURS[problem], {"step_size": s}) for s in STEP_SIZES]
-    for steps, loops, damping, factor in product(ECI_STEPS, ECI_LOOPS, ECI_DAMPING[problem],
-                                                 MARGIN_FACTORS):
-        # A damped Newton step covers less ground, so it gets proportionally more iterations.
-        configs.append(("eci", {"steps": steps, "correction_loops": loops,
+    for steps, mix, resample, damping, factor in product(ECI_STEPS, ECI_MIXING_ITERS,
+                                                         ECI_RESAMPLE_INTERVALS,
+                                                         ECI_DAMPING[problem], MARGIN_FACTORS):
+        # A damped SQP step covers less ground, so it gets proportionally more iterations.
+        configs.append(("eci", {"steps": steps, "mixing_iters": mix,
+                                "resample_interval": resample,
                                 "projection_iters": round(iters / damping),
                                 "projection_damping": damping, "margin": margin * factor}))
-    for scale, steps, factor in product(HARDFLOW_SCALES, HARDFLOW_STEPS, MARGIN_FACTORS):
-        configs.append(("hardflow", {"steps": steps, "guidance_scale": scale,
+    for steps, active_from, factor in product(HARDFLOW_STEPS, HARDFLOW_ACTIVE_FROM,
+                                              MARGIN_FACTORS):
+        configs.append(("hardflow", {"steps": steps, "active_from": active_from,
+                                     "projection_iters": iters, "projection_damping": 1.0,
                                      "margin": margin * factor}))
     for method, settings in configs:
         assert set(settings) == set(SAMPLER_KEYS[method]), (method, settings)
@@ -85,12 +90,14 @@ def grid(problem: str) -> list[tuple[str, dict]]:
 
 
 def cost(method: str, settings: dict) -> float:
-    """Velocity-network evaluations per sample; HardFlow's each also carry a backward pass."""
+    """Velocity-network evaluations per sample."""
     if method in ("functa", "explicit"):
         return 2.0 / settings["step_size"]
     if method == "eci":
-        return float(settings["steps"] * settings["correction_loops"])
-    return float(settings["steps"])
+        return float(settings["steps"] * settings["mixing_iters"])
+    active = settings["steps"] - min(round(settings["active_from"] * settings["steps"]),
+                                     settings["steps"] - 1)
+    return float(settings["steps"] + active)
 
 
 def config_path(problem: str, task_id: int, method: str) -> Path:

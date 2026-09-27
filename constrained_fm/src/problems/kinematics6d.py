@@ -174,12 +174,11 @@ class MassWindowConstraint(Constraint):
 
     Reported in units of ``s = \sqrt{E[M^2]}`` rather than in GeV. Dividing by a positive
     constant leaves the feasible set untouched but puts ``C`` on the same O(1) scale as the
-    polygon and polynomial families, so ``margin``, ``step_clip`` and ``guidance_scale`` keep
-    the meaning they have everywhere else; in GeV the hinge gradient HardFlow subtracts from
-    the velocity would be larger than the velocity itself by two orders of magnitude.
+    polygon and polynomial families, so ``margin`` and ``step_clip`` keep the meaning they have
+    everywhere else.
 
     Non-convex, so :attr:`interior_point` stays None and the projection must rely on its
-    damped Newton loop alone. The absolute value is non-smooth only at ``M = M_target``, which
+    SQP and damped Newton loops alone. The absolute value is non-smooth only at ``M = M_target``, which
     sits strictly inside the shell at depth ``\epsilon``; the boundary itself is the pair of
     smooth surfaces ``M = M_target \pm \epsilon``, so the projection never differentiates the
     kink while it is correcting a violating point.

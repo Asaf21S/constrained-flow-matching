@@ -11,12 +11,12 @@
 #SBATCH --mail-type=FAIL
 
 # Sampler hyperparameter selection on the held-out tuning split. As an array, each task
-# scores one configuration of constrained_fm/scripts/tune_bench1k.py:grid (59 for bump2d,
-# 77 for kinematics6d); without --array, pass --select to pick one per method and write
+# scores one configuration of constrained_fm/scripts/tune_bench1k.py:grid (35 for bump2d,
+# 59 for kinematics6d); without --array, pass --select to pick one per method and write
 # constrained_fm/baselines/tuning/<problem>/selected.json.
 #
-#   PROBLEM=bump2d sbatch --array=0-58%16 scripts/run_tune.sh
-#   PROBLEM=kinematics6d sbatch --array=0-76%16 scripts/run_tune.sh
+#   PROBLEM=bump2d sbatch --array=0-34%16 scripts/run_tune.sh
+#   PROBLEM=kinematics6d sbatch --array=0-58%16 scripts/run_tune.sh
 #   PROBLEM=kinematics6d sbatch --dependency=afterok:<array id> scripts/run_tune.sh --select
 
 set -eo pipefail

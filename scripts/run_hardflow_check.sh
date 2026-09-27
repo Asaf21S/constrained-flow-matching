@@ -11,7 +11,7 @@
 #SBATCH --mail-type=BEGIN,END,FAIL
 
 # Diagnoses HardFlow on bump2d (why the signal is sometimes over-represented) and on
-# kinematics6d (guidance-scale / step / preconditioning sweep). Changes no benchmark number.
+# kinematics6d (steps / activation / SQP damping sweep). Changes no benchmark number.
 #
 #   sbatch scripts/run_hardflow_check.sh
 #   sbatch scripts/run_hardflow_check.sh --problems kinematics6d

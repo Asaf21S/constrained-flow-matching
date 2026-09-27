@@ -187,8 +187,8 @@
       "dtype": "float32"
     }
   },
-  "written_at": "2026-09-15T18:34:34",
-  "git_commit": "a6bb6ef89085f41689959d6d3c2e8f26018a811f",
+  "written_at": "2026-09-27T17:57:06",
+  "git_commit": "3d167cf0283d868a1f0e60b2a3aa994a67bcd1fa",
   "run_id": "val1k-c540c646",
   "method": "val1k",
   "validation_set": "v1k",
@@ -201,5 +201,7 @@
     "functa",
     "gt",
     "hardflow"
-  ]
+  ],
+  "fewshot_source": "finetuned",
+  "fewshot_run_id": "few_shot_val1k-35d68583"
 }

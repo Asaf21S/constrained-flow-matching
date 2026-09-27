@@ -37,8 +37,10 @@ from constrained_fm.src.datasets.bump_conditioning import (sample_query_points, 
                                                         to_siren_coords)
 from constrained_fm.src.experiment.registry import pin_baseline_run, summarize
 from constrained_fm.src.experiment.runtime import resolve_device
-from constrained_fm.src.inference.constrained_samplers import (DEFAULT_CHUNK, DEFAULT_STEPS,
-                                                               sample_eci, sample_hardflow)
+from constrained_fm.src.inference.constrained_samplers import (DEFAULT_ACTIVE_FROM, DEFAULT_CHUNK,
+                                                               DEFAULT_MIXING_ITERS,
+                                                               DEFAULT_STEPS, sample_eci,
+                                                               sample_hardflow)
 from constrained_fm.src.inference.latent_extractor import extract_latents_batched
 from constrained_fm.src.metrics.distributional import (compute_jsd, compute_jsd_1d, compute_mmd,
                                                        compute_swd)
@@ -69,9 +71,10 @@ TUNING_DIR = "constrained_fm/baselines/tuning"
 # The inference-time hyperparameters each method samples with; selected per problem on the
 # held-out tuning set by scripts/tune_bench1k.py and read back from its selected.json.
 SAMPLER_KEYS = {"gt": (), "functa": ("step_size",), "explicit": ("step_size",),
-                "eci": ("steps", "correction_loops", "projection_iters",
+                "eci": ("steps", "mixing_iters", "resample_interval", "projection_iters",
                         "projection_damping", "margin"),
-                "hardflow": ("steps", "guidance_scale", "margin")}
+                "hardflow": ("steps", "active_from", "projection_iters", "projection_damping",
+                             "margin")}
 
 METRIC_KEYS = ("success_rate", "swd", "mmd", "jsd", "nll", "kld", "in_support_fraction",
                "swd_noise_floor", "mmd_noise_floor", "jsd_noise_floor",
@@ -105,6 +108,7 @@ REFERENCE_POOL_SEED = 20_000
 GT_SAMPLE_SEED = 30_000
 QUERY_POINT_SEED = 40_000
 METRIC_SEED = 50_000
+ECI_NOISE_SEED = 60_000
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -133,10 +137,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--step-size", type=float, default=0.05)
 
     parser.add_argument("--steps", type=int, default=DEFAULT_STEPS, help="ECI/HardFlow steps")
-    parser.add_argument("--correction-loops", type=int, default=1)
+    parser.add_argument("--mixing-iters", type=int, default=DEFAULT_MIXING_ITERS,
+                        help="ECI mixing iterations per step (M)")
+    parser.add_argument("--resample-interval", type=int, default=None,
+                        help="ECI noise redraw interval in mixing iterations (R); none = never")
+    parser.add_argument("--active-from", type=float, default=DEFAULT_ACTIVE_FROM,
+                        help="HardFlow: fraction of steps after which the subproblem is solved")
     parser.add_argument("--projection-iters", type=int, default=None)
     parser.add_argument("--projection-damping", type=float, default=1.0)
-    parser.add_argument("--guidance-scale", type=float, default=100.0)
     parser.add_argument("--margin", type=float, default=None)
     parser.add_argument("--chunk-size", type=int, default=DEFAULT_CHUNK)
     parser.add_argument("--functa-dir", default=FUNCTA_DIR)
@@ -176,6 +184,11 @@ def resolve_defaults(args) -> None:
     if path is not None and path.exists():
         for method, values in json.loads(path.read_text())["selected"].items():
             if method in args.settings:
+                stale = set(values) - set(SAMPLER_KEYS[method])
+                if stale:
+                    raise RuntimeError(f"{path} selects {sorted(stale)} for {method}, which the "
+                                       f"sampler no longer takes; re-run tune_bench1k or pass "
+                                       f"--no-tuned")
                 args.settings[method].update(values)
         args.tuned = str(path)
     else:
@@ -275,8 +288,10 @@ def generate(method: str, models: dict, constraint, index: int, x0: torch.Tensor
                                      **settings, **cond)
 
     wrapped = NormalizedConstraint(constraint, normalizer)
-    sampler = sample_eci if method == "eci" else sample_hardflow
-    return sampler(models["base"], x0, wrapped, chunk_size=args.chunk_size, **settings)
+    if method == "eci":
+        return sample_eci(models["base"], x0, wrapped, chunk_size=args.chunk_size,
+                          seed=ECI_NOISE_SEED + index, **settings)
+    return sample_hardflow(models["base"], x0, wrapped, chunk_size=args.chunk_size, **settings)
 
 
 # --- scoring ------------------------------------------------------------------------------

@@ -6,9 +6,11 @@ Two checks, neither of which writes to any baseline directory:
   A. ``PolynomialConstraint`` reproduces the legacy polynomial evaluation exactly, and its
      feasibility mask agrees with ``compute_success_rate_polynomial``.
   B. ECI and HardFlow, now driven by that constraint object, reproduce the per-shape success
-     rates cached in ``baselines/{eci,hardflow}/metrics.json``. Those samplers carry no RNG,
-     so given the frozen validation x0 the rates must match bit-for-bit. SWD/MMD/JSD are not
-     compared: both subsample with an unseeded generator.
+     rates cached in ``baselines/{eci,hardflow}/metrics.json``. With no noise redraws those
+     samplers carry no RNG, so given the frozen validation x0 the rates must match
+     bit-for-bit. SWD/MMD/JSD are not compared: both subsample with an unseeded generator.
+     The cache must come from ``eci_hardflow.py`` at its default settings; caches written
+     before the paper-faithful ECI/HardFlow rewrite describe a different algorithm and fail.
 
     sbatch scripts/run_m0_regression.sh
 """
@@ -29,8 +31,11 @@ from constrained_fm.src.experiment.config import REPO_ROOT
 from constrained_fm.src.experiment.runtime import resolve_device, set_seed
 from constrained_fm.src.geometry.polynomials import (compute_poly_features_batched,
                                                      evaluate_poly_batched)
-from constrained_fm.src.inference.constrained_samplers import sample_eci, sample_hardflow
-from constrained_fm.src.inference.constraint_projection import DEFAULT_MARGIN
+from constrained_fm.src.inference.constrained_samplers import (DEFAULT_ACTIVE_FROM,
+                                                               DEFAULT_MIXING_ITERS,
+                                                               sample_eci, sample_hardflow)
+from constrained_fm.src.inference.constraint_projection import (DEFAULT_MARGIN,
+                                                                DEFAULT_PROJECTION_ITERS)
 from constrained_fm.src.metrics.success_rates import compute_success_rate_polynomial
 from constrained_fm.src.models.unconstrained import UnconstrainedFM
 from constrained_fm.src.problems.gmm_poly import PolynomialConstraint
@@ -40,9 +45,9 @@ CACHED_METRICS = {"eci": "constrained_fm/baselines/eci/metrics.json",
                   "hardflow": "constrained_fm/baselines/hardflow/metrics.json"}
 # The settings the cached run recorded under its "sampling" key.
 CACHED_STEPS = 100
-CACHED_GUIDANCE = 100.0
-CACHED_CORRECTION_LOOPS = 1
-CACHED_PROJECTION_ITERS = 16
+CACHED_MIXING_ITERS = DEFAULT_MIXING_ITERS
+CACHED_ACTIVE_FROM = DEFAULT_ACTIVE_FROM
+CACHED_PROJECTION_ITERS = DEFAULT_PROJECTION_ITERS
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -134,13 +139,14 @@ def check_samplers(args, polys: torch.Tensor, x0: torch.Tensor,
                                               scale=PLANE_SCALE)
             if method == "eci":
                 samples = sample_eci(model, x0, constraint, steps=CACHED_STEPS,
-                                     correction_loops=CACHED_CORRECTION_LOOPS,
+                                     mixing_iters=CACHED_MIXING_ITERS,
                                      margin=DEFAULT_MARGIN,
                                      projection_iters=CACHED_PROJECTION_ITERS,
                                      chunk_size=args.chunk_size)
             else:
                 samples = sample_hardflow(model, x0, constraint, steps=CACHED_STEPS,
-                                          guidance_scale=CACHED_GUIDANCE, margin=DEFAULT_MARGIN,
+                                          active_from=CACHED_ACTIVE_FROM, margin=DEFAULT_MARGIN,
+                                          projection_iters=CACHED_PROJECTION_ITERS,
                                           chunk_size=args.chunk_size)
             rates.append(constraint.success_rate(samples.detach()))
 

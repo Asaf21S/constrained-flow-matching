@@ -4,8 +4,8 @@
 Five distributions over the same truncated GMM target:
 
     Ground Truth   rejection sampling, the distribution every method is trying to match
-    ECI            inference-time projection onto {P(x) <= 0}
-    HardFlow       inference-time gradient guidance towards {P(x) <= 0}
+    ECI            inference-time extrapolate-correct-interpolate onto {P(x) <= 0}
+    HardFlow       inference-time projection of the terminal estimate (HardFlow Alg. 1)
     Functa         ours; the constraint enters through the conditioning, not the trajectory
     Coefficients   conditions on the raw (4, 4) coefficient matrix instead of a functa latent
 
@@ -55,8 +55,10 @@ from constrained_fm.src.experiment.config import REPO_ROOT
 from constrained_fm.src.experiment.registry import load_config, pin_baseline_run
 from constrained_fm.src.experiment.runtime import (build_flow_matcher, load_checkpoint,
                                                    load_siren, resolve_device, set_seed)
-from constrained_fm.src.inference.constrained_samplers import (DEFAULT_CHUNK, DEFAULT_STEPS,
-                                                               sample_eci, sample_hardflow)
+from constrained_fm.src.inference.constrained_samplers import (DEFAULT_ACTIVE_FROM, DEFAULT_CHUNK,
+                                                               DEFAULT_MIXING_ITERS,
+                                                               DEFAULT_STEPS, sample_eci,
+                                                               sample_hardflow)
 from constrained_fm.src.inference.constraint_projection import DEFAULT_MARGIN
 from constrained_fm.src.inference.evaluator import (evaluate_single_configuration,
                                                     run_evaluation_inference)
@@ -118,9 +120,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--time-dim", type=int, default=128)
 
     parser.add_argument("--steps", type=int, default=DEFAULT_STEPS)
-    parser.add_argument("--correction-loops", type=int, default=1)
+    parser.add_argument("--mixing-iters", type=int, default=DEFAULT_MIXING_ITERS)
+    parser.add_argument("--resample-interval", type=int, default=0, help="0 = never")
+    parser.add_argument("--active-from", type=float, default=DEFAULT_ACTIVE_FROM)
     parser.add_argument("--projection-iters", type=int, default=16)
-    parser.add_argument("--guidance-scale", type=float, default=100.0)
     parser.add_argument("--margin", type=float, default=DEFAULT_MARGIN)
     parser.add_argument("--chunk-size", type=int, default=DEFAULT_CHUNK)
 
@@ -350,7 +353,8 @@ def render(samples_by_method: dict[str, np.ndarray], metrics_by_method: dict[str
                                  highlight=(m in args.highlight))
                       for m in methods]
             fig = feas.plot_feasibility_row(panels, coeffs, style=variant_style, degree=args.degree,
-                                            scale=args.scale, show_profile=args.boundary_profile)
+                                            scale=args.scale, show_profile=args.boundary_profile,
+                                            combine_profile=(variant == "4panel_coeff"))
 
             stem = f"feasibility_fidelity_{variant}_poly{args.poly_id}"
             if style_name != "light":
@@ -404,14 +408,14 @@ def main(argv: list[str] | None = None) -> int:
     samples: dict[str, np.ndarray] = {}
     constraint = PolynomialConstraint(coeffs, degree=args.degree, scale=args.scale)
     samples["gt"] = rejection_sample(coeffs, args.num_samples, args, device).cpu().numpy()
-    samples["eci"] = sample_eci(model, x0, constraint,
-                                steps=args.steps, correction_loops=args.correction_loops,
+    samples["eci"] = sample_eci(model, x0, constraint, steps=args.steps,
+                                mixing_iters=args.mixing_iters,
+                                resample_interval=args.resample_interval or None,
                                 margin=args.margin, projection_iters=args.projection_iters,
                                 chunk_size=args.chunk_size).detach().cpu().numpy()
-    samples["hardflow"] = sample_hardflow(model, x0, constraint,
-                                          steps=args.steps,
-                                          guidance_scale=args.guidance_scale,
-                                          margin=args.margin,
+    samples["hardflow"] = sample_hardflow(model, x0, constraint, steps=args.steps,
+                                          active_from=args.active_from, margin=args.margin,
+                                          projection_iters=args.projection_iters,
                                           chunk_size=args.chunk_size).detach().cpu().numpy()
     del model
 

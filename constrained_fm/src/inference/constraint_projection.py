@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
-"""Inference-time operators for a feasible set {x : C(x) <= 0}.
+"""Inference-time projections onto a feasible set {x : C(x) <= 0}.
 
-ECI needs a projection onto that set; HardFlow needs a differentiable penalty whose gradient
-can steer the velocity field. Both are built from a :class:`Constraint`'s value and gradient,
-so they are independent of the constraint family and of the dimension of ``x``.
+ECI's correction step and HardFlow's terminal-state subproblem (with no terminal cost) are
+both the Euclidean projection ``argmin_x ||x - y||^2 s.t. C(x) <= 0``. That projection is
+:func:`project_closest_point`; :func:`project_onto_feasible_region` is its feasibility-only
+fallback. Both use only a :class:`Constraint`'s value and gradient, so they are independent
+of the constraint family and of the dimension of ``x``.
 """
 
 from __future__ import annotations
@@ -14,6 +16,8 @@ from constrained_fm.src.problems.base import Constraint
 
 DEFAULT_MARGIN = 1e-3
 DEFAULT_BISECTIONS = 24
+DEFAULT_PROJECTION_ITERS = 32
+DEFAULT_PROJECTION_TOL = 1e-6
 
 
 def _restore_feasibility(x: torch.Tensor, constraint: Constraint, interior: torch.Tensor,
@@ -125,4 +129,65 @@ def project_onto_feasible_region(x: torch.Tensor, constraint: Constraint,
     return x_proj
 
 
-__all__ = ["DEFAULT_BISECTIONS", "DEFAULT_MARGIN", "project_onto_feasible_region"]
+def project_closest_point(y: torch.Tensor, constraint: Constraint,
+                          margin: float = DEFAULT_MARGIN,
+                          max_iters: int = DEFAULT_PROJECTION_ITERS,
+                          relaxation: float = 1.0, tol: float = DEFAULT_PROJECTION_TOL,
+                          fallback_iters: int = 16, eps: float = 1e-8) -> torch.Tensor:
+    """Euclidean projection ``argmin_x ||x - y||^2 s.t. C(x) + margin <= 0``, batched.
+
+    Feasible points are returned unchanged. Each violating point runs the SQP iteration of
+    the single-constraint KKT system, anchored at ``y``: linearising ``C`` at the iterate
+    ``x_k`` with ``g = grad C(x_k)`` gives the closed-form subproblem solution
+
+        lam = max(0, (C(x_k) + margin + g . (y - x_k)) / ||g||^2),   x_{k+1} = y - lam g,
+
+    whose fixed points are exactly the KKT points ``x = y - lam grad C(x)``, ``C(x) = -margin``.
+    On a linear constraint one iteration is exact. Points whose iterate ends infeasible or
+    non-finite are handed to :func:`project_onto_feasible_region` from ``y``, so the returned
+    points satisfy ``C <= 0`` wherever that fallback does.
+
+    Args:
+        y: (N, dim) points to project, in the coordinates ``constraint`` is defined on.
+        constraint: the feasible set.
+        margin: how far strictly inside the boundary to land, in units of C.
+        max_iters: cap on SQP iterations; the loop exits once every iterate moves less
+            than ``tol``.
+        relaxation: step toward each SQP target, in (0, 1]; below 1 damps oscillation on
+            a strongly curved boundary.
+        tol: max-norm movement below which the iteration is converged.
+        fallback_iters: Newton budget of the fallback projector.
+
+    Returns:
+        (N, dim) projected points.
+    """
+    y = y.detach()
+    out = y.clone()
+    active = constraint.value(y) + margin > 0
+    if not bool(active.any()):
+        return out
+
+    anchor = y[active]
+    x = anchor.clone()
+    for _ in range(max_iters):
+        values, grads = constraint.value_and_grad(x)
+        denom = (grads * grads).sum(dim=-1).clamp_min(eps)
+        lam = ((values + margin + (grads * (anchor - x)).sum(dim=-1)) / denom).clamp_min(0.0)
+        target = anchor - lam.unsqueeze(-1) * grads
+        x_next = x + relaxation * (target - x)
+        x_next = torch.where(torch.isfinite(x_next).all(dim=-1, keepdim=True), x_next, x)
+        moved = (x_next - x).abs().max()
+        x = x_next
+        if float(moved) < tol:
+            break
+
+    failed = ~(constraint.value(x) <= 0) | ~torch.isfinite(x).all(dim=-1)
+    if bool(failed.any()):
+        x[failed] = project_onto_feasible_region(anchor[failed], constraint, margin=margin,
+                                                 max_iters=fallback_iters)
+    out[active] = x
+    return out
+
+
+__all__ = ["DEFAULT_BISECTIONS", "DEFAULT_MARGIN", "DEFAULT_PROJECTION_ITERS",
+           "DEFAULT_PROJECTION_TOL", "project_closest_point", "project_onto_feasible_region"]

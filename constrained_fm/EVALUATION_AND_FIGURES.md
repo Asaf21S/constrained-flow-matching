@@ -210,11 +210,10 @@ distribution into one bin. Taking the central 99.8% of the *pooled* distances di
 degenerate outliers while keeping every panel on one common axis.
 
 **What the row proves.** The true truncated density steps down to zero at $d = 0$. A
-projection- or guidance-based sampler instead shows a narrow spike immediately to the left of
-zero — mass parked *on* the constraint surface. That is the "wall effect" stated numerically:
-for validation polynomial 86, **51.6% of ECI mass lies within 0.02 of the boundary** (profile
-peak 83 vs. ground truth 1.8), against 0.2% for Functa and 0.7% for the ground truth. This is
-also why the density maps use `np.histogram2d` + `imshow` and **never a KDE**: a Gaussian
+projection-based sampler instead shows a narrow spike immediately to the left of
+zero — mass parked *on* the constraint surface. The regenerated figures use the
+paper-faithful ECI and HardFlow samplers and preserve this wall effect. This is also
+why the density maps use `np.histogram2d` + `imshow` and **never a KDE**: a Gaussian
 kernel of any bandwidth spreads that spike back into the interior and erases the evidence.
 
 ---
@@ -359,7 +358,7 @@ $$\log p_{\text{model}}(x_1) \;=\; \log \mathcal{N}(x_0; 0, I) \;-\; \int_{1}^{0
   `chunk_size = 4000`.
 - $N = 5000$ **frozen, shared** points (§6.4). Non-finite log-probs are dropped.
 - Defined **only for `coeff` and `functa`.** ECI and HardFlow move state outside the
-  probability-flow ODE (projection / guidance steps), so change-of-variables no longer
+  probability-flow ODE (projection steps), so change-of-variables no longer
   describes their density. GT's is the reference itself.
 - Lower is better, but the value is **not comparable across constraints**: a small feasible
   region concentrates the same unit of probability into less area, lowering NLL for free.
@@ -410,8 +409,9 @@ $$\log p_{\text{true}}(x) \;=\; \log p_{\mathrm{gmm}}(x) \;-\; \log(\text{mass})
 | Is mass piled on the constraint surface? | §2.3 profile / wall fraction |
 
 The headline result of the feasibility-vs-fidelity figure is precisely that these decouple:
-SR is 100% for GT/ECI/HardFlow and 99.1% for Functa, while JSD is 0.0015 / 0.1450 / 0.0924 /
-0.0031. **Feasibility saturates; fidelity does not.**
+for validation polynomial 86, SR is 100% for GT/ECI/HardFlow, while ECI and HardFlow have
+SWD 0.3973 and 0.9096 and MMD 0.01835 and 0.09250, respectively. **Feasibility saturates;
+fidelity does not.**
 
 ---
 
@@ -490,9 +490,12 @@ marches its own uniform 0.05 grid and interpolates onto the requested times. Wit
 **Conditioning.** The condition tensor is expanded to $(C \cdot N, d)$ and integrated jointly
 with `x0` expanded the same way, then reshaped to $(C, N, 2)$.
 
-**ECI / HardFlow do not use this path.** They run explicit Euler with `--steps DEFAULT_STEPS`,
-`--correction-loops 1`, `--projection-iters 16`, `--guidance-scale 100.0` and a constraint
-margin — see [`src/inference/constrained_samplers.py`](src/inference/constrained_samplers.py).
+**ECI / HardFlow do not use this path.** They run explicit Euler with `--steps DEFAULT_STEPS`
+and the closest-point SQP projection (`--projection-iters`, `--margin`). ECI adds
+`--mixing-iters` ($M$) and `--resample-interval` ($R$), which are chosen by
+`scripts/tune_val1k_eci.py` and passed in through `--eci-selected`. HardFlow adds
+`--active-from` (default 0.5, the paper's second-half activation). See
+[`src/inference/constrained_samplers.py`](src/inference/constrained_samplers.py).
 Because they move state outside the ODE, their samples are not the pushforward of a
 probability flow, which is why NLL/KLD are undefined for them (§3.5).
 

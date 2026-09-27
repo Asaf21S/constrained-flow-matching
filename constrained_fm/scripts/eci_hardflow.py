@@ -5,13 +5,13 @@ Both reuse the single unconstrained checkpoint from ``train_base_fm.py`` and inj
 constraint only during integration, so no training happens here. Scored with the same
 success rate / SWD / MMD / JSD protocol as every other model in the project.
 
-NLL and KLD are deliberately reported as NaN: ECI overwrites the state and HardFlow
-overwrites the velocity, so the sampled distribution is no longer the one whose density the
+NLL and KLD are deliberately reported as NaN: both methods overwrite the state with projected
+terminal estimates, so the sampled distribution is no longer the one whose density the
 probability-flow ODE integrates. A likelihood computed from the base field would describe a
 model that was never sampled from.
 
     sbatch scripts/run_eci_hardflow.sh
-    python -m constrained_fm.scripts.eci_hardflow --methods eci --guidance-scale 20
+    python -m constrained_fm.scripts.eci_hardflow --methods eci --mixing-iters 5
     python -m constrained_fm.scripts.eci_hardflow --plot-only   # figures from saved arrays
 """
 
@@ -38,10 +38,12 @@ from constrained_fm.src.experiment import artifacts
 from constrained_fm.src.experiment.config import REPO_ROOT
 from constrained_fm.src.experiment.registry import pin_baseline_run, readme_table, summarize
 from constrained_fm.src.experiment.runtime import resolve_device, set_seed
-from constrained_fm.src.inference.constrained_samplers import (DEFAULT_CHUNK, DEFAULT_STEPS,
-                                                               sample_eci, sample_euler,
-                                                               sample_hardflow)
-from constrained_fm.src.inference.constraint_projection import DEFAULT_MARGIN
+from constrained_fm.src.inference.constrained_samplers import (DEFAULT_ACTIVE_FROM, DEFAULT_CHUNK,
+                                                               DEFAULT_MIXING_ITERS,
+                                                               DEFAULT_STEPS, sample_eci,
+                                                               sample_euler, sample_hardflow)
+from constrained_fm.src.inference.constraint_projection import (DEFAULT_MARGIN,
+                                                                DEFAULT_PROJECTION_ITERS)
 from constrained_fm.src.inference.evaluator import evaluate_validation_set_metrics
 from constrained_fm.src.metrics.functa_fidelity import constraint_masses
 from constrained_fm.src.models.unconstrained import UnconstrainedFM
@@ -78,10 +80,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--time-dim", type=int, default=128)
 
     parser.add_argument("--steps", type=int, default=DEFAULT_STEPS, help="Euler integration steps")
-    parser.add_argument("--correction-loops", type=int, default=1, help="ECI projections per step")
-    parser.add_argument("--projection-iters", type=int, default=16, help="ECI Newton iterations")
-    # Swept over 10/30/100/300: 100 is the knee, best on every distributional metric.
-    parser.add_argument("--guidance-scale", type=float, default=100.0, help="HardFlow gradient weight")
+    parser.add_argument("--mixing-iters", type=int, default=DEFAULT_MIXING_ITERS,
+                        help="ECI mixing iterations per step (M)")
+    parser.add_argument("--resample-interval", type=int, default=0,
+                        help="ECI noise redraw interval in mixing iterations (R); 0 = never")
+    parser.add_argument("--active-from", type=float, default=DEFAULT_ACTIVE_FROM,
+                        help="HardFlow: fraction of steps after which the subproblem is solved")
+    parser.add_argument("--projection-iters", type=int, default=DEFAULT_PROJECTION_ITERS,
+                        help="SQP iterations of the closest-point projection")
     parser.add_argument("--margin", type=float, default=DEFAULT_MARGIN,
                         help="how far inside P(x) = 0 both methods aim, in units of P")
 
@@ -116,14 +122,16 @@ def generate(method: str, model, x0: torch.Tensor, polys: torch.Tensor, args) ->
     for i in tqdm(range(polys.shape[0]), desc=f"{method} sampling"):
         constraint = PolynomialConstraint(polys[i], degree=args.degree, scale=args.scale)
         if method == "eci":
-            samples = sample_eci(model, x0, constraint,
-                                 steps=args.steps, correction_loops=args.correction_loops,
+            samples = sample_eci(model, x0, constraint, steps=args.steps,
+                                 mixing_iters=args.mixing_iters,
+                                 resample_interval=args.resample_interval or None,
                                  margin=args.margin, projection_iters=args.projection_iters,
                                  chunk_size=args.chunk_size)
         else:
-            samples = sample_hardflow(model, x0, constraint,
-                                      steps=args.steps, guidance_scale=args.guidance_scale,
-                                      margin=args.margin, chunk_size=args.chunk_size)
+            samples = sample_hardflow(model, x0, constraint, steps=args.steps,
+                                      active_from=args.active_from, margin=args.margin,
+                                      projection_iters=args.projection_iters,
+                                      chunk_size=args.chunk_size)
         per_shape.append(samples.detach())
     return torch.stack(per_shape, dim=0)
 
@@ -146,9 +154,10 @@ def score(method: str, samples: torch.Tensor, gmm_pool: torch.Tensor, polys: tor
         "evaluated_at": datetime.now().isoformat(timespec="seconds"),
         "likelihood": "undefined -- trajectories are altered outside the probability-flow ODE",
         "sampling": {"steps": args.steps, "margin": args.margin,
-                     "correction_loops": args.correction_loops if method == "eci" else None,
-                     "projection_iters": args.projection_iters if method == "eci" else None,
-                     "guidance_scale": args.guidance_scale if method == "hardflow" else None},
+                     "projection_iters": args.projection_iters,
+                     "mixing_iters": args.mixing_iters if method == "eci" else None,
+                     "resample_interval": args.resample_interval if method == "eci" else None,
+                     "active_from": args.active_from if method == "hardflow" else None},
         "eval": {"num_polys": args.num_polys, "num_x0": args.num_x0,
                  "gmm_pool_size": args.gmm_pool_size},
         "per_shape": per_shape,

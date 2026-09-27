@@ -108,7 +108,7 @@ KIN_PT_SCALE = 40.0
 KIN_ETA_RANGE = (-3.0, 3.0)
 KIN_ETA_SIGMA = 1.5
 # M^2 = 2 pT1 pT2 (cosh d_eta - cos d_phi) vanishes for collinear pairs, where d(sqrt)/d(M^2)
-# is unbounded; the floor keeps HardFlow's guidance gradient finite there.
+# is unbounded; the floor keeps the projection's constraint gradient finite there.
 KIN_MASS_FLOOR = 1e-6
 # Shell probability mass, the analogue of polygon mass: the fraction of pairs inside the
 # window. Log-spaced because the interesting regime is the narrow end.

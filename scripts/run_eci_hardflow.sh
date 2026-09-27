@@ -15,8 +15,8 @@
 # Writes constrained_fm/baselines/{eci,hardflow}/.
 #
 #   sbatch scripts/run_eci_hardflow.sh
-#   sbatch scripts/run_eci_hardflow.sh --methods hardflow --guidance-scale 20
-#   sbatch scripts/run_eci_hardflow.sh --methods eci --correction-loops 5
+#   sbatch scripts/run_eci_hardflow.sh --methods hardflow --active-from 0.25
+#   sbatch scripts/run_eci_hardflow.sh --methods eci --mixing-iters 5 --resample-interval 5
 
 set -eo pipefail
 

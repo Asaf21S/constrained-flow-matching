@@ -41,9 +41,12 @@ from constrained_fm.src.experiment.runtime import (build_flow_matcher, load_chec
 from constrained_fm.src.geometry.polynomials import (compute_poly_features,
                                                      compute_poly_features_batched,
                                                      evaluate_poly_batched)
-from constrained_fm.src.inference.constrained_samplers import (DEFAULT_CHUNK, DEFAULT_STEPS,
-                                                               sample_eci, sample_hardflow)
-from constrained_fm.src.inference.constraint_projection import DEFAULT_MARGIN
+from constrained_fm.src.inference.constrained_samplers import (DEFAULT_ACTIVE_FROM, DEFAULT_CHUNK,
+                                                               DEFAULT_MIXING_ITERS,
+                                                               DEFAULT_STEPS, sample_eci,
+                                                               sample_hardflow)
+from constrained_fm.src.inference.constraint_projection import (DEFAULT_MARGIN,
+                                                                DEFAULT_PROJECTION_ITERS)
 from constrained_fm.src.inference.evaluator import (evaluate_single_configuration,
                                                     run_evaluation_inference)
 from constrained_fm.src.inference.latent_extractor import extract_latents_batched
@@ -68,6 +71,7 @@ REFERENCE_POOL_SEED = 20_000
 GT_SAMPLE_SEED = 30_000
 QUERY_POINT_SEED = 40_000
 METRIC_SEED = 50_000
+ECI_NOISE_SEED = 60_000
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -94,9 +98,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--extraction-chunk", type=int, default=128)
 
     parser.add_argument("--steps", type=int, default=DEFAULT_STEPS, help="ECI/HardFlow Euler steps")
-    parser.add_argument("--correction-loops", type=int, default=1)
-    parser.add_argument("--projection-iters", type=int, default=16)
-    parser.add_argument("--guidance-scale", type=float, default=100.0)
+    parser.add_argument("--mixing-iters", type=int, default=DEFAULT_MIXING_ITERS,
+                        help="ECI mixing iterations per step (M)")
+    parser.add_argument("--resample-interval", type=int, default=0,
+                        help="ECI noise redraw interval in mixing iterations (R); 0 = never")
+    parser.add_argument("--eci-selected", default=None,
+                        help="JSON from tune_val1k_eci whose 'selected' overrides M and R")
+    parser.add_argument("--active-from", type=float, default=DEFAULT_ACTIVE_FROM,
+                        help="HardFlow: fraction of steps after which the subproblem is solved")
+    parser.add_argument("--projection-iters", type=int, default=DEFAULT_PROJECTION_ITERS)
+    parser.add_argument("--projection-damping", type=float, default=1.0)
     parser.add_argument("--margin", type=float, default=DEFAULT_MARGIN)
     parser.add_argument("--chunk-size", type=int, default=DEFAULT_CHUNK)
 
@@ -165,20 +176,24 @@ def extract_latents(siren, cfg: ExperimentConfig, polys: torch.Tensor, indices: 
 
 
 def sample_inference_hack(method: str, model, x0: torch.Tensor, polys: torch.Tensor,
-                          args) -> torch.Tensor:
+                          indices: list[int], args) -> torch.Tensor:
     """ECI / HardFlow inject the constraint per constraint, so there is no batched form."""
     per_shape = []
-    for i in tqdm(range(polys.shape[0]), desc=f"{method} sampling"):
-        constraint = PolynomialConstraint(polys[i], degree=args.degree, scale=args.scale)
+    for j in tqdm(range(polys.shape[0]), desc=f"{method} sampling"):
+        constraint = PolynomialConstraint(polys[j], degree=args.degree, scale=args.scale)
         if method == "eci":
-            samples = sample_eci(model, x0, constraint,
-                                 steps=args.steps, correction_loops=args.correction_loops,
+            samples = sample_eci(model, x0, constraint, steps=args.steps,
+                                 mixing_iters=args.mixing_iters,
+                                 resample_interval=args.resample_interval or None,
                                  margin=args.margin, projection_iters=args.projection_iters,
-                                 chunk_size=args.chunk_size)
+                                 projection_damping=args.projection_damping,
+                                 seed=ECI_NOISE_SEED + indices[j], chunk_size=args.chunk_size)
         else:
-            samples = sample_hardflow(model, x0, constraint,
-                                      steps=args.steps, guidance_scale=args.guidance_scale,
-                                      margin=args.margin, chunk_size=args.chunk_size)
+            samples = sample_hardflow(model, x0, constraint, steps=args.steps,
+                                      active_from=args.active_from, margin=args.margin,
+                                      projection_iters=args.projection_iters,
+                                      projection_damping=args.projection_damping,
+                                      chunk_size=args.chunk_size)
         per_shape.append(samples.detach())
     return torch.stack(per_shape, dim=0)
 
@@ -203,7 +218,7 @@ def generate(method: str, models: dict, polys: torch.Tensor, indices: list[int],
                                        device=device)
         return as_batched_samples(out, polys.shape[0], device), z
 
-    return sample_inference_hack(method, models["base"], x0, polys, args), None
+    return sample_inference_hack(method, models["base"], x0, polys, indices, args), None
 
 
 # --- scoring ------------------------------------------------------------------------------
@@ -300,6 +315,10 @@ def main(argv: list[str] | None = None) -> int:
     from constrained_fm.src.datasets.validation_v1k import get_validation_set_v1k
 
     args = build_parser().parse_args(argv)
+    if args.eci_selected:
+        selected = json.loads(Path(args.eci_selected).read_text())["selected"]
+        args.mixing_iters = int(selected["mixing_iters"])
+        args.resample_interval = int(selected["resample_interval"] or 0)
     device = resolve_device()
     out = Path(args.outdir)
     (out / "shards").mkdir(parents=True, exist_ok=True)

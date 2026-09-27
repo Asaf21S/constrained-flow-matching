@@ -3,7 +3,7 @@
 
 The shell ``|M - M_target| <= epsilon`` is not convex, so the bisection fallback that rescued
 the 2D polygons is unavailable by construction -- ``interior_point`` is None here and the
-projection has nothing but its damped Newton loop. A full Newton step can cross the shell
+projection has nothing but its damped SQP loop. A full SQP step can cross the shell
 entirely and land on the opposite wall, so the step scale is swept rather than assumed, and
 every infeasible sample is attributed to the wall it escaped through.
 
@@ -26,8 +26,10 @@ from constrained_fm.src.consts import KIN_MMD_GAMMA
 from constrained_fm.src.experiment import artifacts
 from constrained_fm.src.experiment.registry import pin_baseline_run, summarize
 from constrained_fm.src.experiment.runtime import resolve_device, set_seed
-from constrained_fm.src.inference.constrained_samplers import (DEFAULT_CHUNK, DEFAULT_STEPS,
-                                                               sample_eci, sample_hardflow)
+from constrained_fm.src.inference.constrained_samplers import (DEFAULT_ACTIVE_FROM, DEFAULT_CHUNK,
+                                                               DEFAULT_MIXING_ITERS,
+                                                               DEFAULT_STEPS, sample_eci,
+                                                               sample_hardflow)
 from constrained_fm.src.metrics.distributional import compute_mmd, compute_swd
 from constrained_fm.src.models.unconstrained import UnconstrainedFM
 from constrained_fm.src.problems.base import NormalizedConstraint
@@ -52,17 +54,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--num-blocks", type=int, default=4)
     parser.add_argument("--time-dim", type=int, default=128)
     parser.add_argument("--steps", type=int, default=DEFAULT_STEPS)
-    parser.add_argument("--correction-loops", type=int, default=1)
+    parser.add_argument("--mixing-iters", type=int, default=DEFAULT_MIXING_ITERS)
+    parser.add_argument("--resample-interval", type=int, default=0, help="0 = never")
+    parser.add_argument("--active-from", type=float, default=DEFAULT_ACTIVE_FROM)
     parser.add_argument("--projection-iters", type=int, default=32)
     parser.add_argument("--projection-damping", type=float, default=1.0)
-    parser.add_argument("--guidance-scale", type=float, default=100.0)
     parser.add_argument("--margin", type=float, default=DEFAULT_MARGIN)
     parser.add_argument("--num-shells", type=int, default=100)
     parser.add_argument("--num-x0", type=int, default=10000)
     parser.add_argument("--pool-size", type=int, default=500000)
     parser.add_argument("--chunk-size", type=int, default=DEFAULT_CHUNK)
     parser.add_argument("--damping-sweep", type=float, nargs="+", default=None,
-                        help="success-rate-only sweep of the Newton step scale, then exit")
+                        help="success-rate-only sweep of the SQP step scale, then exit")
     parser.add_argument("--sweep-shells", type=int, default=20)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--outdir", default=DEFAULT_OUTDIR)
@@ -98,16 +101,17 @@ def build_benchmark(args, problem: KinematicsProblem, device: torch.device):
 
 def run_sampler(method: str, model, x0: torch.Tensor, wrapped, args,
                 damping: float | None = None) -> torch.Tensor:
+    damping = args.projection_damping if damping is None else damping
     if method == "eci":
         return sample_eci(model, x0, wrapped, steps=args.steps,
-                          correction_loops=args.correction_loops, margin=args.margin,
-                          projection_iters=args.projection_iters,
-                          projection_damping=args.projection_damping if damping is None
-                          else damping,
-                          chunk_size=args.chunk_size)
+                          mixing_iters=args.mixing_iters,
+                          resample_interval=args.resample_interval or None,
+                          margin=args.margin, projection_iters=args.projection_iters,
+                          projection_damping=damping, chunk_size=args.chunk_size)
     return sample_hardflow(model, x0, wrapped, steps=args.steps,
-                           guidance_scale=args.guidance_scale, margin=args.margin,
-                           chunk_size=args.chunk_size)
+                           active_from=args.active_from, margin=args.margin,
+                           projection_iters=args.projection_iters,
+                           projection_damping=damping, chunk_size=args.chunk_size)
 
 
 def wall_split(constraint, physical: torch.Tensor) -> tuple[float, float]:
@@ -124,7 +128,7 @@ def wall_split(constraint, physical: torch.Tensor) -> tuple[float, float]:
 
 
 def sweep_damping(args, model, constraints, normalizer, x0) -> int:
-    """Success rate against the Newton step scale on the tightest shells."""
+    """Success rate against the SQP step scale on the tightest shells."""
     order = sorted(range(len(constraints)), key=lambda i: constraints[i].epsilon)
     subset = [constraints[i] for i in order[:args.sweep_shells]]
     print(f"sweeping {len(subset)} tightest shells | epsilon "
@@ -185,10 +189,11 @@ def score(method: str, samples: torch.Tensor, pool_u: torch.Tensor, constraints,
         "likelihood": "undefined -- trajectories are altered outside the probability-flow ODE",
         "frame": "metrics in the normalised frame; success rate is frame-invariant",
         "sampling": {"steps": args.steps, "margin": args.margin,
-                     "correction_loops": args.correction_loops if method == "eci" else None,
-                     "projection_iters": args.projection_iters if method == "eci" else None,
-                     "projection_damping": args.projection_damping if method == "eci" else None,
-                     "guidance_scale": args.guidance_scale if method == "hardflow" else None},
+                     "projection_iters": args.projection_iters,
+                     "projection_damping": args.projection_damping,
+                     "mixing_iters": args.mixing_iters if method == "eci" else None,
+                     "resample_interval": args.resample_interval if method == "eci" else None,
+                     "active_from": args.active_from if method == "hardflow" else None},
         "eval": {"num_shells": args.num_shells, "num_x0": args.num_x0,
                  "pool_size": args.pool_size, "swd_projections": SWD_PROJECTIONS,
                  "mmd_gamma": KIN_MMD_GAMMA},

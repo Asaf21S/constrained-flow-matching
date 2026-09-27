@@ -2,7 +2,7 @@
 """Feasibility-vs-fidelity figure: what each sampler does to the constraint boundary.
 
 Density is a raw 2D histogram drawn with ``imshow(..., interpolation="nearest")``, never a
-KDE. The claim the figure has to carry is that projection- and guidance-based samplers leave
+KDE. The claim the figure has to carry is that projection-based samplers leave
 a delta-like pile-up of mass exactly on {P(x) = 0}; a Gaussian smoothing kernel of any
 bandwidth spreads that spike back into the interior and erases the evidence.
 
@@ -271,7 +271,8 @@ def plot_feasibility_row(panels: Sequence[Panel], coeffs: torch.Tensor | None = 
                          style: FeasibilityStyle | None = None,
                          degree: int = POLYNOMIAL_DEGREE, scale: float = PLANE_SCALE,
                          show_profile: bool = False, legend: bool = True,
-                         boundary_field: np.ndarray | None = None) -> Figure:
+                         boundary_field: np.ndarray | None = None,
+                         combine_profile: bool = False) -> Figure:
     """A 1 x len(panels) row of boundary-preserving density maps for one constraint.
 
     Args:
@@ -281,6 +282,7 @@ def plot_feasibility_row(panels: Sequence[Panel], coeffs: torch.Tensor | None = 
         show_profile: append a second row histogramming the signed distance to the
             boundary, which turns the visual pile-up into a readable spike.
         boundary_field: (R, R) lattice field whose zero level set replaces the polynomial's.
+        combine_profile: overlay all signed-distance densities on one full-width axis.
     """
     style = style or STYLE_PRESETS["light"]
     num = len(panels)
@@ -311,7 +313,8 @@ def plot_feasibility_row(panels: Sequence[Panel], coeffs: torch.Tensor | None = 
     height = style.panel_size * (1 + style.profile_ratio if show_profile else 1) + 0.6
     with plt.rc_context(PAPER_RC):
         fig = plt.figure(figsize=(style.panel_size * num, height))
-        gs = fig.add_gridspec(rows, num, hspace=0.45, wspace=0.06,
+        gs = fig.add_gridspec(rows, num, hspace=0.24 if show_profile and combine_profile else 0.45,
+                      wspace=0.06,
                               height_ratios=[1.0, style.profile_ratio] if show_profile else [1.0])
 
         for col, (panel, H, vmax) in enumerate(zip(panels, hists, vmaxes)):
@@ -342,7 +345,10 @@ def plot_feasibility_row(panels: Sequence[Panel], coeffs: torch.Tensor | None = 
                           loc="lower left", fontsize=style.legend_size,
                           framealpha=0.75, handlelength=2.6, borderpad=0.4)
 
-        if show_profile:
+        if show_profile and combine_profile:
+            ax = fig.add_subplot(gs[1, :])
+            _draw_combined_profile(ax, profiles, panels, style, profile_top, profile_xlim)
+        elif show_profile:
             for col, data in enumerate(profiles):
                 ax = fig.add_subplot(gs[1, col])
                 _draw_profile(ax, data, style, profile_top, profile_xlim, first=col == 0)
@@ -425,6 +431,44 @@ def _profile_data(distance: np.ndarray, edges: np.ndarray,
         "peak": float(density.max()) if density.size else 0.0,
         "wall_fraction": float(np.mean(np.abs(distance) < style.wall_tolerance)),
     }
+
+
+def _draw_combined_profile(ax, profiles: Sequence[dict[str, Any]], panels: Sequence[Panel],
+                           style: FeasibilityStyle, top: float | None,
+                           xlim: tuple[float, float] | None) -> None:
+    colors = ("#374151", "#2563eb", "#c2410c", "#15803d")
+    names = ("Ground Truth", "ECI", "HardFlow", "Ours")
+    widths = (2.4, 1.2, 2.0, 1.5)
+    linestyles = ((0, (5, 3)), (0, (8, 3, 2, 3)), "solid", "solid")
+    alphas = (1.0, 0.8, 0.8, 1.0)
+    layers = (4, 6, 3, 5)
+    ax.axvline(0.0, color=style.boundary_color, linestyle=style.boundary_linestyle,
+               linewidth=style.boundary_linewidth + 0.5, zorder=1)
+    handles = []
+    for index, data in enumerate(profiles):
+        handle, = ax.step(data["centers"], data["counts"], where="mid", color=colors[index],
+                          linewidth=widths[index], linestyle=linestyles[index],
+                          alpha=alphas[index], label=names[index], zorder=layers[index])
+        handles.append(handle)
+
+    if xlim is not None:
+        ax.set_xlim(*xlim)
+    ax.set_ylim(0.0, top if top is not None else
+                max(data["peak"] for data in profiles) * style.profile_headroom)
+    ax.legend(handles, names,
+              loc="upper center", ncol=len(panels), fontsize=style.legend_size,
+              framealpha=0.85, handlelength=2.0)
+    if top is not None and profiles[1]["peak"] > top * style.profile_annotate_ratio:
+        eci = profiles[1]
+        ax.annotate(f"ECI peak ~{eci['peak']:.0f} (clipped)",
+                    xy=(0, 1.2), xytext=(-0.8, 1.0),
+                    ha="right", va="top", fontsize=style.legend_size, color=colors[1],
+                    bbox=dict(facecolor="white", edgecolor="none", alpha=0.9),
+                    arrowprops=dict(arrowstyle="->", color=colors[1]))
+    ax.set_xlabel(style.profile_xlabel, fontsize=style.metric_size)
+    ax.set_ylabel(style.profile_ylabel, fontsize=style.metric_size)
+    ax.tick_params(labelsize=style.metric_size)
+    ax.grid(True, alpha=0.25)
 
 
 def _draw_profile(ax, data: dict[str, Any], style: FeasibilityStyle, top: float | None,

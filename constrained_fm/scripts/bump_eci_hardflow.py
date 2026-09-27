@@ -7,7 +7,7 @@ rate is frame-invariant; SWD, MMD and JSD are reported in the normalised frame s
 magnitudes sit on the same scale as the numbers already published for the GMM problem.
 
     python -m constrained_fm.scripts.bump_eci_hardflow
-    python -m constrained_fm.scripts.bump_eci_hardflow --methods hardflow --guidance-scale 20
+    python -m constrained_fm.scripts.bump_eci_hardflow --methods eci --mixing-iters 5
 """
 
 from __future__ import annotations
@@ -24,8 +24,10 @@ from tqdm import tqdm
 from constrained_fm.src.experiment import artifacts
 from constrained_fm.src.experiment.registry import pin_baseline_run, summarize
 from constrained_fm.src.experiment.runtime import resolve_device, set_seed
-from constrained_fm.src.inference.constrained_samplers import (DEFAULT_CHUNK, DEFAULT_STEPS,
-                                                               sample_eci, sample_hardflow)
+from constrained_fm.src.inference.constrained_samplers import (DEFAULT_ACTIVE_FROM, DEFAULT_CHUNK,
+                                                               DEFAULT_MIXING_ITERS,
+                                                               DEFAULT_STEPS, sample_eci,
+                                                               sample_hardflow)
 from constrained_fm.src.inference.constraint_projection import DEFAULT_MARGIN
 from constrained_fm.src.metrics.distributional import compute_jsd, compute_mmd, compute_swd
 from constrained_fm.src.models.unconstrained import UnconstrainedFM
@@ -47,10 +49,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--num-blocks", type=int, default=4)
     parser.add_argument("--time-dim", type=int, default=128)
     parser.add_argument("--steps", type=int, default=DEFAULT_STEPS)
-    parser.add_argument("--correction-loops", type=int, default=1)
+    parser.add_argument("--mixing-iters", type=int, default=DEFAULT_MIXING_ITERS)
+    parser.add_argument("--resample-interval", type=int, default=0, help="0 = never")
+    parser.add_argument("--active-from", type=float, default=DEFAULT_ACTIVE_FROM)
     parser.add_argument("--projection-iters", type=int, default=16)
     parser.add_argument("--projection-damping", type=float, default=1.0)
-    parser.add_argument("--guidance-scale", type=float, default=100.0)
     parser.add_argument("--margin", type=float, default=DEFAULT_MARGIN)
     parser.add_argument("--num-polys", type=int, default=100)
     parser.add_argument("--num-x0", type=int, default=10000)
@@ -95,13 +98,16 @@ def generate(method: str, model, x0: torch.Tensor, constraints, normalizer, args
         wrapped = NormalizedConstraint(constraint, normalizer)
         if method == "eci":
             out[i] = sample_eci(model, x0, wrapped, steps=args.steps,
-                                correction_loops=args.correction_loops, margin=args.margin,
-                                projection_iters=args.projection_iters,
+                                mixing_iters=args.mixing_iters,
+                                resample_interval=args.resample_interval or None,
+                                margin=args.margin, projection_iters=args.projection_iters,
                                 projection_damping=args.projection_damping,
                                 chunk_size=args.chunk_size)
         else:
             out[i] = sample_hardflow(model, x0, wrapped, steps=args.steps,
-                                     guidance_scale=args.guidance_scale, margin=args.margin,
+                                     active_from=args.active_from, margin=args.margin,
+                                     projection_iters=args.projection_iters,
+                                     projection_damping=args.projection_damping,
                                      chunk_size=args.chunk_size)
     return out
 
@@ -129,10 +135,11 @@ def score(method: str, samples: torch.Tensor, pool_u: torch.Tensor, constraints,
         "likelihood": "undefined -- trajectories are altered outside the probability-flow ODE",
         "frame": "metrics computed in the normalised frame; success rate is frame-invariant",
         "sampling": {"steps": args.steps, "margin": args.margin,
-                     "correction_loops": args.correction_loops if method == "eci" else None,
-                     "projection_iters": args.projection_iters if method == "eci" else None,
-                     "projection_damping": args.projection_damping if method == "eci" else None,
-                     "guidance_scale": args.guidance_scale if method == "hardflow" else None},
+                     "projection_iters": args.projection_iters,
+                     "projection_damping": args.projection_damping,
+                     "mixing_iters": args.mixing_iters if method == "eci" else None,
+                     "resample_interval": args.resample_interval if method == "eci" else None,
+                     "active_from": args.active_from if method == "hardflow" else None},
         "eval": {"num_polys": args.num_polys, "num_x0": args.num_x0,
                  "pool_size": args.pool_size},
         "per_shape": per_shape,

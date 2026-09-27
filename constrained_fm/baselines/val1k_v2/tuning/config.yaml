@@ -1,0 +1,56 @@
+method: val1k_eci_tune
+run_id: val1k_eci_tune-c8e14160
+settings:
+  active_from: 0.5
+  base_ckpt: constrained_fm/baselines/base_fm/ckpt.pt
+  base_hidden_dim: 1024
+  base_num_blocks: 4
+  base_time_dim: 128
+  chunk_size: 20000
+  coeff_ckpt: constrained_fm/baselines/poly_fm_b1024/ckpt.pt
+  coeff_hidden_dim: 1024
+  degree: 3
+  eci_selected: null
+  end_idx: null
+  extraction_chunk: 128
+  functa_run_id: siren-uniform-8d6375ab
+  gmm_pool_size: 100000
+  grid:
+  - mixing_iters: 1
+    resample_interval: 1
+  - mixing_iters: 1
+    resample_interval: 5
+  - mixing_iters: 1
+    resample_interval: null
+  - mixing_iters: 2
+    resample_interval: 1
+  - mixing_iters: 2
+    resample_interval: 5
+  - mixing_iters: 2
+    resample_interval: null
+  - mixing_iters: 5
+    resample_interval: 1
+  - mixing_iters: 5
+    resample_interval: 5
+  - mixing_iters: 5
+    resample_interval: null
+  - mixing_iters: 10
+    resample_interval: 1
+  - mixing_iters: 10
+    resample_interval: 5
+  - mixing_iters: 10
+    resample_interval: null
+  margin: 0.001
+  mixing_iters: 1
+  nll_points: 5000
+  num_polys: 20
+  num_x0: 10000
+  projection_damping: 1.0
+  projection_iters: 32
+  resample_interval: 0
+  save_samples: false
+  scale: 4.5
+  start_idx: 0
+  step_size: 0.05
+  steps: 100
+  tune_set_seed: 1001

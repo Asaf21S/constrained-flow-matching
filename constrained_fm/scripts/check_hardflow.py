@@ -3,14 +3,13 @@
 
 bump2d -- why the signal is sometimes over-represented. Every HardFlow sample is paired with
 the plain-Euler endpoint of the *same* start point, which splits the feasible samples into
-those the base flow already put inside the polygon ("inside") and those the guidance had to
+those the base flow already put inside the polygon ("inside") and those the projection had to
 move in ("rescued"). The signal share of each group, and of the polygon population as a
-whole, says whether the signal comes from the base flow or from the guidance.
+whole, says whether the signal comes from the base flow or from the projection.
 
-kinematics6d -- whether the failure is the base model, the step count, or the guidance. A
-sweep over guidance scale and steps on a few shells, the plain base flow filtered to the
-shell as a no-guidance reference, and a variant whose guidance is preconditioned to be
-isotropic in physical momentum rather than in the normalised frame.
+kinematics6d -- whether the failure is the base model, the step count, or the projection. A
+sweep over steps, activation point and SQP damping on a few shells, with the plain base flow
+filtered to the shell as a no-projection reference.
 
 Nothing here changes a benchmark number; results go to stdout and a JSON beside the scores.
 
@@ -37,20 +36,18 @@ from constrained_fm.src.datasets.bump_conditioning import signal_fraction
 from constrained_fm.src.experiment.runtime import resolve_device
 from constrained_fm.src.inference.constrained_samplers import (DEFAULT_CHUNK, sample_euler,
                                                                sample_hardflow)
+from constrained_fm.src.inference.constraint_projection import project_closest_point
 from constrained_fm.src.metrics.distributional import compute_mmd, compute_swd
 from constrained_fm.src.problems.base import NormalizedConstraint
 from constrained_fm.src.problems.bump2d import BumpProblem
 from constrained_fm.src.problems.kinematics6d import KinematicsProblem
 
 OUT_ROOT = Path("constrained_fm/baselines/bench1k")
-BUMP_SCALES = (10.0, 30.0, 100.0, 300.0)
+BUMP_ACTIVE_FROM = (0.0, 0.25, 0.5, 0.75)
 KIN_SHOWCASE = 38
-# (label, guidance scale, steps, preconditioned)
-KIN_VARIANTS = (("hardflow", 1.0, 100, False), ("hardflow", 3.0, 100, False),
-                ("hardflow", 10.0, 100, False), ("hardflow", 30.0, 100, False),
-                ("hardflow", 100.0, 100, False), ("hardflow", 10.0, 400, False),
-                ("hardflow", 100.0, 400, False), ("hardflow-iso", 10.0, 100, True),
-                ("hardflow-iso", 100.0, 100, True), ("hardflow-iso", 1000.0, 100, True))
+# (steps, active_from, projection damping)
+KIN_VARIANTS = ((100, 0.5, 1.0), (100, 0.0, 1.0), (100, 0.75, 1.0), (400, 0.5, 1.0),
+                (100, 0.5, 0.5), (100, 0.5, 0.25))
 T_BUCKETS = 4
 
 
@@ -70,18 +67,20 @@ def bench_args(problem: str) -> argparse.Namespace:
 # --- instrumented sampler -----------------------------------------------------------------
 
 
-def traced_hardflow(model, x0: torch.Tensor, constraint, steps: int, scale: float,
-                    margin: float, precondition: torch.Tensor | None = None,
+@torch.no_grad()
+def traced_hardflow(model, x0: torch.Tensor, constraint, steps: int, active_from: float,
+                    margin: float, projection_iters: int, projection_damping: float = 1.0,
                     side_fn=None, chunk_size: int = DEFAULT_CHUNK) -> dict[str, torch.Tensor]:
-    """``sample_hardflow`` with per-sample bookkeeping; identical numerics when unpreconditioned.
+    """``sample_hardflow`` with per-sample bookkeeping and identical numerics.
 
-    Returns the endpoints, the (steps, N) mask of steps whose hinge was active, the summed
-    absolute per-coordinate displacement due to guidance and to the base drift, and, if
-    ``side_fn`` is given, its (steps, N) value at the predicted endpoint.
+    Returns the endpoints, the (steps, N) mask of steps whose posterior mean violated the
+    constraint, the summed absolute per-coordinate displacement due to the projection and to
+    the nominal Euler drift, and, if ``side_fn`` is given, its (steps, N) value at the
+    posterior mean of each active step.
     """
     parts: dict[str, list[torch.Tensor]] = {"x": [], "active": [], "guide": [], "drift": [],
                                             "side": []}
-    dt = 1.0 / steps
+    first_active = min(round(active_from * steps), steps - 1)
     for start in range(0, x0.shape[0], chunk_size):
         x = x0[start:start + chunk_size]
         active = torch.zeros(steps, x.shape[0], dtype=torch.bool, device=x.device)
@@ -89,23 +88,25 @@ def traced_hardflow(model, x0: torch.Tensor, constraint, steps: int, scale: floa
         guide, drift = torch.zeros_like(x), torch.zeros_like(x)
 
         for i in range(steps):
-            t = i * dt
+            t, t_next = i / steps, (i + 1) / steps
             t_batch = torch.full((x.shape[0],), t, device=x.device, dtype=x.dtype)
-            with torch.enable_grad():
-                x_leaf = x.detach().requires_grad_(True)
-                v = model(x_leaf, t_batch)
-                x1_hat = x_leaf + (1.0 - t) * v
-                hinge = constraint.penalty(x1_hat, margin=margin)
-                (grad,) = torch.autograd.grad(hinge.sum(), x_leaf)
-            if precondition is not None:
-                grad = grad * precondition
-            v = v.detach()
-            active[i] = hinge.detach() > 0
+            x_bar = x + (t_next - t) * model(x, t_batch)
+            drift += (x_bar - x).abs()
+            if i < first_active:
+                x = x_bar
+                continue
+
+            t_next_batch = torch.full((x.shape[0],), t_next, device=x.device, dtype=x.dtype)
+            v_bar = model(x_bar, t_next_batch)
+            posterior = x_bar + (1.0 - t_next) * v_bar
+            active[i] = constraint.penalty(posterior, margin=margin) > 0
             if side_fn is not None:
-                side[i] = side_fn(x1_hat.detach()).to(torch.int8)
-            guide += (scale * grad * dt).abs()
-            drift += (v * dt).abs()
-            x = x_leaf.detach() + (v - scale * grad) * dt
+                side[i] = side_fn(posterior).to(torch.int8)
+            terminal = project_closest_point(posterior, constraint, margin=margin,
+                                             max_iters=projection_iters,
+                                             relaxation=projection_damping)
+            x = t_next * terminal + (1.0 - t_next) * (x_bar - t_next * v_bar)
+            guide += (x - x_bar).abs()
 
         for key, value in (("x", x), ("active", active), ("guide", guide), ("drift", drift),
                            ("side", side)):
@@ -117,12 +118,12 @@ def traced_hardflow(model, x0: torch.Tensor, constraint, steps: int, scale: floa
 
 
 def active_profile(active: torch.Tensor) -> list[float]:
-    """Percentage of samples with an active hinge, averaged over ``T_BUCKETS`` time bins."""
+    """Percentage of samples with a violating posterior mean, averaged over ``T_BUCKETS`` bins."""
     return [float(chunk.float().mean()) * 100.0 for chunk in active.chunk(T_BUCKETS, dim=0)]
 
 
 def wall_flips(side: torch.Tensor) -> torch.Tensor:
-    """Per sample, how often the predicted endpoint jumps from one violated wall to the other."""
+    """Per sample, how often the posterior mean jumps from one violated wall to the other."""
     last = torch.zeros_like(side[0])
     flips = torch.zeros(side.shape[1], device=side.device)
     for row in side:
@@ -134,8 +135,11 @@ def wall_flips(side: torch.Tensor) -> torch.Tensor:
 def check_parity(model, x0, wrapped, args) -> float:
     """Max deviation of the traced sampler from the production one on a small batch."""
     reference = sample_hardflow(model, x0, wrapped, steps=args.steps,
-                                guidance_scale=args.guidance_scale, margin=args.margin)
-    traced = traced_hardflow(model, x0, wrapped, args.steps, args.guidance_scale, args.margin)
+                                active_from=args.active_from, margin=args.margin,
+                                projection_iters=args.projection_iters,
+                                projection_damping=args.projection_damping)
+    traced = traced_hardflow(model, x0, wrapped, args.steps, args.active_from, args.margin,
+                             args.projection_iters, args.projection_damping)
     return float((reference - traced["x"]).abs().max())
 
 
@@ -153,11 +157,12 @@ def share(target, x: torch.Tensor) -> float:
 # --- bump2d -------------------------------------------------------------------------------
 
 
-def bump_polygon_row(model, constraint, x0, base_u, normalizer, target, scale: float,
+def bump_polygon_row(model, constraint, x0, base_u, normalizer, target, active_from: float,
                      args) -> dict:
     """HardFlow on one polygon, decomposed by where the base flow would have put each sample."""
     wrapped = NormalizedConstraint(constraint, normalizer)
-    run = traced_hardflow(model, x0, wrapped, args.steps, scale, args.margin)
+    run = traced_hardflow(model, x0, wrapped, args.steps, active_from, args.margin,
+                          args.projection_iters, args.projection_damping)
     x = normalizer.inverse(run["x"])
     base = normalizer.inverse(base_u)
 
@@ -209,19 +214,19 @@ def run_bump(args_cli, device) -> dict:
     eligible = np.flatnonzero((depth >= 0) & (exact >= 10.0))
     ratio = scored_hf[eligible] / exact[eligible]
 
-    # --- every eligible polygon at the production scale
+    # --- every eligible polygon at the production settings
     rows = []
     for index in eligible:
         row = bump_polygon_row(model, constraints[index], x0, base_u, normalizer, target,
-                               args.guidance_scale, args)
+                               args.active_from, args)
         row.update(index=int(index), exact=float(exact[index]), depth=float(depth[index]),
                    mass=float(benchmark["mass"][index]), scored=float(scored_hf[index]))
         row["ratio"] = row["signal"] / row["exact"]
         rows.append(row)
     rows.sort(key=lambda r: r["ratio"])
 
-    print(f"\n## bump2d: {len(rows)} eligible polygons, HardFlow scale {args.guidance_scale:g}, "
-          f"{args.steps} steps\n")
+    print(f"\n## bump2d: {len(rows)} eligible polygons, HardFlow active from "
+          f"{args.active_from:g}, {args.steps} steps\n")
     print("| poly | mass % | depth(mu_s) | exact sig % | HF sig % | ratio | SR % | base inside % "
           "| inside share of feas % | sig inside % | sig rescued % | core from rescued % |")
     print("|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
@@ -241,7 +246,7 @@ def run_bump(args_cli, device) -> dict:
     print(f"recomputed vs scored ratio: median {np.median(table['ratio']):.2f} vs "
           f"{np.median(ratio):.2f}", flush=True)
 
-    # --- the guidance-scale sweep on the illustrative polygons
+    # --- the activation-point sweep on the illustrative polygons
     focus = {"hand-drawn": (signal_polygon(problem.domain, device), SIGNAL_INDEX),
              "median (455)": (constraints[455], 455),
              f"lowest ratio ({rows[0]['index']})": (constraints[rows[0]['index']],
@@ -255,17 +260,19 @@ def run_bump(args_cli, device) -> dict:
         base_kept = base[constraint.is_feasible(base)]
         print(f"\n### {name}: exact signal {share(target, truth):.1f}%, base flow filtered "
               f"{share(target, base_kept):.1f}% (base inside {base_kept.shape[0] / x0.shape[0] * 100:.1f}%)")
-        print("| scale | SR % | signal % | sig inside % | sig rescued % | inside share % "
+        print("| active from | SR % | signal % | sig inside % | sig rescued % | inside share % "
               "| core share % | core from rescued % | rescued->core origin | ever active % "
               "| active by t-quarter % | median move of inside |")
         print("|---:|---:|---:|---:|---:|---:|---:|---:|:---|---:|:---|---:|")
         sweep[name] = {}
-        for scale in BUMP_SCALES:
-            r = bump_polygon_row(model, constraint, x0, base_u, normalizer, target, scale, args)
-            sweep[name][scale] = r
+        for active_from in BUMP_ACTIVE_FROM:
+            r = bump_polygon_row(model, constraint, x0, base_u, normalizer, target, active_from,
+                                 args)
+            sweep[name][active_from] = r
             origin = ("--" if r["rescued_origin"] is None
                       else "(" + ", ".join(f"{v:.2f}" for v in r["rescued_origin"]) + ")")
-            print(f"| {scale:g} | {r['sr']:.1f} | {r['signal']:.1f} | {r['signal_inside']:.1f} | "
+            print(f"| {active_from:g} | {r['sr']:.1f} | {r['signal']:.1f} | "
+                  f"{r['signal_inside']:.1f} | "
                   f"{r['signal_rescued']:.1f} | {r['inside_share']:.1f} | {r['core_share']:.1f} | "
                   f"{r['rescued_to_core']:.1f} | {origin} | {r['ever_active']:.1f} | "
                   + " / ".join(f"{a:.0f}" for a in r["active"])
@@ -322,9 +329,6 @@ def run_kinematics(args_cli, device) -> dict:
     base = normalizer.inverse(base_u)
 
     std = normalizer.std
-    # Rescales the normalised-frame gradient so the physical step -std^2 * g_x becomes
-    # -std_T^2 * g_x: isotropic in momentum, unchanged along the transverse axes.
-    iso = (std[0] / std) ** 2
     print(f"\nnormaliser std (GeV): {[round(float(s), 1) for s in std]}; "
           f"longitudinal/transverse = {float(std[2] / std[0]):.2f}", flush=True)
 
@@ -361,11 +365,11 @@ def run_kinematics(args_cli, device) -> dict:
                    in_support=float(target.in_support(base).float().mean()) * 100)
         row.update(distance_row(normalizer.forward(kept), truth_u, index))
         row["filtered"] = kinematic_summary(target, kept, constraint) if kept.shape[0] > 2 else {}
-        rows["base (no guidance), filtered to window"] = row
+        rows["base (no projection), filtered to window"] = row
 
-        for label, scale, steps, precondition in KIN_VARIANTS:
-            run = traced_hardflow(model, x0, wrapped, steps, scale, args.margin,
-                                  precondition=iso if precondition else None, side_fn=side_fn)
+        for steps, active_from, damping in KIN_VARIANTS:
+            run = traced_hardflow(model, x0, wrapped, steps, active_from, args.margin,
+                                  args.projection_iters, damping, side_fn=side_fn)
             x = normalizer.inverse(run["x"])
             row = kinematic_summary(target, x, constraint)
             row.update(sr=constraint.success_rate(x),
@@ -379,10 +383,10 @@ def run_kinematics(args_cli, device) -> dict:
                        drift_L=float(drift[[2, 5]].mean()),
                        flips=float(wall_flips(run["side"]).mean()),
                        active=active_profile(run["active"]))
-            rows[f"{label} scale {scale:g} steps {steps}"] = row
+            rows[f"hardflow steps {steps} active from {active_from:g} damping {damping:g}"] = row
 
         print("| variant | SR % | in-support % | SWD / floor | MMD / floor | pT median | "
-              "|eta|>2.5 % | corr(eta1,eta2) | phi R | below / above % | guide GeV T / L | "
+              "|eta|>2.5 % | corr(eta1,eta2) | phi R | below / above % | projection GeV T / L | "
               "drift GeV T / L | wall flips | active by t-quarter % |")
         print("|:---|---:|---:|---:|---:|---:|---:|---:|---:|:---|:---|:---|---:|:---|")
         for key, r in rows.items():
@@ -396,7 +400,7 @@ def run_kinematics(args_cli, device) -> dict:
                   f"{r['pt_median']:.1f} | {r['eta_edge']:.1f} | {r['eta_corr']:+.2f} | "
                   f"{r['phi_resultant']:.3f} | {r['below']:.1f} / {r['above']:.1f} | {anat} |",
                   flush=True)
-        filtered = rows["base (no guidance), filtered to window"]["filtered"]
+        filtered = rows["base (no projection), filtered to window"]["filtered"]
         if filtered:
             print(f"base filtered to window: pT median {filtered['pt_median']:.1f}, "
                   f"|eta|>2.5 {filtered['eta_edge']:.1f}%, corr(eta) {filtered['eta_corr']:+.2f}")

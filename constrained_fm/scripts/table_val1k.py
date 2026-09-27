@@ -17,6 +17,8 @@ import json
 import math
 from pathlib import Path
 
+from constrained_fm.scripts import fewshot_source
+
 DEFAULT_OUTDIR = "constrained_fm/baselines/val1k"
 DEFAULT_TABLE = "constrained_fm/tables/val1k_main.tex"
 
@@ -59,12 +61,19 @@ QUALITATIVE = (
     }),
 )
 
+# Cells that change when the few-shot column is fine-tuned from the base model.
+FINETUNED_CELLS = {
+    "constraint supplied as": "$N$ valid samples",
+    "models trained": "{num} (fine-tuned from 1)",
+}
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Emit the v1k comparison table as LaTeX.")
     parser.add_argument("--outdir", default=DEFAULT_OUTDIR)
     parser.add_argument("--out", default=DEFAULT_TABLE, help="path of the .tex file to write")
     parser.add_argument("--label", default="tab:val1k-main")
+    fewshot_source.add_arguments(parser)
     return parser
 
 
@@ -84,6 +93,8 @@ def header_for(payload: dict, method: str, label: str) -> str:
     """The shot budget is part of the few-shot baseline's identity, so it goes in the header."""
     if method != "fewshot":
         return label
+    if fewshot_source.source_of(payload) == fewshot_source.FINETUNED:
+        label = f"{label} FT"
     n_points = payload["methods"][method].get("eval", {}).get("n_points")
     return f"{label}, $N{{=}}{n_points}$" if n_points else label
 
@@ -117,17 +128,22 @@ def build_table(payload: dict, label: str) -> str:
         lines.append(f"{row_label} & " + " & ".join(cells) + r" \\")
 
     lines.append(r"\midrule")
+    finetuned = fewshot_source.source_of(payload) == fewshot_source.FINETUNED
     for row_label, mapping in QUALITATIVE:
+        if finetuned and row_label in FINETUNED_CELLS:
+            mapping = {**mapping, "fewshot": FINETUNED_CELLS[row_label]}
         # Literal replacement, not str.format: these cells contain LaTeX braces.
         cells = [mapping.get(key, "--").replace("{num}", str(num)) for key, _ in present]
         lines.append(f"{row_label} & " + " & ".join(cells) + r" \\")
 
+    ft_note = (r" Few-shot FT fine-tunes, per constraint, the unconditional base model "
+               r"ECI and HardFlow sample from." if finetuned else "")
     lines += [
         r"\bottomrule",
         r"\end{tabular}",
         rf"\caption{{Median performance over the {num}-polynomial validation set. "
         r"KLD is undefined for ECI and HardFlow, which alter the state outside the "
-        r"probability-flow ODE, so no density of theirs is defined.}",
+        rf"probability-flow ODE, so no density of theirs is defined.{ft_note}}}",
         rf"\label{{{label}}}",
         r"\end{table}",
         "",
@@ -141,7 +157,7 @@ def main(argv: list[str] | None = None) -> int:
     if not path.exists():
         raise FileNotFoundError(
             f"{path} missing -- run `python3 -m constrained_fm.scripts.merge_val1k` first")
-    payload = json.loads(path.read_text())
+    payload = fewshot_source.with_fewshot(json.loads(path.read_text()), args)
 
     table = build_table(payload, args.label)
     out = Path(args.out)

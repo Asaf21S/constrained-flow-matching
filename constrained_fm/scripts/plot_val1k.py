@@ -31,6 +31,7 @@ from pathlib import Path
 
 import numpy as np
 
+from constrained_fm.scripts import fewshot_source
 from constrained_fm.src.experiment import artifacts
 from constrained_fm.src.visualization.comparison import (METHOD_COLORS, METRIC_SPECS,
                                                          plot_metric_trend, plot_parity,
@@ -81,6 +82,7 @@ def build_parser() -> argparse.ArgumentParser:
                         help="constraints the trend window advances between points")
     parser.add_argument("--no-panels", action="store_true",
                         help="render only the combined parity grids, not the standalone panels")
+    fewshot_source.add_arguments(parser)
     return parser
 
 
@@ -119,16 +121,19 @@ def persist_arrays(out: Path, payload: dict, by_method: dict[str, dict[str, np.n
                              method="val1k", validation_set="v1k",
                              poly_digest=payload["poly_digest"],
                              num_constraints=payload["num_constraints"],
-                             methods=sorted(by_method))
+                             methods=sorted(by_method),
+                             fewshot_source=fewshot_source.source_of(payload),
+                             fewshot_run_id=payload["methods"].get(FEWSHOT, {}).get("run_id"))
 
 
 def fewshot_label(payload: dict) -> str | None:
-    """The shot budget is part of the baseline's identity, so it belongs in the legend."""
+    """The shot budget and initialisation are part of the baseline's identity."""
     merged = payload.get("methods", {}).get(FEWSHOT)
     if merged is None:
         return None
+    name = fewshot_source.LABELS[fewshot_source.source_of(payload)]
     n_points = merged.get("eval", {}).get("n_points")
-    return f"Few-Shot ($N{{=}}{n_points}$)" if n_points else "Few-Shot"
+    return f"{name} ($N{{=}}{n_points}$)" if n_points else name
 
 
 def save_both_variants(figure_factory, figure_dir: Path, stem: str,
@@ -261,10 +266,11 @@ def main(argv: list[str] | None = None) -> int:
     out = Path(args.outdir)
     figure_dir = Path(args.figure_dir)
 
-    payload = load_metrics(out)
+    payload = fewshot_source.with_fewshot(load_metrics(out), args)
     by_method, mass = metric_arrays(payload)
     print(f"validation set {payload['validation_set']} | digest {payload['poly_digest']} | "
-          f"{payload['num_constraints']} constraints | methods {sorted(by_method)}")
+          f"{payload['num_constraints']} constraints | methods {sorted(by_method)} | "
+          f"few-shot {fewshot_source.source_of(payload)} N={args.fewshot_budget}")
 
     persist_arrays(out, payload, by_method, mass)
     written = render_trends(by_method, mass, figure_dir, args.window, args.step,

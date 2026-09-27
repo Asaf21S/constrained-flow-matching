@@ -1,0 +1,7 @@
+{
+  "run_id": "few_shot_val1k-aef27ea7",
+  "method": "few_shot_val1k",
+  "fingerprint": "aef27ea712aee01b5b3e2c6f64112413a2e420bc9b74d9821bcbf6f229657cb1",
+  "git_commit": "5636b9f38c9ca9db04828e0bccd12c1a23674b7c",
+  "created_at": "2026-09-27T10:38:45"
+}

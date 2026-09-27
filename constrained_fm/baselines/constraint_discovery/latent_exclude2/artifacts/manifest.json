@@ -64,11 +64,56 @@
         6000
       ],
       "dtype": "int64"
+    },
+    "strip_indices": {
+      "shape": [
+        6
+      ],
+      "dtype": "int64"
+    },
+    "likelihood": {
+      "shape": [
+        200,
+        200
+      ],
+      "dtype": "float32"
+    },
+    "strip_inside": {
+      "shape": [
+        6,
+        200000
+      ],
+      "dtype": "uint8"
+    },
+    "likelihood_vmax": {
+      "shape": [
+        1
+      ],
+      "dtype": "float32"
+    },
+    "metric_x": {
+      "shape": [
+        200000
+      ],
+      "dtype": "float32"
+    },
+    "target_x": {
+      "shape": [
+        849906
+      ],
+      "dtype": "float32"
+    },
+    "density": {
+      "shape": [
+        200,
+        200
+      ],
+      "dtype": "float32"
     }
   },
-  "written_at": "2026-09-25T13:17:42",
-  "git_commit": "135c92c36aaf346b4741fdb680b3ffbfd7a27407",
-  "run_id": "constraint_discovery-959c7a4b",
+  "written_at": "2026-09-27T21:11:54",
+  "git_commit": "c9ff3a3b23037fd79fd5350352b65de5d6e230f2",
+  "run_id": "constraint_discovery-aeaf5f43",
   "config_run_id": "siren-uniform-8d6375ab",
   "iteration": 15001,
   "param": "latent",

@@ -1,0 +1,113 @@
+{
+  "arrays": {
+    "snapshot_steps": {
+      "shape": [
+        31
+      ],
+      "dtype": "int64"
+    },
+    "latents": {
+      "shape": [
+        31,
+        512
+      ],
+      "dtype": "float32"
+    },
+    "fields": {
+      "shape": [
+        31,
+        300,
+        300
+      ],
+      "dtype": "float32"
+    },
+    "mode_inside": {
+      "shape": [
+        31,
+        4
+      ],
+      "dtype": "float32"
+    },
+    "eval_losses": {
+      "shape": [
+        31
+      ],
+      "dtype": "float32"
+    },
+    "z_norm": {
+      "shape": [
+        31
+      ],
+      "dtype": "float32"
+    },
+    "mahalanobis": {
+      "shape": [
+        31
+      ],
+      "dtype": "float32"
+    },
+    "losses": {
+      "shape": [
+        3000
+      ],
+      "dtype": "float32"
+    },
+    "scatter_points": {
+      "shape": [
+        6000,
+        2
+      ],
+      "dtype": "float32"
+    },
+    "scatter_labels": {
+      "shape": [
+        6000
+      ],
+      "dtype": "int64"
+    },
+    "strip_indices": {
+      "shape": [
+        6
+      ],
+      "dtype": "int64"
+    },
+    "likelihood": {
+      "shape": [
+        200,
+        200
+      ],
+      "dtype": "float32"
+    },
+    "strip_inside": {
+      "shape": [
+        6,
+        200000
+      ],
+      "dtype": "uint8"
+    },
+    "likelihood_vmax": {
+      "shape": [
+        1
+      ],
+      "dtype": "float32"
+    },
+    "metric_x": {
+      "shape": [
+        200000
+      ],
+      "dtype": "float32"
+    },
+    "target_x": {
+      "shape": [
+        750270
+      ],
+      "dtype": "float32"
+    }
+  },
+  "written_at": "2026-09-27T20:31:39",
+  "git_commit": "c9ff3a3b23037fd79fd5350352b65de5d6e230f2",
+  "run_id": "constraint_discovery-5bf62808",
+  "config_run_id": "siren-uniform-8d6375ab",
+  "iteration": 15001,
+  "exclude_mode": 1
+}

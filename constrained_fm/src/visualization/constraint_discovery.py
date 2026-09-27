@@ -4,8 +4,10 @@
 Pure consumers of arrays. Fields follow ``meshgrid(axis, axis, indexing="ij")``:
 ``field[i, j]`` is the value at ``(x = axis[j], y = axis[i])``; the feasible side is ``field <= 0``.
 
-* :func:`plot_discovery_frame` -- one snapshot: GMM scatter, shaded region, zero level set(s).
-* :func:`plot_discovery_strip` -- 1xK strip of snapshots over the optimisation.
+* :func:`plot_discovery_frame` -- one snapshot: GMM scatter, shaded region, decoded zero level set.
+* :func:`plot_discovery_strip` -- 2xK strip: scatter + boundary over the optimisation, and below
+  each panel the x-marginal of the GMM points inside the boundary against the 3-mode target.
+* :func:`plot_likelihood_map` -- FM density of one latent over the whole domain.
 * :func:`plot_discovery_history` -- FM loss and per-mode inside fraction against step.
 """
 
@@ -16,8 +18,10 @@ from typing import Any, Sequence
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.colors import Normalize
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
 
 from constrained_fm.src.visualization.diagnostics import smooth_field
 from constrained_fm.src.visualization.style import SERIF_RC
@@ -35,10 +39,17 @@ class DiscoveryStyle:
     region_alpha: float = 0.15
     boundary_color: str = "black"
     boundary_linewidth: float = 2.0
-    poly_color: str = "#ff7f0e"
-    poly_linestyle: str = "--"
-    poly_linewidth: float = 1.8
     smooth_sigma: float = 2.0      # blur before tracing; the w0=30 ripple fragments raw contours
+    likelihood_cmap: str = "viridis"
+    hist_ratio: float = 0.42       # histogram row height relative to a map panel
+    hist_color: str = "#c2410c"
+    hist_fill_alpha: float = 0.25
+    hist_linewidth: float = 1.4
+    gt_color: str = "black"
+    gt_linewidth: float = 1.8
+    gt_linestyle: str = "--"
+    hist_headroom: float = 1.15
+    grid_alpha: float = 0.25
     panel_size: float = 4.5
     title_size: float = 14.0
     caption_size: float = 10.0
@@ -58,7 +69,7 @@ def _grid(resolution: int, scale: float) -> tuple[np.ndarray, np.ndarray]:
 
 
 def _draw_panel(ax, field: np.ndarray, points: np.ndarray, labels: np.ndarray, excluded_mode: int,
-                scale: float, style: DiscoveryStyle, poly_field: np.ndarray | None = None) -> None:
+                scale: float, style: DiscoveryStyle) -> None:
     xx, yy = _grid(field.shape[0], scale)
     traced = smooth_field(np.asarray(field, dtype=np.float32), style.smooth_sigma)
     if traced.min() < 0.0:
@@ -74,9 +85,6 @@ def _draw_panel(ax, field: np.ndarray, points: np.ndarray, labels: np.ndarray, e
     if traced.min() < 0.0 < traced.max():
         ax.contour(xx, yy, traced, levels=[0.0], colors=style.boundary_color,
                    linewidths=style.boundary_linewidth, zorder=4)
-    if poly_field is not None and poly_field.min() < 0.0 < poly_field.max():
-        ax.contour(xx, yy, poly_field, levels=[0.0], colors=style.poly_color,
-                   linestyles=style.poly_linestyle, linewidths=style.poly_linewidth, zorder=3)
 
     ax.set_xlim(-scale, scale)
     ax.set_ylim(-scale, scale)
@@ -84,17 +92,19 @@ def _draw_panel(ax, field: np.ndarray, points: np.ndarray, labels: np.ndarray, e
     ax.tick_params(labelsize=style.tick_size)
 
 
-def _legend_handles(style: DiscoveryStyle, with_poly: bool) -> list[Line2D]:
-    handles = [
+def _legend_handles(style: DiscoveryStyle) -> list[Line2D]:
+    return [
         Line2D([], [], marker="o", ls="", color=style.target_color, label="target modes"),
         Line2D([], [], marker="o", ls="", color=style.excluded_color, label="excluded mode"),
         Line2D([], [], color=style.boundary_color, lw=style.boundary_linewidth,
                label=r"decoded $f_\theta(x, z_c) = 0$"),
     ]
-    if with_poly:
-        handles.append(Line2D([], [], color=style.poly_color, ls=style.poly_linestyle,
-                              lw=style.poly_linewidth, label=r"polynomial $P_C(x) = 0$"))
-    return handles
+
+
+def _density(values: np.ndarray, edges: np.ndarray) -> np.ndarray:
+    """Histogram normalised to unit area; all zeros for an empty sample."""
+    counts, _ = np.histogram(values, bins=edges)
+    return counts / max(len(values), 1) / np.diff(edges)
 
 
 def mode_caption(mode_inside: np.ndarray, excluded_mode: int) -> str:
@@ -107,17 +117,16 @@ def mode_caption(mode_inside: np.ndarray, excluded_mode: int) -> str:
 def plot_discovery_frame(field: np.ndarray, points: np.ndarray, labels: np.ndarray,
                          excluded_mode: int, scale: float, title: str,
                          mode_inside: np.ndarray | None = None,
-                         poly_field: np.ndarray | None = None,
                          style: DiscoveryStyle | None = None) -> Figure:
     style = style or DiscoveryStyle()
     with plt.rc_context(SERIF_RC):
         fig, ax = plt.subplots(figsize=(style.panel_size, style.panel_size))
-        _draw_panel(ax, field, points, labels, excluded_mode, scale, style, poly_field)
+        _draw_panel(ax, field, points, labels, excluded_mode, scale, style)
         ax.set_title(title, fontsize=style.title_size)
         if mode_inside is not None:
             ax.set_xlabel(mode_caption(mode_inside, excluded_mode), fontsize=style.caption_size)
         if style.show_legend:
-            ax.legend(handles=_legend_handles(style, poly_field is not None),
+            ax.legend(handles=_legend_handles(style),
                       loc="upper left", fontsize=style.legend_size, framealpha=0.85)
         fig.tight_layout()
     return fig
@@ -125,27 +134,86 @@ def plot_discovery_frame(field: np.ndarray, points: np.ndarray, labels: np.ndarr
 
 def plot_discovery_strip(fields: np.ndarray, steps: Sequence[int], points: np.ndarray,
                          labels: np.ndarray, excluded_mode: int, scale: float,
-                         mode_inside: np.ndarray | None = None,
-                         poly_fields: np.ndarray | None = None,
+                         inside_x: Sequence[np.ndarray], target_x: np.ndarray,
+                         mode_inside: np.ndarray | None = None, bins: int = 120,
                          style: DiscoveryStyle | None = None) -> Figure:
-    """``fields``: (K, R, R) snapshots, one panel each, sharing axes."""
+    """Top: scatter, shaded region and decoded boundary; bottom: first-coordinate marginal.
+
+    ``fields``: (K, R, R) decoded snapshots. ``inside_x[k]``: first coordinate of the labelled
+    GMM points on the feasible side of snapshot k, shaded. ``target_x``: first coordinate of the
+    3-mode optimisation target, dashed.
+    """
     style = style or DiscoveryStyle()
     k = len(fields)
+
+    edges = np.linspace(-scale, scale, bins + 1)
+    centres = 0.5 * (edges[:-1] + edges[1:])
+    gt = _density(target_x, edges)
+    hists = [_density(x, edges) for x in inside_x]
+    y_max = style.hist_headroom * max([gt.max()] + [h.max() for h in hists])
+
     with plt.rc_context(SERIF_RC):
-        fig, axes = plt.subplots(1, k, figsize=(style.panel_size * k, style.panel_size + 0.4),
-                                 sharex=True, sharey=True, squeeze=False)
-        for i, ax in enumerate(axes[0]):
-            _draw_panel(ax, fields[i], points, labels, excluded_mode, scale, style,
-                        None if poly_fields is None else poly_fields[i])
+        fig = plt.figure(figsize=(style.panel_size * k,
+                                  style.panel_size * (1.0 + style.hist_ratio) + 1.2))
+        gs = fig.add_gridspec(2, k, height_ratios=[1.0, style.hist_ratio])
+        top = [fig.add_subplot(gs[0, i]) for i in range(k)]
+        bottom = [fig.add_subplot(gs[1, i]) for i in range(k)]
+        for i in range(k):
+            ax = top[i]
+            _draw_panel(ax, fields[i], points, labels, excluded_mode, scale, style)
             ax.set_title(f"step {int(steps[i])}", fontsize=style.title_size)
             if mode_inside is not None:
                 ax.set_xlabel(mode_caption(mode_inside[i], excluded_mode),
                               fontsize=style.caption_size)
-            ax.label_outer()
+
+            ax = bottom[i]
+            ax.fill_between(centres, hists[i], step="mid", color=style.hist_color,
+                            alpha=style.hist_fill_alpha, linewidth=0)
+            ax.step(centres, hists[i], where="mid", color=style.hist_color,
+                    linewidth=style.hist_linewidth)
+            ax.step(centres, gt, where="mid", color=style.gt_color, linewidth=style.gt_linewidth,
+                    linestyle=style.gt_linestyle)
+            ax.set_xlim(-scale, scale)
+            ax.set_ylim(0.0, y_max)
+            ax.grid(True, alpha=style.grid_alpha)
+            ax.tick_params(labelsize=style.tick_size)
+            ax.set_xlabel(r"first coordinate $x$", fontsize=style.caption_size)
+            if i > 0:
+                top[i].tick_params(labelleft=False)
+                ax.tick_params(labelleft=False)
+        bottom[0].set_ylabel("density", fontsize=style.caption_size)
         if style.show_legend:
-            axes[0, 0].legend(handles=_legend_handles(style, poly_fields is not None),
-                              loc="upper left", fontsize=style.legend_size, framealpha=0.85)
+            top[0].legend(handles=_legend_handles(style), loc="upper left",
+                          fontsize=style.legend_size, framealpha=0.85)
+            bottom[0].legend(handles=[
+                Patch(facecolor=style.hist_color, alpha=style.hist_fill_alpha,
+                      edgecolor=style.hist_color, label=r"GMM inside $f_\theta \leq 0$"),
+                Line2D([], [], color=style.gt_color, lw=style.gt_linewidth,
+                       ls=style.gt_linestyle, label="target (3 modes)"),
+            ], loc="upper right", fontsize=style.legend_size, framealpha=0.85)
         fig.tight_layout()
+    return fig
+
+
+def plot_likelihood_map(likelihood: np.ndarray, scale: float, vmax: float,
+                        style: DiscoveryStyle | None = None) -> Figure:
+    """FM density on ``+-scale`` (row is y), laid out like the true-GMM likelihood figure.
+
+    ``vmax`` is the target's peak density; exact-divergence blow-ups saturate instead of
+    setting the colour scale.
+    """
+    style = style or DiscoveryStyle()
+    norm = Normalize(vmin=0.0, vmax=vmax, clip=True)
+    with plt.rc_context(SERIF_RC):
+        fig, ax = plt.subplots(figsize=(6, 6))
+        image = ax.imshow(np.nan_to_num(likelihood, nan=0.0, posinf=vmax), origin="lower",
+                          extent=(-scale, scale, -scale, scale), cmap=style.likelihood_cmap,
+                          norm=norm)
+        ax.grid(False)
+        ax.set_aspect("equal")
+        cbar = fig.colorbar(image, ax=ax, orientation="vertical")
+        cbar.set_label("Model Density")
+        cbar.ax.tick_params(labelsize=style.tick_size)
     return fig
 
 
@@ -184,4 +252,4 @@ def plot_discovery_history(losses: np.ndarray, snapshot_steps: np.ndarray,
 
 
 __all__ = ["DiscoveryStyle", "get_style", "mode_caption", "plot_discovery_frame",
-           "plot_discovery_strip", "plot_discovery_history"]
+           "plot_discovery_strip", "plot_likelihood_map", "plot_discovery_history"]

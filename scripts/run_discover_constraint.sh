@@ -11,13 +11,13 @@
 #SBATCH --mail-user=asafucho@gmail.com
 #SBATCH --mail-type=BEGIN,END,FAIL
 
-# Test-time FM-loss optimisation of a constraint isolating 3 of the 4 GMM modes (frozen FM + SIREN).
-# Arrays -> constrained_fm/baselines/constraint_discovery/<param>_exclude<mode>/artifacts/,
-# figures -> constrained_fm/images/thesis_pool/constraint_discovery/<param>_exclude<mode>/.
+# Test-time FM-loss optimisation of a latent z_c isolating 3 of the 4 GMM modes (frozen FM + SIREN).
+# Arrays -> constrained_fm/baselines/constraint_discovery/latent_exclude<mode>/artifacts/,
+# figures -> constrained_fm/images/thesis_pool/constraint_discovery/latent_exclude<mode>/.
 #
 #   sbatch scripts/run_discover_constraint.sh --smoke
 #   sbatch scripts/run_discover_constraint.sh
-#   sbatch scripts/run_discover_constraint.sh --param coeffs
+#   sbatch scripts/run_discover_constraint.sh --exclude-mode 1
 #   sbatch scripts/run_discover_constraint.sh --plot-only
 
 set -eo pipefail

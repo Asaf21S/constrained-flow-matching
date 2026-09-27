@@ -1,0 +1,32 @@
+{
+  "run_id": "constraint_discovery-456ebe0a",
+  "config_run_id": "siren-uniform-8d6375ab",
+  "iteration": 15001,
+  "exclude_mode": 1,
+  "target_modes": [
+    0,
+    2,
+    3
+  ],
+  "scale": 4.5,
+  "lr": 0.003,
+  "steps": 3000,
+  "batch_size": 4096,
+  "subspace_dim": 15,
+  "subspace_explained_var": 0.9999999782048677,
+  "z_reg_weight": 0.0,
+  "reference_z_norm": 0.012713178992271423,
+  "reference_mahalanobis": 0.03246735781431198,
+  "initial_eval_loss": 2.404245376586914,
+  "final": {
+    "mode_inside": [
+      0.9999428987503052,
+      0.08083611726760864,
+      0.9339290261268616,
+      0.9509494304656982
+    ],
+    "eval_loss": 2.1582417488098145,
+    "z_norm": 0.004515890032052994,
+    "mahalanobis": 0.007397194392979145
+  }
+}

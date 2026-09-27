@@ -1,9 +1,8 @@
 {
-  "run_id": "constraint_discovery-959c7a4b",
+  "run_id": "constraint_discovery-aeaf5f43",
   "method": "constraint_discovery",
-  "fingerprint": "959c7a4b3c46d09a774562a531e50351c3c0323490934f70f46472555cfa6b16",
-  "git_commit": "135c92c36aaf346b4741fdb680b3ffbfd7a27407",
-  "created_at": "2026-09-25T13:17:42",
-  "config_run_id": "siren-uniform-8d6375ab",
-  "lr_resolved": 1e-05
+  "fingerprint": "aeaf5f4329f0c47a47538d6792363ffb55737060e9220ac70e05127cccc4bbf7",
+  "git_commit": "c9ff3a3b23037fd79fd5350352b65de5d6e230f2",
+  "created_at": "2026-09-27T20:59:16",
+  "config_run_id": "siren-uniform-8d6375ab"
 }

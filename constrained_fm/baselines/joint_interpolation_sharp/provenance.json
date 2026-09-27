@@ -1,0 +1,9 @@
+{
+  "run_id": "joint_interpolation-f96820ed",
+  "method": "joint_interpolation",
+  "fingerprint": "f96820ededd4de377cb4ef9825171e459b0e829bf116a579cad01b7a9bb12fce",
+  "git_commit": "3d167cf0283d868a1f0e60b2a3aa994a67bcd1fa",
+  "created_at": "2026-09-27T18:02:26",
+  "siren_run_id": "joint_siren-490e48e3",
+  "tau": 0.9
+}

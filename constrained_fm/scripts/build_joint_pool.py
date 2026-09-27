@@ -84,7 +84,7 @@ def main(argv: list[str] | None = None) -> int:
         extraction_steps=meta["inner_steps"], extraction_lr=meta["inner_lr"],
         chunk_size=args.chunk_size, query_gmm_fraction=meta["query_gmm_fraction"],
         degree=meta["degree"], scale=meta["scale"], min_mass=meta["min_mass"],
-        max_mass=meta["max_mass"], device=device)
+        max_mass=meta["max_mass"], device=device, poly_gain=meta["poly_gain"])
 
     path = outdir / "pool.pt"
     tmp = path.with_suffix(".pt.tmp")

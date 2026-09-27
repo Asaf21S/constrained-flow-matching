@@ -1,0 +1,9 @@
+{
+  "run_id": "joint_pool-91bd9b20",
+  "method": "joint_pool",
+  "fingerprint": "91bd9b205185d02623e2ec8e8eb75afade86818c06880cb4aff55abd73b89f1b",
+  "git_commit": "3d167cf0283d868a1f0e60b2a3aa994a67bcd1fa",
+  "created_at": "2026-09-27T18:02:20",
+  "siren_run_id": "joint_siren-490e48e3",
+  "tau": 0.9
+}

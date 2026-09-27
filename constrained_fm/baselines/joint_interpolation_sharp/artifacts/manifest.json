@@ -1,0 +1,104 @@
+{
+  "arrays": {
+    "family": {
+      "shape": [
+        8
+      ],
+      "dtype": "int64"
+    },
+    "sign": {
+      "shape": [
+        8
+      ],
+      "dtype": "float32"
+    },
+    "C": {
+      "shape": [
+        8,
+        4,
+        4
+      ],
+      "dtype": "float32"
+    },
+    "normals": {
+      "shape": [
+        8,
+        11,
+        2
+      ],
+      "dtype": "float32"
+    },
+    "offsets": {
+      "shape": [
+        8,
+        11
+      ],
+      "dtype": "float32"
+    },
+    "active": {
+      "shape": [
+        8,
+        11
+      ],
+      "dtype": "bool"
+    },
+    "latents": {
+      "shape": [
+        8,
+        512
+      ],
+      "dtype": "float32"
+    },
+    "query_points": {
+      "shape": [
+        8,
+        1000,
+        2
+      ],
+      "dtype": "float32"
+    },
+    "true_fields": {
+      "shape": [
+        8,
+        400,
+        400
+      ],
+      "dtype": "float32"
+    },
+    "interp_fields": {
+      "shape": [
+        4,
+        9,
+        400,
+        400
+      ],
+      "dtype": "float32"
+    },
+    "interp_times": {
+      "shape": [
+        9
+      ],
+      "dtype": "float32"
+    },
+    "path_mass": {
+      "shape": [
+        4,
+        9
+      ],
+      "dtype": "float32"
+    },
+    "path_z_norm": {
+      "shape": [
+        4,
+        9
+      ],
+      "dtype": "float32"
+    }
+  },
+  "written_at": "2026-09-27T18:02:26",
+  "git_commit": "3d167cf0283d868a1f0e60b2a3aa994a67bcd1fa",
+  "run_id": "joint_interpolation-f96820ed",
+  "siren_run_id": "joint_siren-490e48e3",
+  "checkpoint": "siren_best.pt",
+  "tau": 0.9
+}

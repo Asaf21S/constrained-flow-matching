@@ -58,6 +58,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--w0", type=float, default=30.0)
     parser.add_argument("--tau", type=float, default=None,
                         help="polygon target tanh(C / tau); default matches the polynomial boundary slope")
+    parser.add_argument("--poly-gain", type=float, default=1.0,
+                        help="polynomial target tanh(g P)")
+    parser.add_argument("--match-slope", action="store_true",
+                        help="set g = 1 / (slope * tau) so both families cross zero equally steeply")
     parser.add_argument("--query-gmm-fraction", type=float, default=FUNCTA_QUERY_GMM_FRACTION)
     parser.add_argument("--min-mass", type=float, default=POLY_MIN_AREA_RATIO)
     parser.add_argument("--max-mass", type=float, default=POLY_MAX_AREA_RATIO)
@@ -105,11 +109,13 @@ def main(argv: list[str] | None = None) -> int:
     slope = jc.polynomial_boundary_slope(POLYNOMIAL_DEGREE, PLANE_SCALE, args.min_mass,
                                          args.max_mass, device=device)
     tau = args.tau if args.tau is not None else 1.0 / slope
+    if args.match_slope:
+        args.poly_gain = 1.0 / (slope * tau)
     outdir = resolve_path(args.outdir)
     run_id = pin_baseline_run(outdir, "joint_siren", args,
                               extra={"tau": tau, "boundary_slope": slope})
     print(f"run {run_id} | device {device} | boundary slope {slope:.4f} | tau {tau:.4f} | "
-          f"polygon fraction {args.polygon_fraction}")
+          f"poly gain {args.poly_gain:.4f} | polygon fraction {args.polygon_fraction}")
 
     proxy = jc.proxy_set(args.proxy_points, POLYNOMIAL_DEGREE, PLANE_SCALE, device)
 
@@ -117,7 +123,7 @@ def main(argv: list[str] | None = None) -> int:
         return jc.draw_joint_batch(count, proxy, args.points_per_shape, tau,
                                    args.polygon_fraction, True, args.query_gmm_fraction,
                                    POLYNOMIAL_DEGREE, PLANE_SCALE, args.min_mass,
-                                   args.max_mass, device)
+                                   args.max_mass, device, args.poly_gain)
 
     val_shapes, val_x, val_y = draw(args.val_shapes)
     iou_points, _ = get_points(args.iou_points, device=device)
@@ -128,6 +134,7 @@ def main(argv: list[str] | None = None) -> int:
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.5, patience=25)
 
     meta = {"run_id": run_id, "method": "joint_siren", "tau": tau, "boundary_slope": slope,
+            "poly_gain": args.poly_gain,
             "polygon_fraction": args.polygon_fraction, "degree": POLYNOMIAL_DEGREE,
             "scale": PLANE_SCALE, "min_mass": args.min_mass, "max_mass": args.max_mass,
             "latent_dim": args.latent_dim, "hidden_dim": args.hidden_dim,

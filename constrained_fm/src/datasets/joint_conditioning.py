@@ -158,18 +158,18 @@ def sample_joint_shapes(count: int, proxy: dict[str, torch.Tensor],
 
 
 def constraint_values(shapes: Shapes, x: torch.Tensor, tau: float,
-                      degree: int = POLYNOMIAL_DEGREE,
-                      scale: float = PLANE_SCALE) -> torch.Tensor:
+                      degree: int = POLYNOMIAL_DEGREE, scale: float = PLANE_SCALE,
+                      poly_gain: float = 1.0) -> torch.Tensor:
     """Oriented field ``s * v(x)`` whose ``tanh`` is the regression target; (B, N, 2) -> (B, N).
 
-    ``{s v <= 0}`` is the feasible region: ``v = P`` for polynomials, ``v = C / tau`` for
+    ``{s v <= 0}`` is the feasible region: ``v = g P`` for polynomials, ``v = C / tau`` for
     polygons, and ``s = -1`` its exact complement.
     """
     values = x.new_empty(x.shape[:2])
     poly = shapes["family"] == FAMILY_POLYNOMIAL
     if bool(poly.any()):
         x_pow, y_pow = compute_poly_features_batched(x[poly], degree=degree, scale=scale)
-        values[poly] = evaluate_poly_batched(x_pow, y_pow, shapes["C"][poly])
+        values[poly] = poly_gain * evaluate_poly_batched(x_pow, y_pow, shapes["C"][poly])
     gon = ~poly
     if bool(gon.any()):
         values[gon] = polygon_values(x[gon], shapes["normals"][gon], shapes["offsets"][gon],
@@ -178,10 +178,11 @@ def constraint_values(shapes: Shapes, x: torch.Tensor, tau: float,
 
 
 def regression_targets(shapes: Shapes, x_raw: torch.Tensor, tau: float,
-                       degree: int = POLYNOMIAL_DEGREE,
-                       scale: float = PLANE_SCALE) -> tuple[torch.Tensor, torch.Tensor]:
+                       degree: int = POLYNOMIAL_DEGREE, scale: float = PLANE_SCALE,
+                       poly_gain: float = 1.0) -> tuple[torch.Tensor, torch.Tensor]:
     """``(x / S, tanh(s v(x)))`` for raw-plane query points (B, N, 2)."""
-    return x_raw / scale, torch.tanh(constraint_values(shapes, x_raw, tau, degree, scale))
+    values = constraint_values(shapes, x_raw, tau, degree, scale, poly_gain)
+    return x_raw / scale, torch.tanh(values)
 
 
 def draw_joint_batch(count: int, proxy: dict[str, torch.Tensor], points_per_shape: int,
@@ -190,14 +191,14 @@ def draw_joint_batch(count: int, proxy: dict[str, torch.Tensor], points_per_shap
                      degree: int = POLYNOMIAL_DEGREE, scale: float = PLANE_SCALE,
                      min_mass: float = POLY_MIN_AREA_RATIO,
                      max_mass: float = POLY_MAX_AREA_RATIO,
-                     device: torch.device | str | None = None
+                     device: torch.device | str | None = None, poly_gain: float = 1.0
                      ) -> tuple[Shapes, torch.Tensor, torch.Tensor]:
     """Mixed constraints with their CAVIA query points ``x / S`` and targets."""
     shapes = sample_joint_shapes(count, proxy, polygon_fraction, random_sign, degree, scale,
                                  min_mass, max_mass, device)
     x_raw = sample_query_points(count, points_per_shape, scale=scale,
                                 gmm_fraction=query_gmm_fraction, device=device)
-    x, y = regression_targets(shapes, x_raw, tau, degree, scale)
+    x, y = regression_targets(shapes, x_raw, tau, degree, scale, poly_gain)
     return shapes, x, y
 
 
@@ -237,7 +238,8 @@ def build_joint_pool(siren: nn.Module, proxy: dict[str, torch.Tensor], tau: floa
                      degree: int = POLYNOMIAL_DEGREE, scale: float = PLANE_SCALE,
                      min_mass: float = POLY_MIN_AREA_RATIO,
                      max_mass: float = POLY_MAX_AREA_RATIO,
-                     device: torch.device | str | None = None) -> dict[str, torch.Tensor]:
+                     device: torch.device | str | None = None,
+                     poly_gain: float = 1.0) -> dict[str, torch.Tensor]:
     """Both orientations of every pool constraint, on CPU.
 
     ``z_pos`` encodes ``{v <= 0}`` and ``z_neg`` its exact complement ``{-v <= 0}``, extracted
@@ -252,7 +254,7 @@ def build_joint_pool(siren: nn.Module, proxy: dict[str, torch.Tensor], tau: floa
         count = min(chunk_size, pool_size - start)
         shapes, x, y = draw_joint_batch(count, proxy, points_per_shape, tau, polygon_fraction,
                                         False, query_gmm_fraction, degree, scale, min_mass,
-                                        max_mass, device)
+                                        max_mass, device, poly_gain)
         z_pos, mse_pos = extract_latents_batched(siren, x, y, lr=extraction_lr,
                                                  steps=extraction_steps)
         z_neg, mse_neg = extract_latents_batched(siren, x, -y, lr=extraction_lr,
@@ -269,6 +271,7 @@ def load_joint_siren(siren_dir: Path, checkpoint: str,
                      device: torch.device) -> tuple[ModulatedSIREN, dict]:
     """Frozen joint SIREN plus the training metadata (tau, CAVIA settings) in ``metrics.json``."""
     meta = json.loads((siren_dir / "metrics.json").read_text())
+    meta.setdefault("poly_gain", 1.0)
     siren = build_modulated_siren(latent_dim=meta["latent_dim"], hidden_dim=meta["hidden_dim"],
                                   n_layers=meta["n_layers"], w0=meta["w0"]).to(device)
     siren.load_state_dict(torch.load(siren_dir / checkpoint, map_location=device,

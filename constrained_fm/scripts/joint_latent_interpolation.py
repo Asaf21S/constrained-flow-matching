@@ -139,7 +139,7 @@ def main(argv: list[str] | None = None) -> int:
 
     x_raw = sample_query_points(2 * num_pairs, meta["points_per_shape"], scale=scale,
                                 gmm_fraction=meta["query_gmm_fraction"], device=device)
-    x, y = jc.regression_targets(shapes, x_raw, tau, degree, scale)
+    x, y = jc.regression_targets(shapes, x_raw, tau, degree, scale, meta["poly_gain"])
     z, extraction_mse = extract_latents_batched(siren, x, y, lr=meta["inner_lr"],
                                                 steps=meta["inner_steps"])
 

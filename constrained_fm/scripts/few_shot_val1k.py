@@ -18,8 +18,13 @@ as a single method covering each constraint twice.
 Per-constraint results are checkpointed to ``results/`` before the shard file is written, so
 a preempted job resumes instead of retraining what it already finished.
 
+With ``--finetune`` every constraint instead starts from the unconditional base model that
+ECI and HardFlow sample from, reloaded fresh for each constraint. That mode writes to its own
+directory tree, since the resume logic would otherwise take from-scratch results as done.
+
     sbatch scripts/run_val1k_fewshot.sh
     N=100 METHOD=fewshot_N100 sbatch scripts/run_val1k_fewshot.sh
+    N=100 FINETUNE=1 sbatch scripts/run_val1k_fewshot.sh
     python -m constrained_fm.scripts.few_shot_val1k --start-idx 0 --end-idx 50 --num-points 2000
     python -m constrained_fm.scripts.few_shot_val1k --start-idx 0 --end-idx 50 --assemble-only
 """
@@ -57,6 +62,16 @@ METRIC_KEYS = ("success_rate", "swd", "mmd", "jsd", "nll", "kld")
 
 DEFAULT_OUTDIR = "constrained_fm/baselines/val1k"
 DEFAULT_WORKDIR = "constrained_fm/baselines/few_shot_val1k"
+SCRATCH_LR = 1e-3
+SCRATCH_EVAL_EVERY = 250
+
+# Same checkpoint eval_val1k loads for ECI and HardFlow.
+BASE_CKPT = "constrained_fm/baselines/base_fm/ckpt.pt"
+FINETUNE_DIR = "constrained_fm/baselines/few_shot_finetuned_v1k"
+FINETUNE_METHOD_PREFIX = "fewshot_ft"
+# Lower LR limits forgetting of the base GMM; faster convergence needs finer early stopping.
+FINETUNE_LR = 1e-4
+FINETUNE_EVAL_EVERY = 100
 
 # Must match eval_val1k, or the metrics are measured against a different ground truth.
 REFERENCE_POOL_SEED = 20_000
@@ -81,10 +96,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--iterations", type=int, default=20000,
                         help="upper bound; early stopping decides")
     parser.add_argument("--batch-size", type=int, default=256)
-    parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument("--lr", type=float, default=None,
+                        help=f"default {SCRATCH_LR:g} from scratch, {FINETUNE_LR:g} fine-tuning")
     parser.add_argument("--val-points", type=int, default=10000,
                         help="held-out constraint-satisfying points driving early stopping")
-    parser.add_argument("--eval-every", type=int, default=250)
+    parser.add_argument("--eval-every", type=int, default=None,
+                        help=f"default {SCRATCH_EVAL_EVERY} from scratch, "
+                             f"{FINETUNE_EVAL_EVERY} fine-tuning")
     parser.add_argument("--patience", type=int, default=12,
                         help="evaluations without improvement")
 
@@ -97,17 +115,51 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--degree", type=int, default=POLYNOMIAL_DEGREE)
     parser.add_argument("--scale", type=float, default=PLANE_SCALE)
-    parser.add_argument("--outdir", default=DEFAULT_OUTDIR,
-                        help="v1k directory whose shards/ this baseline joins")
-    parser.add_argument("--workdir", default=DEFAULT_WORKDIR,
-                        help="per-constraint results and provenance for this baseline")
-    parser.add_argument("--method", default=METHOD,
-                        help="method name the shards carry; must be unique per shot budget")
+    parser.add_argument("--finetune", action="store_true",
+                        help="start every constraint from --base-ckpt instead of random weights")
+    parser.add_argument("--base-ckpt", default=BASE_CKPT,
+                        help="unconditional base model to fine-tune from")
+    parser.add_argument("--outdir", default=None,
+                        help=f"v1k directory whose shards/ this baseline joins (default "
+                             f"{DEFAULT_OUTDIR}, or {FINETUNE_DIR} fine-tuning)")
+    parser.add_argument("--workdir", default=None,
+                        help=f"per-constraint results and provenance (default "
+                             f"{DEFAULT_WORKDIR}, or {FINETUNE_DIR} fine-tuning)")
+    parser.add_argument("--method", default=None,
+                        help=f"method name the shards carry; must be unique per shot budget "
+                             f"(default {METHOD}, or {FINETUNE_METHOD_PREFIX}_N<points>)")
     parser.add_argument("--assemble-only", action="store_true",
                         help="write the shard file from existing per-constraint results")
     parser.add_argument("--save-samples", action="store_true",
                         help="also persist the raw (N, 2) sample tensor per constraint")
     return parser
+
+
+def resolve_mode_defaults(args: argparse.Namespace) -> None:
+    """Fills every mode-dependent default, and refuses to mix the two runs' result trees."""
+    if args.finetune:
+        args.lr = FINETUNE_LR if args.lr is None else args.lr
+        args.eval_every = FINETUNE_EVAL_EVERY if args.eval_every is None else args.eval_every
+        args.outdir = args.outdir or FINETUNE_DIR
+        args.workdir = args.workdir or FINETUNE_DIR
+        args.method = args.method or f"{FINETUNE_METHOD_PREFIX}_N{args.num_points}"
+        clashes = {Path(args.outdir), Path(args.workdir)} & {Path(DEFAULT_OUTDIR),
+                                                              Path(DEFAULT_WORKDIR)}
+        if clashes:
+            raise ValueError(f"--finetune must not write into the from-scratch tree: {clashes}")
+    else:
+        args.lr = SCRATCH_LR if args.lr is None else args.lr
+        args.eval_every = SCRATCH_EVAL_EVERY if args.eval_every is None else args.eval_every
+        args.outdir = args.outdir or DEFAULT_OUTDIR
+        args.workdir = args.workdir or DEFAULT_WORKDIR
+        args.method = args.method or METHOD
+
+
+def load_base_state(args, device) -> dict[str, torch.Tensor]:
+    path = Path(args.base_ckpt)
+    if not path.exists():
+        raise FileNotFoundError(f"{path} not found -- run scripts/run_base_fm.sh first")
+    return torch.load(path, map_location=device, weights_only=True)
 
 
 def seed_metric_rng(index: int) -> None:
@@ -141,15 +193,17 @@ def pin_once(workdir: Path, args) -> str:
 
 
 def run_item(index: int, C: torch.Tensor, gmm_pool: torch.Tensor, pool_features,
-             nll_points: torch.Tensor, mass: float, args, device) -> tuple[dict, np.ndarray]:
+             nll_points: torch.Tensor, mass: float, args, device,
+             base_state: dict | None = None) -> tuple[dict, np.ndarray]:
     """Trains one specialist on N valid points and scores it like every other v1k method."""
+    # Seeded before any draw, so fine-tuning sees the exact points the from-scratch run did.
     set_seed(TRAIN_SEED + args.seed + index)
     started = time.time()
 
     x_train = rejection_sample(C, args.num_points, args.degree, args.scale, device)
     x_val = rejection_sample(C, args.val_points, args.degree, args.scale, device)
 
-    model, train_info = train_few_shot(x_train, x_val, args, device)
+    model, train_info = train_few_shot(x_train, x_val, args, device, init_state=base_state)
     train_seconds = time.time() - started
 
     samples = model.sample(num_points=args.num_x0, step_size=args.step_size, device=device)
@@ -172,7 +226,9 @@ def run_item(index: int, C: torch.Tensor, gmm_pool: torch.Tensor, pool_features,
     record.update({"index": index, "n_points": args.num_points, "mass": mass,
                    "train_seconds": train_seconds,
                    "best_iteration": train_info["best_iteration"],
-                   "stopped_at": train_info["stopped_at"]})
+                   "stopped_at": train_info["stopped_at"],
+                   "best_val_loss": train_info["best_val_loss"],
+                   "initial_val_loss": train_info["initial_val_loss"]})
     return record, samples.detach().cpu().numpy().astype(np.float32)
 
 
@@ -210,7 +266,11 @@ def assemble_shard(out: Path, workdir: Path, indices: list[int], run_id: str, di
                  "gmm_pool_size": args.gmm_pool_size, "step_size": args.step_size,
                  "nll_points": args.nll_points, "val_points": args.val_points,
                  "reference_pool_seed": REFERENCE_POOL_SEED,
-                 "median_train_seconds": float(np.median([r["train_seconds"] for r in records]))},
+                 "init": args.base_ckpt if args.finetune else "scratch",
+                 "lr": args.lr, "eval_every": args.eval_every,
+                 "median_train_seconds": float(np.median([r["train_seconds"] for r in records])),
+                 "median_best_iteration": float(np.median([r["best_iteration"]
+                                                           for r in records]))},
         "per_shape": per_shape,
         "summary": summarize(per_shape),
     }
@@ -223,6 +283,7 @@ def main(argv: list[str] | None = None) -> int:
     from constrained_fm.src.datasets.validation_v1k import get_validation_set_v1k
 
     args = build_parser().parse_args(argv)
+    resolve_mode_defaults(args)
     device = resolve_device()
     out = Path(args.outdir)
     workdir = Path(args.workdir)
@@ -244,10 +305,13 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     polys = val_set["polynomials"].to(device)
+    base_state = load_base_state(args, device) if args.finetune else None
 
     print(f"run_id {run_id} | device {device} | constraints [{start}, {end}) of {total}")
     print(f"digest {val_set['poly_digest']} | N {args.num_points} | "
-          f"model: hidden {args.hidden_dim}, {args.num_blocks} blocks", flush=True)
+          f"model: hidden {args.hidden_dim}, {args.num_blocks} blocks | "
+          f"init {args.base_ckpt if args.finetune else 'scratch'} | lr {args.lr:g} | "
+          f"eval every {args.eval_every}", flush=True)
 
     # One fixed reference pool for every shard and every method: the SWD/MMD/JSD of two
     # methods are only comparable if they were measured against the same ground truth.
@@ -265,7 +329,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             record, samples = run_item(index, polys[index], gmm_pool, pool_features,
                                        nll_set["points"][index], float(nll_set["mass"][index]),
-                                       args, device)
+                                       args, device, base_state=base_state)
         except Exception as exc:
             print(f"constraint {index}: FAILED ({type(exc).__name__}: {exc})", flush=True)
             continue

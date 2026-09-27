@@ -117,15 +117,23 @@ def rejection_sample(C: torch.Tensor, count: int, degree: int, scale: float,
     return torch.cat(collected, dim=0)[:count]
 
 
-def train_few_shot(x_train: torch.Tensor, x_val: torch.Tensor, args, device) -> tuple[UnconstrainedFM, dict]:
+def train_few_shot(x_train: torch.Tensor, x_val: torch.Tensor, args, device,
+                   init_state: dict | None = None) -> tuple[UnconstrainedFM, dict]:
     """Trains an unconditional flow matcher on x_train, early-stopping on x_val.
 
     The validation loss is evaluated on a *fixed* (t, x_0) draw so the stopping signal is
     deterministic; resampling it every check would make the comparison across N noisier
     than the effect being measured.
+
+    With init_state the model is fine-tuned from those weights instead of trained from
+    scratch, and the untouched starting point competes for best checkpoint, so fine-tuning
+    never returns a model that fits the held-out valid points worse than it began.
     """
     model = UnconstrainedFM(time_dim=args.time_dim, hidden_dim=args.hidden_dim,
                             num_blocks=args.num_blocks).to(device)
+    # load_state_dict copies into this fresh model, so init_state itself is never modified.
+    if init_state is not None:
+        model.load_state_dict(init_state)
     prob_path = AffineProbPath(scheduler=CondOTScheduler())
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
@@ -134,8 +142,18 @@ def train_few_shot(x_train: torch.Tensor, x_val: torch.Tensor, args, device) -> 
     val_t = torch.rand(x_val.shape[0], generator=generator).to(device)
     val_sample = prob_path.sample(t=val_t, x_0=val_x0, x_1=x_val)
 
+    def validation_loss() -> float:
+        model.eval()
+        with torch.no_grad():
+            val_pred = model(val_sample.x_t, val_sample.t)
+            return float(torch.pow(val_pred - val_sample.dx_t, 2).mean())
+
     best_loss, best_state, best_iter, stale = float("inf"), None, 0, 0
+    initial_val_loss = float("nan")
     history = []
+    if init_state is not None:
+        initial_val_loss = best_loss = validation_loss()
+        best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
 
     for iteration in range(1, args.iterations + 1):
         model.train()
@@ -153,10 +171,7 @@ def train_few_shot(x_train: torch.Tensor, x_val: torch.Tensor, args, device) -> 
         optimizer.step()
 
         if iteration % args.eval_every == 0:
-            model.eval()
-            with torch.no_grad():
-                val_pred = model(val_sample.x_t, val_sample.t)
-                val_loss = float(torch.pow(val_pred - val_sample.dx_t, 2).mean())
+            val_loss = validation_loss()
             history.append((iteration, float(loss), val_loss))
 
             if val_loss < best_loss - 1e-5:
@@ -170,8 +185,8 @@ def train_few_shot(x_train: torch.Tensor, x_val: torch.Tensor, args, device) -> 
     if best_state is not None:
         model.load_state_dict(best_state)
     model.eval()
-    return model, {"best_val_loss": best_loss, "best_iteration": best_iter,
-                   "stopped_at": iteration, "history": history}
+    return model, {"best_val_loss": best_loss, "initial_val_loss": initial_val_loss,
+                   "best_iteration": best_iter, "stopped_at": iteration, "history": history}
 
 
 def run_item(shape_id: int, n_points: int, C: torch.Tensor, gmm_pool: torch.Tensor,

@@ -22,18 +22,27 @@
 #   N=2000 sbatch scripts/run_val1k_fewshot.sh
 #   sbatch --array=7 scripts/run_val1k_fewshot.sh              # one failed shard
 #   N=100 METHOD=fewshot_N100 sbatch scripts/run_val1k_fewshot.sh
+#
+# FINETUNE=1 starts every constraint from the base_fm checkpoint instead of random weights and
+# writes to baselines/few_shot_finetuned_v1k/ under method fewshot_ft_N<N>:
+#
+#   N=100 FINETUNE=1 sbatch scripts/run_val1k_fewshot.sh
 
 set -eo pipefail
 
 SHARD_SIZE="${SHARD_SIZE:-50}"
 N="${N:-2000}"
-METHOD="${METHOD:-fewshot}"
 TASK_ID="${SLURM_ARRAY_TASK_ID:-0}"
 START=$(( TASK_ID * SHARD_SIZE ))
 END=$(( START + SHARD_SIZE ))
 EXTRA="$*"
 
-echo "array task ${TASK_ID}: constraints [${START}, ${END}) | N=${N} | method=${METHOD}"
+# Left unset, the script picks the method name that matches the mode.
+MODE_ARGS=""
+[[ -n "${METHOD:-}" ]] && MODE_ARGS="--method ${METHOD}"
+[[ "${FINETUNE:-0}" == "1" ]] && MODE_ARGS="${MODE_ARGS} --finetune"
+
+echo "array task ${TASK_ID}: constraints [${START}, ${END}) | N=${N} | args=${MODE_ARGS:-default}"
 
 export ENROOT_CACHE_PATH=/users/rosenbaum/asolomiak/.enroot_cache
 mkdir -p "$ENROOT_CACHE_PATH"
@@ -46,6 +55,6 @@ srun --container-image=/users/rosenbaum/asolomiak/nvidia+pytorch+24.03-py3.sqsh 
               pip install --user -q -r requirements.txt && \
               python -m constrained_fm.scripts.few_shot_val1k \
                      --start-idx ${START} --end-idx ${END} --num-points ${N} \
-                     --method ${METHOD} ${EXTRA}"
+                     ${MODE_ARGS} ${EXTRA}"
 
 echo "shard [${START}, ${END}) finished."

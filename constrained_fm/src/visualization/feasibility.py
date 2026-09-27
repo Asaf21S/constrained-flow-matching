@@ -272,7 +272,8 @@ def plot_feasibility_row(panels: Sequence[Panel], coeffs: torch.Tensor | None = 
                          degree: int = POLYNOMIAL_DEGREE, scale: float = PLANE_SCALE,
                          show_profile: bool = False, legend: bool = True,
                          boundary_field: np.ndarray | None = None,
-                         combine_profile: bool = False) -> Figure:
+                         combine_profile: bool = False,
+                         overlay_reference_profile: bool = False) -> Figure:
     """A 1 x len(panels) row of boundary-preserving density maps for one constraint.
 
     Args:
@@ -283,6 +284,7 @@ def plot_feasibility_row(panels: Sequence[Panel], coeffs: torch.Tensor | None = 
             boundary, which turns the visual pile-up into a readable spike.
         boundary_field: (R, R) lattice field whose zero level set replaces the polynomial's.
         combine_profile: overlay all signed-distance densities on one full-width axis.
+        overlay_reference_profile: draw one profile per non-reference panel with GT overlaid.
     """
     style = style or STYLE_PRESETS["light"]
     num = len(panels)
@@ -313,7 +315,8 @@ def plot_feasibility_row(panels: Sequence[Panel], coeffs: torch.Tensor | None = 
     height = style.panel_size * (1 + style.profile_ratio if show_profile else 1) + 0.6
     with plt.rc_context(PAPER_RC):
         fig = plt.figure(figsize=(style.panel_size * num, height))
-        gs = fig.add_gridspec(rows, num, hspace=0.24 if show_profile and combine_profile else 0.45,
+        gs = fig.add_gridspec(rows, num, hspace=0.24 if show_profile and
+                      (combine_profile or overlay_reference_profile) else 0.45,
                       wspace=0.06,
                               height_ratios=[1.0, style.profile_ratio] if show_profile else [1.0])
 
@@ -348,12 +351,24 @@ def plot_feasibility_row(panels: Sequence[Panel], coeffs: torch.Tensor | None = 
         if show_profile and combine_profile:
             ax = fig.add_subplot(gs[1, :])
             _draw_combined_profile(ax, profiles, panels, style, profile_top, profile_xlim)
+        elif show_profile and overlay_reference_profile:
+            profile_grid = gs[1, :].subgridspec(1, num, wspace=0.06)
+            for method_index in range(num):
+                ax = fig.add_subplot(profile_grid[0, method_index])
+                if method_index == 0:
+                    _draw_profile(ax, profiles[0], style, profile_top, profile_xlim, first=True)
+                    ax.set_title("Ground Truth", fontsize=style.metric_size)
+                else:
+                    _draw_reference_profile(ax, profiles[0], profiles[method_index],
+                                            panels[method_index], style,
+                                            profile_top, profile_xlim)
         elif show_profile:
             for col, data in enumerate(profiles):
                 ax = fig.add_subplot(gs[1, col])
                 _draw_profile(ax, data, style, profile_top, profile_xlim, first=col == 0)
 
-        fig.tight_layout()
+        fig.tight_layout(rect=(0, 0.08, 1, 1) if show_profile and overlay_reference_profile
+                 else None)
     return fig
 
 
@@ -468,6 +483,38 @@ def _draw_combined_profile(ax, profiles: Sequence[dict[str, Any]], panels: Seque
     ax.set_xlabel(style.profile_xlabel, fontsize=style.metric_size)
     ax.set_ylabel(style.profile_ylabel, fontsize=style.metric_size)
     ax.tick_params(labelsize=style.metric_size)
+    ax.grid(True, alpha=0.25)
+
+
+def _draw_reference_profile(ax, reference: dict[str, Any], method: dict[str, Any],
+                panel: Panel, style: FeasibilityStyle, top: float | None,
+                            xlim: tuple[float, float] | None) -> None:
+    method_name = panel.label.split("\n")[0]
+    ax.fill_between(method["centers"], method["counts"], step="mid",
+            color=style.profile_color, alpha=style.profile_fill_alpha)
+    ax.step(method["centers"], method["counts"], where="mid",
+        color=style.profile_color, linewidth=1.4)
+    ax.step(reference["centers"], reference["counts"], where="mid", color="black",
+            linewidth=1.8, linestyle="--")
+    ax.axvline(0.0, color=style.boundary_color, linestyle=style.boundary_linestyle,
+           linewidth=style.boundary_linewidth + 0.5)
+    if xlim is not None:
+        ax.set_xlim(*xlim)
+    ax.set_ylim(0.0, top if top is not None else reference["peak"] * style.profile_headroom)
+    lines = []
+    if style.show_wall_fraction:
+        lines.append(f"{100 * method['wall_fraction']:.1f}% on the wall")
+    if top is not None and method["peak"] > top * style.profile_annotate_ratio:
+        lines.append(f"peak {method['peak']:.0f}, clipped")
+    if lines:
+        ax.text(0.03, 0.95, "\n".join(lines), transform=ax.transAxes, va="top", ha="left",
+                fontsize=style.metric_size - 0.5, color=style.text_color,
+                bbox=dict(facecolor="white", alpha=0.75, edgecolor="none",
+                          boxstyle="round,pad=0.25"))
+    ax.set_title(method_name, fontsize=style.metric_size)
+    ax.set_xlabel(style.profile_xlabel, fontsize=style.metric_size)
+    ax.tick_params(axis="x", labelsize=style.metric_size)
+    ax.tick_params(axis="y", left=True, labelleft=False)
     ax.grid(True, alpha=0.25)
 
 

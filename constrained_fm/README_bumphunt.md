@@ -175,38 +175,52 @@ $$
 All computations happen in the model's normalised coordinates; the polygon is mapped into
 those coordinates by the same affine transform.
 
-**ECI (Extrapolation–Correction–Interpolation; Cheng et al., 2024).** Each step has three
-parts.
+Both methods use the same Euclidean projection $\Pi(y) = \arg\min_x \lVert x - y \rVert^2$
+s.t. $C(x) + m \le 0$, with margin $m = 10^{-3}$. Feasible points are left unchanged. A
+violating point runs up to 16 SQP iterations anchored at $y$: linearising $C$ at the
+iterate $x_k$ with $g = \nabla C(x_k)$ gives
+$\lambda = \max\left(0, \frac{C(x_k) + m + g \cdot (y - x_k)}{\lVert g \rVert^2}\right)$ and
+$x_{k+1} = y - \lambda g$. On a single edge one iteration is exact. Near a corner the
+linearisation sees one edge at a time and can alternate between them. Points still outside
+afterwards fall back to a damped Newton walk from $y$ and, if that also fails, to a
+bisection of the segment between the point and a fixed interior point of the polygon (24
+halvings). The polygon is convex, so that segment crosses the boundary exactly once and the
+fallback always succeeds.
 
-1. *Extrapolation*: compute $\hat{x}_1$.
-2. *Correction*: project $\hat{x}_1$ into the polygon. The projection repeats the step
-   $x \leftarrow x - \frac{C(x) + m}{\lVert \nabla C(x) \rVert^2} \nabla C(x)$ up to 16
-   times, with margin $m = 10^{-3}$. For a polygon, $\nabla C$ is the normal of the edge that
-   is currently most violated, so one step moves the point perpendicularly onto that edge,
-   $m$ inside it. Each step is halved (up to 8 times) until it lowers the violation. Near a
-   corner, stepping onto one edge can push the point out through the neighbouring edge, and
-   the iteration stalls. For points still outside after that, a fallback bisects the segment
-   between the point and a fixed interior point of the polygon (24 halvings) and keeps the
-   last feasible point. That segment crosses the boundary exactly once because the polygon
-   is convex, so the fallback always succeeds.
-3. *Interpolation*: move a fraction $\Delta t / (1 - t)$ of the way from $x_t$ toward the
-   projected endpoint. On the last step this fraction is 1, so the final sample *is* a
-   projected point, and every sample satisfies the constraint.
+**ECI (Extrapolation–Correction–Interpolation; Cheng et al., ICLR 2025).** This follows
+Alg. 2–3 of the paper and `eci_sample` in the official code. Each Euler step runs $M$
+mixing iterations.
 
-**HardFlow.** A guided Euler integrator. At each step the velocity is corrected by the
-gradient of a penalty on the predicted endpoint,
+1. *Extrapolation*: $\hat{x}_1 = x + (1 - t) v(x, t)$.
+2. *Correction*: $\hat{x}_1 \leftarrow \Pi(\hat{x}_1)$.
+3. *Interpolation*: $x = t' \hat{x}_1 + (1 - t') x_0$. The first $M - 1$ iterations use
+   $t' = t$, and the last one advances to $t' = t + \Delta t$.
 
-$$
-v_{\text{guided}} = v(x_t, t) - \lambda \nabla_{x_t} \mathrm{ReLU}\left( C(\hat{x}_1) + m \right),
-\qquad \lambda = 100, \quad m = 10^{-3},
-$$
+The noise $x_0$ is the initial draw. If a resampling interval $R$ is set, it is redrawn from
+$\mathcal{N}(0, I)$ every $R$ mixing iterations. On the last step $t' = 1$, so every sample
+*is* a projected point and satisfies the constraint. $M$ and $R$ are selected on held-out
+tuning constraints.
 
-with the gradient taken through the velocity network by automatic differentiation. A sample
-whose predicted endpoint lies inside the polygon (with margin) gets no correction; one whose
-endpoint lies outside is pushed along the most violated edge's normal, transported back to
-$x_t$ through the network. The penalty is linear rather than squared so the push does not
-vanish for points just outside the boundary. There is no final projection, so HardFlow can
-leave samples outside.
+**HardFlow (Li, Alim & Azizan, 2025, Alg. 1).** For the path $x_t = (1-t) x_0 + t x_1$,
+the posterior-mean maps are $M_t(x) = x + (1-t) v(x, t)$ and $N_t(x) = x - t v(x, t)$. Each
+active step does the following.
+
+1. It takes the nominal Euler step $\bar{x} = x_i + v(x_i, t_i) \Delta t$.
+2. It solves
+   $\min_{\hat{x}} \mathcal{C}(\hat{x}) + \frac{\lambda}{2 \Delta t} t'^2 \lVert \hat{x} - M_{t'}(\bar{x}) \rVert^2$
+   s.t. $C(\hat{x}) \le 0$, with $t' = t_{i+1}$.
+3. It sets $x_{i+1} = t' \hat{x}^\ast + (1 - t') N_{t'}(\bar{x})$.
+
+There is no terminal cost ($\mathcal{C} = 0$), so for every $\lambda$ the minimiser is
+$\hat{x}^\ast = \Pi(M_{t'}(\bar{x}))$. When the posterior mean is already feasible, the
+update reduces to $x_{i+1} = \bar{x}$. As in the paper's appendix, the subproblem is solved
+only in the second half of the steps; earlier steps are plain Euler. On the last step
+$t' = 1$, so every sample is a projected point.
+
+> The ECI and HardFlow numbers and figures in this document come from an earlier
+> implementation that did not follow the papers: ECI had no $x_0$ interpolation, and HardFlow
+> was implemented as gradient guidance. They are pending regeneration with the algorithms
+> described above.
 
 ## A.4 Evaluation protocol
 
@@ -221,7 +235,7 @@ Four methods are scored on identical inputs:
 | Ground Truth | rejection sampling from $p$, restricted to the polygon |
 | Functa (ours) | the amortized conditional flow of A.3.2 |
 | ECI | inference-time projection applied to the unconstrained base flow (A.3.3) |
-| HardFlow | inference-time guidance applied to the unconstrained base flow (A.3.3) |
+| HardFlow | inference-time projection of the terminal estimate, applied to the unconstrained base flow (A.3.3) |
 
 Metrics are success rate (SR, the percentage of samples that satisfy the constraint), sliced
 Wasserstein distance, maximum mean discrepancy, and Jensen–Shannon divergence against an
@@ -516,10 +530,10 @@ C(x) = \frac{\left| M(x) - M_\star \right| - \varepsilon}{s} \le 0,
 $$
 
 The feasible set is the *mass window* $M_\star - \varepsilon \le M(x) \le M_\star + \varepsilon$.
-The scale $s$ normalizes the value to order one so the same guidance and projection step sizes
+The scale $s$ normalizes the value to order one so the same projection margin and step sizes
 apply across windows. $M^2$ vanishes for collinear pairs, where the derivative of
 $\sqrt{M^2}$ with respect to $M^2$ is unbounded, so $M^2$ is floored at $10^{-6}$ to keep the
-guidance gradient finite there.
+projection's constraint gradient finite there.
 
 As an example, take the showcase window of B.6: $M_\star = 59.88$ GeV, $\varepsilon = 6.12$ GeV,
 so the window is $53.76 \le M \le 66.00$ GeV. The events below were drawn from $p$ (momenta
@@ -604,36 +618,24 @@ $$
 so it points along the direction that changes the pair's mass fastest: outward (raising $M$)
 for an event below the window and inward for an event above it.
 
-**ECI (Extrapolation–Correction–Interpolation; Cheng et al., 2024).** Each step has three
-parts.
-
-1. *Extrapolation*: compute $\hat{x}_1$.
-2. *Correction*: move $\hat{x}_1$ into the window by repeating
-   $x \leftarrow x - \frac{C(x) + m}{\lVert \nabla C(x) \rVert^2} \nabla C(x)$ up to 32 times,
-   with margin $m = 10^{-4}$. Each step changes the mass by the amount needed to reach the
-   window edge (to first order), shifted $m$ inside it. Each step is halved (up to 8 times)
-   until it lowers the violation without overshooting. There is no fallback: the window is
-   not convex (B.2), so there is no interior point to bisect toward.
-3. *Interpolation*: move a fraction $\Delta t / (1 - t)$ of the way from $x_t$ toward the
-   corrected endpoint. On the last step this fraction is 1, so the final sample *is* a
-   corrected point.
+**ECI (Extrapolation–Correction–Interpolation; Cheng et al., ICLR 2025).** The same
+algorithm as in A.3.3, with $M$ mixing iterations per step and an optional noise-resampling
+interval $R$. The projection $\Pi$ onto the window runs up to 32 SQP iterations anchored at
+the input, with margin $m = 10^{-4}$. Each iteration moves the input along the current mass
+gradient by the amount that puts the linearised mass $m$ inside the window edge. Points
+still outside afterwards fall back to a damped Newton walk. There is no bisection fallback:
+the window is not convex (B.2), so there is no interior point to bisect toward. On the last
+step $t' = 1$, so the final sample *is* a corrected point.
 
 The margin is ten times smaller than in the 2D polygon problem because the narrowest window
 in the benchmark is only 0.004 wide in units of $C$; a larger margin would push corrected
 points a quarter of the way across it.
 
-**HardFlow.** A guided Euler integrator. At each step the velocity is corrected by the
-gradient of a penalty on the predicted endpoint,
-
-$$
-v_{\text{guided}} = v(x_t, t) - \lambda \nabla_{x_t} \mathrm{ReLU}\left( C(\hat{x}_1) + m \right),
-\qquad \lambda = 100, \quad m = 10^{-4},
-$$
-
-with the gradient taken through the velocity network by automatic differentiation. A sample
-whose predicted endpoint has a mass inside the window gets no correction; one outside is
-pushed in the direction that moves its mass toward $M_\star$. There is no final correction,
-so HardFlow can leave samples outside the window.
+**HardFlow (Li, Alim & Azizan, 2025, Alg. 1).** The same algorithm as in A.3.3: a nominal
+Euler step, then the projection $\Pi$ of the posterior mean $M_{t'}(\bar{x})$ (no terminal
+cost), then the reconstruction $x_{i+1} = t' \hat{x}^\ast + (1 - t') N_{t'}(\bar{x})$. This
+is done only in the second half of the steps. Because the window is non-convex, the final
+projection can fail to converge, so HardFlow can leave samples outside the window.
 
 ## B.4 Evaluation protocol
 
@@ -645,7 +647,7 @@ probability-mass bins, together with a fixed set of 10000 prior draws shared by 
 | Ground Truth | rejection sampling from $p$, restricted to the mass window |
 | Explicit (ours) | the amortized conditional flow of B.3 |
 | ECI | inference-time correction applied to the unconstrained base flow (B.3.1) |
-| HardFlow | inference-time guidance applied to the unconstrained base flow (B.3.1) |
+| HardFlow | inference-time projection of the terminal estimate, applied to the unconstrained base flow (B.3.1) |
 
 Metrics are success rate (SR, the percentage of samples inside the mass window), sliced
 Wasserstein distance, maximum mean discrepancy, and Jensen–Shannon divergence against an

@@ -1,0 +1,106 @@
+{
+  "run_id": "bump_polygon_siren-c64a2f9b",
+  "benchmark_digest": "0a207ab7332ab583",
+  "siren_checkpoint": "constrained_fm/functa_dataset/bump_siren_best.pt",
+  "resolution": 600,
+  "panel_labels": [
+    "mass=0.02  K=5",
+    "mass=0.10  K=6",
+    "mass=0.20  K=3",
+    "mass=0.28  K=5",
+    "mass=0.37  K=4",
+    "mass=0.45  K=6",
+    "mass=0.54  K=7",
+    "mass=0.63  K=4",
+    "mass=0.72  K=6",
+    "mass=0.80  K=4",
+    "mass=0.89  K=5",
+    "mass=0.98  K=4"
+  ],
+  "per_shape": [
+    {
+      "benchmark_index": 624,
+      "mass": 0.020069999620318413,
+      "num_vertices": 5,
+      "extraction_mse": 7.851607369957492e-05,
+      "mass_iou": 0.9862879514694214
+    },
+    {
+      "benchmark_index": 371,
+      "mass": 0.10160300135612488,
+      "num_vertices": 6,
+      "extraction_mse": 0.0003355415537953377,
+      "mass_iou": 0.9587213397026062
+    },
+    {
+      "benchmark_index": 157,
+      "mass": 0.19754399359226227,
+      "num_vertices": 3,
+      "extraction_mse": 2.77167036983883e-05,
+      "mass_iou": 0.9932639598846436
+    },
+    {
+      "benchmark_index": 323,
+      "mass": 0.2837890088558197,
+      "num_vertices": 5,
+      "extraction_mse": 7.853144779801369e-05,
+      "mass_iou": 0.9932489395141602
+    },
+    {
+      "benchmark_index": 5,
+      "mass": 0.36811500787734985,
+      "num_vertices": 4,
+      "extraction_mse": 2.2933369109523483e-05,
+      "mass_iou": 0.9958601593971252
+    },
+    {
+      "benchmark_index": 810,
+      "mass": 0.45423299074172974,
+      "num_vertices": 6,
+      "extraction_mse": 0.0006752368644811213,
+      "mass_iou": 0.9736664295196533
+    },
+    {
+      "benchmark_index": 839,
+      "mass": 0.5429229736328125,
+      "num_vertices": 7,
+      "extraction_mse": 0.00013384190970100462,
+      "mass_iou": 0.9910702705383301
+    },
+    {
+      "benchmark_index": 313,
+      "mass": 0.6314989924430847,
+      "num_vertices": 4,
+      "extraction_mse": 4.143980913795531e-05,
+      "mass_iou": 0.9932780861854553
+    },
+    {
+      "benchmark_index": 699,
+      "mass": 0.717860996723175,
+      "num_vertices": 6,
+      "extraction_mse": 0.0003736631479114294,
+      "mass_iou": 0.9919767379760742
+    },
+    {
+      "benchmark_index": 881,
+      "mass": 0.8023009896278381,
+      "num_vertices": 4,
+      "extraction_mse": 5.7163699239026755e-05,
+      "mass_iou": 0.9975939989089966
+    },
+    {
+      "benchmark_index": 2,
+      "mass": 0.8906660079956055,
+      "num_vertices": 5,
+      "extraction_mse": 4.744500620290637e-05,
+      "mass_iou": 0.9967679381370544
+    },
+    {
+      "benchmark_index": 811,
+      "mass": 0.9795439839363098,
+      "num_vertices": 4,
+      "extraction_mse": 2.284975016664248e-05,
+      "mass_iou": 0.997582197189331
+    }
+  ]
+}

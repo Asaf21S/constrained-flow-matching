@@ -1,8 +1,8 @@
 {
-  "run_id": "constraint_discovery-330f199a",
+  "run_id": "constraint_discovery-16a625cd",
   "method": "constraint_discovery",
-  "fingerprint": "330f199a658699e30c1567f168b4c8f4ac47eeb47825bc097c2f89faba10e7bd",
-  "git_commit": "c9ff3a3b23037fd79fd5350352b65de5d6e230f2",
-  "created_at": "2026-09-27T20:59:17",
+  "fingerprint": "16a625cd07ea2e1a481e15e744fa9f370bbde6fd338c6a5dafe422f57308de11",
+  "git_commit": "c6ef9e7dde8a20d87972c4ba2d104e2cdcbe5746",
+  "created_at": "2026-09-29T18:14:52",
   "config_run_id": "siren-uniform-8d6375ab"
 }

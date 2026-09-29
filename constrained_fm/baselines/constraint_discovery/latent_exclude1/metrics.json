@@ -1,5 +1,5 @@
 {
-  "run_id": "constraint_discovery-330f199a",
+  "run_id": "constraint_discovery-16a625cd",
   "config_run_id": "siren-uniform-8d6375ab",
   "iteration": 15001,
   "exclude_mode": 1,
@@ -10,23 +10,23 @@
   ],
   "scale": 4.5,
   "lr": 0.01,
-  "steps": 3000,
+  "steps": 250,
   "batch_size": 4096,
   "subspace_dim": 15,
   "subspace_explained_var": 0.9999999782048677,
   "z_reg_weight": 0.0,
-  "reference_z_norm": 0.012670659460127354,
-  "reference_mahalanobis": 0.03222055733203888,
+  "reference_z_norm": 0.0126726059243083,
+  "reference_mahalanobis": 0.03243822976946831,
   "initial_eval_loss": 2.404245376586914,
   "final": {
     "mode_inside": [
-      0.9999714493751526,
-      0.08858232200145721,
-      0.9392107129096985,
-      0.9543052315711975
+      0.9998714923858643,
+      0.05416359007358551,
+      0.9424993395805359,
+      0.928644597530365
     ],
-    "eval_loss": 2.15704345703125,
-    "z_norm": 0.006912159733474255,
-    "mahalanobis": 0.02099660597741604
+    "eval_loss": 2.161980390548706,
+    "z_norm": 0.0028564915992319584,
+    "mahalanobis": 0.001277759438380599
   }
 }

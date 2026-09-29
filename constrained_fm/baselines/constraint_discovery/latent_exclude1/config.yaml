@@ -1,5 +1,5 @@
 method: constraint_discovery
-run_id: constraint_discovery-330f199a
+run_id: constraint_discovery-16a625cd
 settings:
   batch_size: 4096
   chunk_size: 65536
@@ -21,10 +21,12 @@ settings:
   scatter_points: 6000
   seed: 0
   smooth_sigma: 2.0
-  steps: 3000
-  strip_panels: 6
+  steps: 250
+  strip_growth: 2.0
+  strip_last: 32
+  strip_panels: 7
   subspace_var: 0.999
   target_pool_size: 1000000
-  viz_every: 100
+  viz_every: 25
   z_reg_weight: 0.0
 config_run_id: siren-uniform-8d6375ab

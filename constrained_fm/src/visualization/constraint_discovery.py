@@ -51,10 +51,10 @@ class DiscoveryStyle:
     hist_headroom: float = 1.15
     grid_alpha: float = 0.25
     panel_size: float = 4.5
-    title_size: float = 14.0
-    caption_size: float = 10.0
-    tick_size: float = 10.0
-    legend_size: float = 10.0
+    title_size: float = 20.0
+    caption_size: float = 15.0
+    tick_size: float = 14.0
+    legend_size: float = 15.0
     show_legend: bool = True
     dpi: int = 150
 
@@ -101,6 +101,12 @@ def _legend_handles(style: DiscoveryStyle) -> list[Line2D]:
     ]
 
 
+def _legend_above(fig: Figure, handles: list, ncol: int, style: DiscoveryStyle) -> None:
+    """Legend outside the top edge; kept by ``savefig(bbox_inches="tight")``."""
+    fig.legend(handles=handles, loc="lower center", ncol=ncol, frameon=False,
+               fontsize=style.legend_size, bbox_to_anchor=(0.5, 1.0))
+
+
 def _density(values: np.ndarray, edges: np.ndarray) -> np.ndarray:
     """Histogram normalised to unit area; all zeros for an empty sample."""
     counts, _ = np.histogram(values, bins=edges)
@@ -108,10 +114,11 @@ def _density(values: np.ndarray, edges: np.ndarray) -> np.ndarray:
 
 
 def mode_caption(mode_inside: np.ndarray, excluded_mode: int) -> str:
-    """``m0 0.98, m1 0.99, [m2 0.03]`` with the excluded mode bracketed."""
+    """``inside: m0 0.98, m1 0.99,`` / ``[m2 0.03], m3 0.97`` with the excluded mode bracketed."""
     parts = [f"[m{k} {v:.2f}]" if k == excluded_mode else f"m{k} {v:.2f}"
              for k, v in enumerate(mode_inside)]
-    return "inside: " + ", ".join(parts)
+    half = (len(parts) + 1) // 2
+    return "inside: " + ", ".join(parts[:half]) + ",\n" + ", ".join(parts[half:])
 
 
 def plot_discovery_frame(field: np.ndarray, points: np.ndarray, labels: np.ndarray,
@@ -125,10 +132,9 @@ def plot_discovery_frame(field: np.ndarray, points: np.ndarray, labels: np.ndarr
         ax.set_title(title, fontsize=style.title_size)
         if mode_inside is not None:
             ax.set_xlabel(mode_caption(mode_inside, excluded_mode), fontsize=style.caption_size)
-        if style.show_legend:
-            ax.legend(handles=_legend_handles(style),
-                      loc="upper left", fontsize=style.legend_size, framealpha=0.85)
         fig.tight_layout()
+        if style.show_legend:
+            _legend_above(fig, _legend_handles(style), 1, style)
     return fig
 
 
@@ -154,7 +160,8 @@ def plot_discovery_strip(fields: np.ndarray, steps: Sequence[int], points: np.nd
 
     with plt.rc_context(SERIF_RC):
         fig = plt.figure(figsize=(style.panel_size * k,
-                                  style.panel_size * (1.0 + style.hist_ratio) + 1.2))
+                                  style.panel_size * (1.0 + style.hist_ratio) + 1.2),
+                         layout="constrained")
         gs = fig.add_gridspec(2, k, height_ratios=[1.0, style.hist_ratio])
         top = [fig.add_subplot(gs[0, i]) for i in range(k)]
         bottom = [fig.add_subplot(gs[1, i]) for i in range(k)]
@@ -183,15 +190,13 @@ def plot_discovery_strip(fields: np.ndarray, steps: Sequence[int], points: np.nd
                 ax.tick_params(labelleft=False)
         bottom[0].set_ylabel("density", fontsize=style.caption_size)
         if style.show_legend:
-            top[0].legend(handles=_legend_handles(style), loc="upper left",
-                          fontsize=style.legend_size, framealpha=0.85)
-            bottom[0].legend(handles=[
+            handles = _legend_handles(style) + [
                 Patch(facecolor=style.hist_color, alpha=style.hist_fill_alpha,
                       edgecolor=style.hist_color, label=r"GMM inside $f_\theta \leq 0$"),
                 Line2D([], [], color=style.gt_color, lw=style.gt_linewidth,
                        ls=style.gt_linestyle, label="target (3 modes)"),
-            ], loc="upper right", fontsize=style.legend_size, framealpha=0.85)
-        fig.tight_layout()
+            ]
+            _legend_above(fig, handles, len(handles), style)
     return fig
 
 
@@ -211,8 +216,9 @@ def plot_likelihood_map(likelihood: np.ndarray, scale: float, vmax: float,
                           norm=norm)
         ax.grid(False)
         ax.set_aspect("equal")
+        ax.tick_params(labelsize=style.tick_size)
         cbar = fig.colorbar(image, ax=ax, orientation="vertical")
-        cbar.set_label("Model Density")
+        cbar.set_label("Model Density", fontsize=style.caption_size)
         cbar.ax.tick_params(labelsize=style.tick_size)
     return fig
 
@@ -234,8 +240,9 @@ def plot_discovery_history(losses: np.ndarray, snapshot_steps: np.ndarray,
         ax_l.plot(smoothed, color="black", lw=1.4, label=f"EMA {ema}")
         ax_l.plot(snapshot_steps, eval_losses, "o-", color=style.target_color, ms=3,
                   label="fixed eval batch")
-        ax_l.set_xlabel("step")
-        ax_l.set_ylabel("FM loss")
+        ax_l.set_xlabel("step", fontsize=style.caption_size)
+        ax_l.set_ylabel("FM loss", fontsize=style.caption_size)
+        ax_l.tick_params(labelsize=style.tick_size)
         ax_l.legend(fontsize=style.legend_size)
 
         for m in range(mode_inside.shape[1]):
@@ -244,8 +251,9 @@ def plot_discovery_history(losses: np.ndarray, snapshot_steps: np.ndarray,
                       color=style.excluded_color if is_excluded else None,
                       label=f"mode {m}" + (" (excluded)" if is_excluded else ""))
         ax_m.set_ylim(-0.02, 1.02)
-        ax_m.set_xlabel("step")
-        ax_m.set_ylabel(r"fraction with $f_\theta(x, z_c) \leq 0$")
+        ax_m.set_xlabel("step", fontsize=style.caption_size)
+        ax_m.set_ylabel(r"fraction with $f_\theta(x, z_c) \leq 0$", fontsize=style.caption_size)
+        ax_m.tick_params(labelsize=style.tick_size)
         ax_m.legend(fontsize=style.legend_size)
         fig.tight_layout()
     return fig

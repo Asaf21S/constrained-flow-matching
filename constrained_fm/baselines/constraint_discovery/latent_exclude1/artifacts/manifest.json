@@ -2,20 +2,20 @@
   "arrays": {
     "snapshot_steps": {
       "shape": [
-        31
+        17
       ],
       "dtype": "int64"
     },
     "latents": {
       "shape": [
-        31,
+        17,
         512
       ],
       "dtype": "float32"
     },
     "fields": {
       "shape": [
-        31,
+        17,
         300,
         300
       ],
@@ -23,32 +23,32 @@
     },
     "mode_inside": {
       "shape": [
-        31,
+        17,
         4
       ],
       "dtype": "float32"
     },
     "eval_losses": {
       "shape": [
-        31
+        17
       ],
       "dtype": "float32"
     },
     "z_norm": {
       "shape": [
-        31
+        17
       ],
       "dtype": "float32"
     },
     "mahalanobis": {
       "shape": [
-        31
+        17
       ],
       "dtype": "float32"
     },
     "losses": {
       "shape": [
-        3000
+        250
       ],
       "dtype": "float32"
     },
@@ -65,22 +65,28 @@
       ],
       "dtype": "int64"
     },
-    "strip_indices": {
+    "strip_steps_linear": {
       "shape": [
         6
       ],
       "dtype": "int64"
     },
-    "likelihood": {
+    "strip_steps_exp": {
+      "shape": [
+        7
+      ],
+      "dtype": "int64"
+    },
+    "density": {
       "shape": [
         200,
         200
       ],
       "dtype": "float32"
     },
-    "strip_inside": {
+    "inside_masks": {
       "shape": [
-        6,
+        17,
         200000
       ],
       "dtype": "uint8"
@@ -102,18 +108,11 @@
         750270
       ],
       "dtype": "float32"
-    },
-    "density": {
-      "shape": [
-        200,
-        200
-      ],
-      "dtype": "float32"
     }
   },
-  "written_at": "2026-09-27T21:11:48",
-  "git_commit": "c9ff3a3b23037fd79fd5350352b65de5d6e230f2",
-  "run_id": "constraint_discovery-330f199a",
+  "written_at": "2026-09-29T18:27:24",
+  "git_commit": "c6ef9e7dde8a20d87972c4ba2d104e2cdcbe5746",
+  "run_id": "constraint_discovery-16a625cd",
   "config_run_id": "siren-uniform-8d6375ab",
   "iteration": 15001,
   "exclude_mode": 1

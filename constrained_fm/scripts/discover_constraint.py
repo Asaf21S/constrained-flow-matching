@@ -18,7 +18,7 @@ The optional Mahalanobis term uses the pool latents' Gaussian (mu, Sigma); its v
 at every snapshot regardless of lambda, as an off-manifold indicator for the frozen FM.
 
     frames/step_<k>.png   decoded boundary over the 4-mode scatter, every --viz-every steps
-    strip.{png,pdf}       evenly spaced steps: scatter + boundary, x-marginal below
+    strip_exp.{png,pdf}   steps 0, 1, 2, ..., --strip-last: scatter + boundary, x-marginal below
     likelihood.{png,pdf}  FM density of the final z_c over the whole domain, as a histogram of
                           forward samples: the exact-divergence trace through the w0=30 SIREN
                           feature blows up (total mass ~1e33 at step 0.01), sampling does not
@@ -69,7 +69,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--exclude-mode", type=int, default=2, choices=range(NUM_MODES),
                         help="GMM component removed from the target batch")
 
-    parser.add_argument("--steps", type=int, default=3000)
+    parser.add_argument("--steps", type=int, default=250)
     parser.add_argument("--batch-size", type=int, default=4096)
     parser.add_argument("--lr", type=float, default=None,
                         help=f"Adam step; default {DEFAULT_SUBSPACE_LR:g} on w, {DEFAULT_LR:g} on a full z_c")
@@ -91,8 +91,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--chunk-size", type=int, default=65536)
     parser.add_argument("--seed", type=int, default=0)
 
-    parser.add_argument("--viz-every", type=int, default=100)
-    parser.add_argument("--strip-panels", type=int, default=6)
+    parser.add_argument("--viz-every", type=int, default=25)
+    parser.add_argument("--strip-panels", type=int, default=7)
+    parser.add_argument("--strip-last", type=int, default=32,
+                        help="last step shown in strip_exp; 0 = --steps")
+    parser.add_argument("--strip-growth", type=float, default=2.0,
+                        help="ratio between consecutive nonzero steps in strip_exp")
     parser.add_argument("--density-grid", type=int, default=200,
                         help="bins per side of the full-domain FM density of the final z_c")
     parser.add_argument("--density-samples", type=int, default=4000000)
@@ -193,9 +197,17 @@ def sample_density(model, z: torch.Tensor, args, device: torch.device) -> np.nda
     return (counts / args.density_samples / (edges[1] - edges[0]) ** 2).astype(np.float32)
 
 
-def strip_indices(num_snapshots: int, num_panels: int) -> np.ndarray:
-    """Evenly spaced snapshot indices, always including the first and the last."""
-    return np.unique(np.linspace(0, num_snapshots - 1, min(num_panels, num_snapshots)).round().astype(int))
+def strip_schedule(last: int, panels: int, growth: float) -> np.ndarray:
+    """Geometric strip steps from 0 to ``last``, ``growth`` apart after the first."""
+    exp = np.concatenate([[0.0], last / growth ** np.arange(panels - 2, -1, -1)])
+    return np.unique(np.rint(exp).astype(np.int64))
+
+
+def snapshot_indices(snapshot_steps: np.ndarray, strip_steps: np.ndarray) -> np.ndarray:
+    idx = np.searchsorted(snapshot_steps, strip_steps)
+    if np.any(idx >= len(snapshot_steps)) or np.any(snapshot_steps[idx] != strip_steps):
+        raise ValueError("strip steps are missing from the saved snapshots; rerun the optimisation")
+    return idx
 
 
 def render_frame(root_fig: Path, step: int, field: np.ndarray, points: np.ndarray,
@@ -209,14 +221,16 @@ def render_frame(root_fig: Path, step: int, field: np.ndarray, points: np.ndarra
 
 def render_summary(root_fig: Path, arrays: dict[str, np.ndarray], scale: float, args,
                    style: cd.DiscoveryStyle) -> list[Path]:
-    steps, idx = arrays["snapshot_steps"], arrays["strip_indices"]
-    inside = arrays["strip_inside"].astype(bool)
+    steps = arrays["snapshot_steps"]
+    inside = arrays["inside_masks"].astype(bool)
+    written = []
+    idx = snapshot_indices(steps, arrays["strip_steps_exp"])
     fig = cd.plot_discovery_strip(
         arrays["fields"][idx], steps[idx], arrays["scatter_points"], arrays["scatter_labels"],
-        args.exclude_mode, scale, inside_x=[arrays["metric_x"][row] for row in inside],
+        args.exclude_mode, scale, inside_x=[arrays["metric_x"][inside[i]] for i in idx],
         target_x=arrays["target_x"], mode_inside=arrays["mode_inside"][idx],
         bins=args.hist_bins, style=style)
-    written = save_encoder_figure(fig, root_fig / "strip", formats=args.formats, dpi=args.dpi)
+    written += save_encoder_figure(fig, root_fig / "strip_exp", formats=args.formats, dpi=args.dpi)
     fig = cd.plot_likelihood_map(arrays["density"], PLANE_SCALE,
                                  float(arrays["likelihood_vmax"][0]))
     written += save_encoder_figure(fig, root_fig / "likelihood", formats=args.formats, dpi=300)
@@ -229,8 +243,8 @@ def render_summary(root_fig: Path, arrays: dict[str, np.ndarray], scale: float, 
 def replot(args, root: Path, root_fig: Path, style: cd.DiscoveryStyle) -> int:
     record = json.loads((root / "metrics.json").read_text())
     names = ["snapshot_steps", "fields", "mode_inside", "eval_losses", "losses", "scatter_points",
-             "scatter_labels", "strip_indices", "density", "strip_inside", "metric_x",
-             "target_x", "likelihood_vmax"]
+             "scatter_labels", "strip_steps_exp", "density", "inside_masks",
+             "metric_x", "target_x", "likelihood_vmax"]
     arrays = {name: artifacts.load_array(root, name) for name in names}
     args.exclude_mode = record["exclude_mode"]
     written = [render_frame(root_fig, int(step), arrays["fields"][i], arrays["scatter_points"],
@@ -307,7 +321,14 @@ def main(argv: list[str] | None = None) -> int:
 
     snaps: dict[str, list] = {k: [] for k in ["snapshot_steps", "latents", "fields", "mode_inside",
                                               "eval_losses", "z_norm", "mahalanobis"]}
+    inside_masks: list[np.ndarray] = []
     losses: list[float] = []
+    strip_last = args.strip_last or args.steps
+    if strip_last > args.steps:
+        raise ValueError(f"--strip-last {strip_last} exceeds --steps {args.steps}")
+    strip_steps = strip_schedule(strip_last, args.strip_panels, args.strip_growth)
+    snapshot_steps = set(range(0, args.steps + 1, args.viz_every)) | {args.steps}
+    snapshot_steps |= {int(s) for s in strip_steps}
 
     def snapshot(step: int) -> None:
         z = latent().detach()
@@ -316,7 +337,9 @@ def main(argv: list[str] | None = None) -> int:
             maha = float(mahalanobis(z, prior))
         field = decode(siren, lattice, z, cfg.scale, args.chunk_size).view(
             args.resolution, args.resolution).cpu().numpy()
-        inside = mode_inside(decode(siren, metric_x, z, cfg.scale, args.chunk_size), metric_labels)
+        values = decode(siren, metric_x, z, cfg.scale, args.chunk_size)
+        inside = mode_inside(values, metric_labels)
+        inside_masks.append((values <= 0).cpu().numpy().astype(np.uint8))
         for key, value in [("snapshot_steps", step), ("latents", z.cpu().numpy()), ("fields", field),
                            ("mode_inside", inside), ("eval_losses", eval_loss),
                            ("z_norm", float(z.norm())), ("mahalanobis", maha)]:
@@ -329,7 +352,7 @@ def main(argv: list[str] | None = None) -> int:
                      args, style)
 
     for step in range(args.steps + 1):
-        if step % args.viz_every == 0 or step == args.steps:
+        if step in snapshot_steps:
             snapshot(step)
         if step == args.steps:
             break
@@ -344,10 +367,6 @@ def main(argv: list[str] | None = None) -> int:
         optimizer.step()
         losses.append(float(fm))
 
-    idx = strip_indices(len(snaps["snapshot_steps"]), args.strip_panels)
-    strip_inside = [(decode(siren, metric_x, torch.from_numpy(snaps["latents"][i]).to(device),
-                            cfg.scale, args.chunk_size) <= 0).cpu().numpy() for i in idx]
-
     kept_weights = torch.tensor(GMM_WEIGHTS)[kept]
     target_peak = float(compute_gmm_density(
         means=torch.tensor(GMM_MEANS)[kept], covs=torch.tensor(GMM_COVS)[kept],
@@ -357,9 +376,9 @@ def main(argv: list[str] | None = None) -> int:
     arrays = {k: np.asarray(v, dtype=np.float32) for k, v in snaps.items()}
     arrays["snapshot_steps"] = np.asarray(snaps["snapshot_steps"], dtype=np.int64)
     arrays.update(losses=np.asarray(losses, dtype=np.float32), scatter_points=scatter_points,
-                  scatter_labels=scatter_labels, strip_indices=idx,
+                  scatter_labels=scatter_labels, strip_steps_exp=strip_steps,
                   density=sample_density(model, latent().detach(), args, device),
-                  strip_inside=np.stack(strip_inside).astype(np.uint8),
+                  inside_masks=np.stack(inside_masks),
                   likelihood_vmax=np.asarray([target_peak], dtype=np.float32),
                   metric_x=metric_x[:, 0].cpu().numpy(), target_x=target[:, 0].cpu().numpy())
     artifacts.save_arrays(root, **arrays)

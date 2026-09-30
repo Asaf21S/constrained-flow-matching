@@ -33,6 +33,12 @@ $$
 \mathbb E[f(\vec p_2)\mid \vec p_1\in\mathcal B].
 $$
 
+In the simulator, the direction is sampled in [decay6d.py](src/problems/decay6d.py#L85):
+draw a three-component standard-normal vector $g$ and set $\hat v=g/\lVert g\rVert$.
+For example, $g=(3,4,0)$ gives $\hat v=(0.6,0.8,0)$, while $g=(1,1,1)$ gives
+$\hat v\approx(0.577,0.577,0.577)$. These illustrate the normalization; the actual components
+are random Gaussian draws. This construction gives a uniform direction on the sphere's surface.
+
 The three observables are $\lVert\vec p_2\rVert$, $p_{2z}$, and the tail indicator
 $\mathbb 1[\lVert\vec p_2\rVert>\tau_{\mathcal B}]$. Here $\tau_{\mathcal B}$ is a cutoff
 chosen separately for each box: 95% of true events inside that box have a smaller
@@ -41,10 +47,23 @@ it makes the tail observable similarly rare in all five boxes.
 
 The target density formula contains the hidden split fraction $u$. For a given observed pair
 $(\vec p_1,\vec p_2)$, the density is found by adding up the contributions from all possible
-values of $u$ between 0.1 and 0.9. The code approximates this one-dimensional integral with
-4096 evenly spaced points and trapezoid weights. In this report, “exact density” means this
-physics-based density calculation, as opposed to a density learned by a neural network; the
-integral itself is evaluated numerically.
+values of $u$ between 0.1 and 0.9. For a fixed $u$, the code recovers
+$\vec a=M\hat v=\tfrac12(\vec p_1/u-\vec p_2/(1-u))$ and
+$\vec P=\tfrac12(\vec p_1/u+\vec p_2/(1-u))$. It evaluates the density of $\vec a$
+(whose value at radius $r=\lVert\vec a\rVert$ is
+$[\phi_M(r)+\phi_M(-r)]/(4\pi r^2)$), multiplies by the 3D Gaussian density of $\vec P$,
+and divides by the change-of-variables Jacobian $8u^3(1-u)^3$. Here $\phi_M$ is the Gaussian
+mass density; both signs appear because either signed mass along a uniform direction can produce
+the same vector radius. This gives the joint density contribution $p(x\mid u)$ for that split.
+
+The marginal likelihood is the average of those contributions over the uniform split:
+$p(x)=\frac{1}{0.8}\int_{0.1}^{0.9}p(x\mid u)\,du$. Numerically, the code uses 4096
+equally spaced $u$ values and normalized trapezoid weights. If there are $K=4096$ grid points,
+the two endpoints each get weight $1/[2(K-1)]$ and each interior point gets
+$1/(K-1)$. The weights sum to one, so the weighted sum approximates the *uniform average*
+over $u$, not the unnormalized integral. The code combines the weighted density contributions
+in log space. In this report, “exact density” means this physics-based calculation rather than
+a learned neural density; the one-dimensional integral is still numerical.
 
 The physical coupling explains why conditioning on $\vec p_1$ changes $\vec p_2$:
 
@@ -149,8 +168,25 @@ for evaluation.
 | box benchmark | `decay6d_boxes-519394b0` | — | fixed boxes and ground truth |
 | final evaluation | `decay6d_is-f07211bc` | — | 20 repetitions at each $N\in\{10^3,10^4,10^5\}$ |
 
-Each box proposal has two million $q$ samples across four shards. Rejection uses 80 million
-unconstrained draws in total. The probability-flow ODE uses adaptive dopri5 in float64 with
+Here $N$ is the number of samples used to make ONE estimate. For each box, each proposal method
+forms 20 estimates from non-overlapping groups of $N$ samples. At $N=100{,}000$, that consumes
+2 million samples per box across the 20 estimates; four shards of 500,000 samples provide them.
+But each individual estimate still uses 100,000 samples, not 2 million. The smaller-$N$ estimates
+use smaller groups from the same stored proposal draws, so results at different $N$ are not
+independent of one another.
+
+Rejection uses 80 million candidate draws from the unconstrained model in total, shared across
+all five boxes. These are draws before filtering, not 80 million accepted in-box events. For each
+rejection comparison, the number of candidates in one repetition is set to $N$ for equal draw
+count, or increased to match measured time or NFE. The same candidate stream can be checked
+against each box. The estimate is calculated only from candidates that land inside that box.
+In the final rerun, all three rejection budgets have 20 finite estimates for every box,
+observable, and $N$. Raw $q$ can still
+have fewer than 20 finite estimates because it deliberately includes leaked samples, including
+rare non-finite fallback outputs. At $N=100{,}000$, raw $q$ has 14--20 valid estimates depending
+on box and observable; filtered $q$ and both IS estimators have 20.
+
+The probability-flow ODE uses adaptive dopri5 in float64 with
 exact divergence for density evaluation, absolute and relative tolerances $10^{-5}$, and a
 max-over-batch error norm. A small number of underflowing trajectories are isolated and retried
 with 10,000 fixed RK4 steps; fallback counts are included in the evaluation metrics. The final
@@ -170,19 +206,65 @@ KL fell to 0.00043. The box model also improved, from 96.6% average in-box rate 
 
 ### Accuracy at $N=100{,}000$
 
-The table gives the median RMSE across the five boxes, in physical momentum units (tail
-probability RMSE is unitless). The `q_raw` median conceals an extreme outlier and is qualified
-below; do not interpret it as uniformly reliable.
+For each box, estimator, observable, and $N$, the code first has up to 20 estimates
+$\hat\mu_r$, each based on $N$ samples. It computes that box's RMSE across repetitions,
+$\sqrt{\mathrm{mean}_r[(\hat\mu_r-\mu_{\rm gt})^2]}$. The table then reports the median of
+those five box-level RMSEs, in physical momentum units (tail-probability RMSE is unitless).
+It does not pool the samples or calculate an RMSE over $5\times20\times N$ events. The `q_raw`
+median conceals an extreme outlier and is qualified below; do not interpret it as uniformly
+reliable.
+
+In the detailed [per-box tables](baselines/decay6d_is/eval/tables.md), each pool of $N$ points
+produces one estimate, not one RMSE. For each observable, the table reports standard deviation
+of absolute error across the valid repetitions and RMSE across those errors. Slash-separated
+values are ordered by $N=10^3/10^4/10^5$.
+
+The evaluation also computes the standard deviation of repeated estimates within each box; it
+is recorded separately as `std` in `metrics.json`. It is not shown beside the across-box median
+RMSE because these are different summaries: RMSE includes both bias and repetition spread,
+while `std` measures the spread around the repetition mean. The detailed tables show absolute-
+error summaries per box and keep RMSE as a separate column. They also report valid repetition
+counts per observable; in this run raw $q$ has some invalid estimates, while filtered $q$, IS,
+and rejection have 20.
+
+### Reading the Cost Columns
+
+Each per-box table reports cost means only; draw budgets and density-evaluation counts are fixed
+per repetition. `q draws` is the number sampled from the box-conditioned proposal;
+`$p_{uncon}$ draws` is the number sampled from the unconstrained model for rejection.
+`learned / exact density evals` counts target-density evaluations made by learned- or
+exact-density IS. `samples used` is the mean number entering the estimate: all proposals for raw
+$q$, in-box proposals for filtered $q$ and IS, and accepted events for rejection. The heading's
+`GT events` is the number of simulator-generated benchmark events inside that box used to compute
+the ground-truth reference; it is not a per-estimator sample budget. The benchmark generated one
+billion target events total.
+
+`NFE` counts calls to the ODE velocity network. Proposal generation tracks density, learned IS
+adds a backward learned-density solve, exact IS adds quadrature time but no extra network NFEs,
+and rejection uses unconstrained sampling only. Density solves also compute divergence
+derivatives that are not extra NFEs, but are included in wall time. The time column reports
+seconds for the sampling and density work used by that estimator. Timings and NFEs were recorded
+per 10,000-sample ODE chunk; if a repetition uses only part of a recorded chunk, its cost is
+prorated by sample count and is an estimate rather than a separately timed solver run.
+
+Equal-time and equal-NFE rejection budgets are approximate matches, not exact per-repetition
+equalities. Their draw counts are chosen from the median costs of 10,000-sample chunks and
+rounded to 1,000-draw minibatches. The tables show mean realized costs across repetitions;
+adaptive solver work and rare fallback trajectories can make those means differ from the
+median-calibrated IS target. At $N=100{,}000$, equal-time windows contain 1.4--1.9 million
+draws; the observed 60 fallbacks in 80 million draws imply about 1.1--1.5 fallback trajectories
+per such window on average. This can raise realized time above the median-chunk target, while
+even a few expensive trajectories can substantially raise mean NFE.
 
 | estimator | $\lVert\vec p_2\rVert$ RMSE | $p_{2z}$ RMSE | tail RMSE |
 | :--- | ---: | ---: | ---: |
 | (a) raw $q$ | 0.00080* | 0.00175* | 0.00082 |
 | (b) filtered $q$ | 0.00097 | 0.00161 | 0.00086 |
-| (c) learned-$p$ IS | 0.00045 | 0.00097 | 0.00087 |
-| (d) exact-$p$ IS | 0.00041 | 0.00075 | 0.00086 |
-| (e1) rejection, equal $N$ | 0.00218 | 0.00373 | 0.00360 |
-| (e2) rejection, equal time | 0.00048 | 0.00091 | 0.00080 |
-| (e3) rejection, equal NFE | 0.00135 | 0.00267 | 0.00210 |
+| (c) learned-$p$ IS | 0.00044 | 0.00102 | 0.00087 |
+| (d) exact-$p$ IS | 0.00038 | 0.00083 | 0.00086 |
+| (e1) rejection, equal $N$ | 0.00229 | 0.00365 | 0.00360 |
+| (e2) rejection, equal time | 0.00052 | 0.00096 | 0.00080 |
+| (e3) rejection, equal NFE | 0.00120 | 0.00252 | 0.00210 |
 
 *For raw $q$, the elongated-box RMSE is $6.25\times10^{124}$ for $|\vec p_2|$ and
 $5.39\times10^{124}$ for $p_{2z}$. One sample in that box required the RK4 fallback; its
@@ -224,11 +306,17 @@ on the tested support.
 ![Learned and exact importance-weight distributions](images/thesis_pool/decay6d_is/weight_histograms.png)
 
 Cost ratios use median per-chunk timings so an occasional solver retry does not dominate the
-comparison. Across boxes, IS costs 14.1–19.4 times as much wall-clock time per proposal sample
-as unconstrained rejection draws, and 2.1–2.9 times as many network evaluations. At equal
+comparison. NFE counts calls to the velocity network made by the ODE solver. During a density
+solve, each such call also computes six derivatives to get the exact divergence; this extra work
+is not counted as six NFEs. An unconstrained rejection draw only needs a forward velocity call,
+without those derivatives. Thus time and NFE are not interchangeable: across boxes, IS costs
+14.1--19.4 times as much wall-clock time per proposal sample, but 2.1--2.9 times as many
+network calls, as unconstrained rejection draws. At equal
 sample count, IS is substantially more accurate than rejection. At equal wall time, rejection
 is competitive and is slightly better on the median $|\vec p_2|$ RMSE; therefore the result
-does not show a universal wall-clock advantage for IS at these model sizes.
+does not show a universal wall-clock advantage for IS at these model sizes. However, the
+equal-time rejection comparison has very few usable momentum estimates at $N=100{,}000$, so
+that apparent tie should be treated as provisional rather than a strong conclusion.
 
 ### Marginal distributions
 

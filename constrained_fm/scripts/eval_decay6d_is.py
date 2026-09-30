@@ -188,8 +188,9 @@ def run_uncon_task(args, boxes: list[dict], uncon_model, problem, generator, dev
         x = normalizer.inverse(x_n)
         inside = boxes_contain(x[:, None, :PARTICLE_DIM], lo, hi).to(x.dtype)
         counts.append(inside.view(per_chunk, args.minibatch, -1).sum(1))
+        # where, not a product: out-of-box fallback samples may be NaN and 0 * NaN = NaN.
         sums.append(torch.stack([
-            (observables(x, box["tail_threshold"]) * inside[:, b, None])
+            torch.where(inside[:, b, None] > 0, observables(x, box["tail_threshold"]), 0.0)
             .view(per_chunk, args.minibatch, -1).sum(1) for b, box in enumerate(boxes)], dim=1))
         seconds.append(stats.seconds)
         nfe.append(stats.nfe)
@@ -241,8 +242,103 @@ def _weight_stats(log_w: np.ndarray, f: np.ndarray, n: int) -> dict[str, float |
     shift = log_w[finite].max()
     w = np.where(finite, np.exp(log_w - shift), 0.0)
     total = w.sum()
+    f = np.where(w[:, None] > 0, f, 0.0)
     return {"estimate": w @ f / total, "mass": math.exp(shift) * total / n,
             "ess_frac": total ** 2 / (w @ w) / n, "max_weight": w.max() / total}
+
+
+def _cumulative(per_chunk: np.ndarray) -> np.ndarray:
+    return np.concatenate([[0.0], np.cumsum(per_chunk, dtype=np.float64)])
+
+
+def _span_cost(cum: np.ndarray, start: int, stop: int, chunk: int) -> float:
+    """Cost of samples ``[start, stop)``, pro-rating chunks that are only partly used."""
+    grid = np.arange(cum.size)
+    return float(np.interp(stop / chunk, grid, cum) - np.interp(start / chunk, grid, cum))
+
+
+def _summary(values: np.ndarray) -> dict[str, float]:
+    return {"mean": float(np.nanmean(values)), "median": float(np.nanmedian(values)),
+            "std": float(np.nanstd(values))}
+
+
+def _triple(stats: dict[str, float], fmt: str) -> str:
+    return " / ".join(format(stats[k], fmt) for k in ("mean", "median", "std"))
+
+
+def markdown_tables(report: dict) -> str:
+    """One combined cost and accuracy table per box, with values ordered by N."""
+    n_values = report["n_values"]
+    n_order = "/".join(f"{n:,}" for n in n_values)
+
+    def triplet(values, fmt: str) -> str:
+        return "<br>".join(format(value, fmt).replace("e-", "e&#8209;") for value in values)
+
+    lines = [
+        "# Decay6D per-box accuracy and cost",
+        "",
+        f"Each box has one combined table. Its values are ordered by $N={n_order}$, one value per line within each cell.",
+        "One repetition uses $N$ proposal samples or its listed rejection draw budget to produce",
+        "one estimate. Each accuracy cell gives the standard deviation of absolute error across",
+        "valid repetitions; RMSE is one value per box, estimator, and observable, computed across",
+        "those repetitions. `valid reps` gives finite estimates out of 20, ordered by observable",
+        "(norm / z / tail) and then by N (one line per N). A repetition is valid for an observable",
+        "only if its estimate is finite. Raw $q$ includes every proposal, so a non-finite fallback",
+        "output can invalidate its norm and z estimates; the tail indicator can remain numerically",
+        "finite because a NaN threshold comparison is false. Thus valid means finite, not",
+        "necessarily fallback-free. Filtered $q$ and IS exclude leaked proposals.",
+        "",
+        "Cost columns show mean values only, except draw/evaluation budgets which are fixed per",
+        "repetition. `q draws` is the number from the box-conditioned proposal; `p_uncon draws`",
+        "is the number from the unconstrained model. Density evals are learned / exact. Samples",
+        "used are all proposals for raw $q$, in-box proposals for filtered $q$ and IS, and accepted",
+        "events for rejection. NFE counts velocity-network calls. Exact IS adds quadrature time but",
+        "no extra network NFE; all times include the estimator's density work.",
+        "",
+        "Equal-time and equal-NFE draw budgets are calibrated from median per-chunk costs, then",
+        "rounded to 1,000-draw minibatches. The table reports mean realized costs, which need not",
+        "match exactly: adaptive solver work and fallback trajectories vary between repetitions.",
+        "At $N=100{,}000$, equal-time windows contain 1.4--1.9 million draws; the observed",
+        "60 fallbacks in 80 million draws imply about 1.1--1.5 fallback trajectories per such",
+        "window on average, which can raise realized cost above the median-chunk target.",
+        "Timing/NFE costs for partial 10,000-sample chunks are prorated by sample count.",
+        "",
+    ]
+
+    for name, box in report["boxes"].items():
+        per_n = [box["by_n"][str(n)] for n in n_values]
+        lines += [f"#### {name}: $P(\\mathcal B)={box['gt_mass']:.4f}$, "
+                  f"GT events={box['gt_count']:,}", "",
+                  "| estimator | $q$ draws | $p_{\\rm uncon}$ draws | density evals (learned/exact) "
+                  "| samples used (mean) | NFE (mean) | time [s] (mean) | valid reps (norm/z/tail per N) "
+                  "| $\\lVert\\vec p_2\\rVert$ abs-error std | $\\lVert\\vec p_2\\rVert$ RMSE "
+                  "| $p_{2z}$ abs-error std | $p_{2z}$ RMSE "
+                  "| tail abs-error std | tail RMSE |",
+                  "| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: "
+                  "| ---: | ---: | ---: | ---: |"]
+        for estimator in ESTIMATORS:
+            costs = [entry["cost"][estimator] for entry in per_n]
+            scores = [entry["estimators"][estimator] for entry in per_n]
+            q_draws = triplet([c["q_draws"] for c in costs], ",")
+            p_draws = triplet([c["uncon_draws"] for c in costs], ",")
+            density_evals = "<br>".join(
+                f"{c['learned_density_evals']:,} / {c['exact_density_evals']:,}" for c in costs)
+            samples = triplet([c["used"]["mean"] for c in costs], ",.0f")
+            nfe = triplet([c["nfe"]["mean"] for c in costs], ",.0f")
+            seconds = triplet([c["seconds"]["mean"] for c in costs], ",.1f")
+            reps = "<br>".join(" / ".join(str(s[k]["valid_reps"])
+                                         for k in OBSERVABLE_NAMES) for s in scores)
+            cells = []
+            for observable in OBSERVABLE_NAMES:
+                cells.extend([
+                    triplet([s[observable]["abs_err"]["std"] for s in scores], ".2e"),
+                    triplet([s[observable]["rmse"] for s in scores], ".2e"),
+                ])
+            lines.append("| " + " | ".join(
+                [estimator, q_draws, p_draws, density_evals, samples, nfe, seconds, reps] + cells
+            ) + " |")
+        lines.append("")
+    return "\n".join(lines)
 
 
 def merge(args, run_id: str, out: Path) -> None:
@@ -258,6 +354,7 @@ def merge(args, run_id: str, out: Path) -> None:
     rej_sums = np.concatenate([s["sums"] for s in uncon])
     uncon_nfe = float(np.median(np.concatenate([s["nfe"] for s in uncon])))
     uncon_fallbacks = int(np.sum([s.get("fallbacks", np.zeros(1)).sum() for s in uncon]))
+    rej_cum = {k: _cumulative(np.concatenate([s[k] for s in uncon])) for k in ("seconds", "nfe")}
 
     estimates = np.full((num_b, len(ESTIMATORS), num_f, num_n, reps), np.nan)
     mass = np.full((num_b, len(WEIGHTS), num_n, reps), np.nan)
@@ -265,6 +362,9 @@ def merge(args, run_id: str, out: Path) -> None:
     max_weight = np.full_like(mass, np.nan)
     rej_budget = np.zeros((num_b, 3, num_n), dtype=np.int64)
     rej_reps = np.zeros_like(rej_budget)
+    rep_seconds = np.full((num_b, len(ESTIMATORS), num_n, reps), np.nan)
+    rep_nfe = np.full_like(rep_seconds, np.nan)
+    rep_used = np.full_like(rep_seconds, np.nan)
     gt_mean = np.array([[b["gt"][k]["mean"] for k in OBSERVABLE_NAMES] for b in boxes])
     gt_se = np.array([[b["gt"][k]["se"] for k in OBSERVABLE_NAMES] for b in boxes])
     box_report, plot_arrays = {}, {}
@@ -293,10 +393,20 @@ def merge(args, run_id: str, out: Path) -> None:
         rej_seconds = med["calib_seconds"] / args.chunk
         cost_ratio = {"equal_n": 1.0, "equal_time": is_seconds / rej_seconds,
                       "equal_nfe": is_nfe / med["calib_nfe"]}
+        cum = {k: _cumulative(timing[k]) for k in
+               ("q_seconds", "q_nfe", "p_seconds", "p_nfe", "exact_seconds")}
 
         for j, n in enumerate(n_values):
             for r in range(min(reps, inside.shape[0] // n)):
                 sl = slice(r * n, (r + 1) * n)
+                span = {k: _span_cost(c, sl.start, sl.stop, args.chunk) for k, c in cum.items()}
+                rep_seconds[b, :4, j, r] = [span["q_seconds"], span["q_seconds"],
+                                            span["q_seconds"] + span["p_seconds"],
+                                            span["q_seconds"] + span["exact_seconds"]]
+                rep_nfe[b, :4, j, r] = [span["q_nfe"], span["q_nfe"],
+                                        span["q_nfe"] + span["p_nfe"], span["q_nfe"]]
+                rep_used[b, 0, j, r] = n
+                rep_used[b, 1:4, j, r] = inside[sl].sum()
                 estimates[b, 0, :, j, r] = f[sl].mean(0)
                 if inside[sl].any():
                     estimates[b, 1, :, j, r] = f[sl][inside[sl]].mean(0)
@@ -313,6 +423,10 @@ def merge(args, run_id: str, out: Path) -> None:
                 rej_reps[b, v, j] = min(reps, rej_counts.shape[0] // k)
                 for r in range(rej_reps[b, v, j]):
                     count = rej_counts[r * k:(r + 1) * k, b].sum()
+                    draws = (r * k * args.minibatch, (r + 1) * k * args.minibatch)
+                    rep_seconds[b, 4 + v, j, r] = _span_cost(rej_cum["seconds"], *draws, args.chunk)
+                    rep_nfe[b, 4 + v, j, r] = _span_cost(rej_cum["nfe"], *draws, args.chunk)
+                    rep_used[b, 4 + v, j, r] = count
                     if count > 0:
                         estimates[b, 4 + v, :, j, r] = rej_sums[r * k:(r + 1) * k, b].sum(0) / count
 
@@ -320,6 +434,7 @@ def merge(args, run_id: str, out: Path) -> None:
         finite_gap = gap[np.isfinite(gap)]
         box_report[box["name"]] = {
             "gt_mass": box["gt_mass"],
+            "gt_count": box["gt_count"],
             "leakage": float(1.0 - inside.mean()),
             "p_uncon_fallback": {"total": int(p_fallback.sum()),
                                  "in_box": int((p_fallback & inside).sum())},
@@ -357,9 +472,18 @@ def merge(args, run_id: str, out: Path) -> None:
                 "estimators": {e: {fname: {"bias": float(bias[b, i, k, j]),
                                            "std": float(spread[b, i, k, j]),
                                            "rmse": float(rmse[b, i, k, j]),
+                                           "abs_err": _summary(np.abs(err[b, i, k, j])),
                                            "valid_reps": int(valid[b, i, k, j])}
                                    for k, fname in enumerate(OBSERVABLE_NAMES)}
                                for i, e in enumerate(ESTIMATORS)},
+                "cost": {e: {"q_draws": n if i < 4 else 0,
+                              "uncon_draws": int(rej_budget[b, i - 4, j]) if i >= 4 else 0,
+                              "learned_density_evals": n if e == "is_learned" else 0,
+                              "exact_density_evals": n if e == "is_exact" else 0,
+                              "used": _summary(rep_used[b, i, j]),
+                              "nfe": _summary(rep_nfe[b, i, j]),
+                              "seconds": _summary(rep_seconds[b, i, j])}
+                         for i, e in enumerate(ESTIMATORS)},
                 "rejection_budget": dict(zip(("equal_n", "equal_time", "equal_nfe"),
                                              rej_budget[b, :, j].tolist())),
                 "mass": {w: {"mean": float(np.nanmean(mass[b, i, j])),
@@ -374,13 +498,14 @@ def merge(args, run_id: str, out: Path) -> None:
     artifacts.save_arrays(out, estimates=estimates, gt_mean=gt_mean, gt_se=gt_se,
                           n_values=np.asarray(n_values), mass=mass, ess_frac=ess_frac,
                           max_weight=max_weight, rej_budget=rej_budget, rej_reps=rej_reps,
+                          rep_seconds=rep_seconds, rep_nfe=rep_nfe, rep_used=rep_used,
                           gt_mass=np.array([b["gt_mass"] for b in boxes]), **plot_arrays)
     artifacts.write_manifest(out, run_id=run_id, estimators=list(ESTIMATORS),
                              weights=list(WEIGHTS), observables=list(OBSERVABLE_NAMES),
                              boxes=[b["name"] for b in boxes],
                              benchmark_dir=str(Path(args.boxes).parent))
 
-    (out / "metrics.json").write_text(json.dumps({
+    report = {
         "run_id": run_id,
         "benchmark_run_id": bench["run_id"],
         "evaluated_at": datetime.now().isoformat(timespec="seconds"),
@@ -392,7 +517,9 @@ def merge(args, run_id: str, out: Path) -> None:
         "uncon_nfe_per_chunk": uncon_nfe,
         "uncon_sample_fallbacks": uncon_fallbacks,
         "boxes": box_report,
-    }, indent=2))
+    }
+    (out / "metrics.json").write_text(json.dumps(report, indent=2))
+    (out / "tables.md").write_text(markdown_tables(report))
 
     print(f"### decay6d IS ({run_id})")
     for b, box in enumerate(boxes):
@@ -404,6 +531,7 @@ def merge(args, run_id: str, out: Path) -> None:
 def main(argv: list[str] | None = None) -> int:
     warnings.filterwarnings("ignore", "Mean of empty slice", RuntimeWarning)
     warnings.filterwarnings("ignore", "Degrees of freedom <= 0", RuntimeWarning)
+    warnings.filterwarnings("ignore", "All-NaN slice encountered", RuntimeWarning)
     args = resolve_args(build_parser().parse_args(argv))
     device = resolve_device()
     out = Path(args.outdir)

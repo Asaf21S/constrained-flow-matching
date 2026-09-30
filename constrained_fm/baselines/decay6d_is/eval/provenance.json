@@ -2,8 +2,8 @@
   "run_id": "decay6d_is-f07211bc",
   "method": "decay6d_is",
   "fingerprint": "f07211bc2063b262e498ae274a5371203bc9261b58a0fca306e5f1aa42df75f7",
-  "git_commit": "77c6194a5701bc51bfcaef79ea10a3f9c497fcea",
-  "created_at": "2026-09-30T02:00:38",
+  "git_commit": "c738fed790b5b2255326958b27c1415cafc34d0a",
+  "created_at": "2026-09-30T18:20:42",
   "box_ckpt_run_id": "decay6d_box-cdea812c",
   "uncon_ckpt_run_id": "decay6d_uncon-cb36fa75",
   "benchmark_run_id": "decay6d_boxes-519394b0"

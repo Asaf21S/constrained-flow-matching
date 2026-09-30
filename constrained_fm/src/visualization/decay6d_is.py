@@ -254,7 +254,7 @@ def plot_dataset_p2_given_box(x: np.ndarray, boxes: list[dict]) -> Figure:
     with plt.rc_context(PAPER_RC):
         fig, axes = plt.subplots(2, len(boxes), figsize=(len(boxes) * PANEL_SIZE[0],
                                                          2 * PANEL_SIZE[1]),
-                                 layout="constrained", squeeze=False)
+                                 layout="constrained", sharey="row", squeeze=False)
         for b, (color, box) in enumerate(zip(BOX_COLORS, boxes)):
             inside = ((p1 >= box["lo"]) & (p1 <= box["hi"])).all(1)
             ax = axes[0, b]

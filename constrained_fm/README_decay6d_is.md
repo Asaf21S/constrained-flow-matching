@@ -33,11 +33,18 @@ $$
 \mathbb E[f(\vec p_2)\mid \vec p_1\in\mathcal B].
 $$
 
-The three observables are $|\vec p_2|$, $p_{2z}$, and the tail indicator
-$\mathbb 1[|\vec p_2|>\tau_{\mathcal B}]$. Each box has its own $\tau_{\mathcal B}$, set to the
-95th percentile of $|\vec p_2|$ among true in-box events; therefore the ground-truth tail
-probability is approximately 5% in every box. The exact target density is computed by
-one-dimensional quadrature over $u$ (4096 trapezoid nodes).
+The three observables are $\lVert\vec p_2\rVert$, $p_{2z}$, and the tail indicator
+$\mathbb 1[\lVert\vec p_2\rVert>\tau_{\mathcal B}]$. Here $\tau_{\mathcal B}$ is a cutoff
+chosen separately for each box: 95% of true events inside that box have a smaller
+$\lVert\vec p_2\rVert$, and about 5% have a larger one. It is not a universal physics constant;
+it makes the tail observable similarly rare in all five boxes.
+
+The target density formula contains the hidden split fraction $u$. For a given observed pair
+$(\vec p_1,\vec p_2)$, the density is found by adding up the contributions from all possible
+values of $u$ between 0.1 and 0.9. The code approximates this one-dimensional integral with
+4096 evenly spaced points and trapezoid weights. In this report, “exact density” means this
+physics-based density calculation, as opposed to a density learned by a neural network; the
+integral itself is evaluated numerically.
 
 The physical coupling explains why conditioning on $\vec p_1$ changes $\vec p_2$:
 
@@ -47,8 +54,7 @@ The physical coupling explains why conditioning on $\vec p_1$ changes $\vec p_2$
 
 Five fixed test boxes target different probabilities and geometries. They were selected by
 bisecting a scale against a large simulated pool; their final probabilities were independently
-measured from ground-truth samples. The training-box filter covers probabilities from 0.4% to
-50%, leaving the smallest test box above the training boundary.
+measured from ground-truth samples.
 
 | box | target mass | measured mass | centre of $\vec p_1$ | half-widths | $\tau_{\mathcal B}$ |
 | :--- | ---: | ---: | :--- | :--- | ---: |
@@ -64,15 +70,17 @@ but outside the box along the omitted axis.
 
 ![The particle-1 dataset and projected test boxes](images/thesis_pool/decay6d_is/dataset/dataset_p1_boxes.png)
 
-The boxes induce quite different $\vec p_2$ distributions. The top row compares $|\vec p_2|$
-for all events and in-box events; the bottom row shows the in-box $(p_{2x},p_{2z})$ density.
+The boxes induce quite different $\vec p_2$ distributions. The top row compares
+$\lVert\vec p_2\rVert$ for all events and in-box events. All five panels share one vertical
+density scale, so their heights can be compared directly. The bottom row shows the in-box
+$(p_{2x},p_{2z})$ density.
 
 ![Particle-2 distributions induced by each evaluation box](images/thesis_pool/decay6d_is/dataset/dataset_p2_given_box.png)
 
-Ground-truth conditional means are listed below. Tail means vary slightly around 0.05 because
-the quantile is estimated from a finite pool.
+Ground-truth conditional means are listed below. Tail means vary slightly around
+0.05 because the cutoff is estimated from a finite pool.
 
-| box | $\mathbb E[|\vec p_2|]$ | $\mathbb E[p_{2z}]$ | tail probability |
+| box | $\mathbb E[\lVert\vec p_2\rVert]$ | $\mathbb E[p_{2z}]$ | tail probability |
 | :--- | ---: | ---: | ---: |
 | small_offcentre | 0.29728 | -0.13535 | 0.04950 |
 | thin_slab | 0.89792 | 0.00000 | 0.04995 |
@@ -82,9 +90,11 @@ the quantile is estimated from a finite pool.
 
 ## Models and estimators
 
-The conditional flow $q(\vec p_1,\vec p_2\mid\mathcal B)$ receives the box centre and log
-half-widths and is trained on simulator events conditioned to lie inside the box. Its samples
-are not perfectly confined, so its measured leakage is reported. The unconstrained flow
+The conditional flow $q(\vec p_1,\vec p_2\mid\mathcal B)$ receives the box centre and the
+logarithm of each half-width. A half-width is the distance from the box centre to a face; its
+logarithm keeps the value positive when converted back and makes narrow and wide boxes easier
+to represent on one numerical scale. The model is trained on simulator events conditioned to
+lie inside the box. Its samples are not perfectly confined, so its measured leakage is reported. The unconstrained flow
 $p_{\mathrm{uncon}}$ models the full six-dimensional target.
 
 For a proposal sample $x\sim q$, the importance weight is
@@ -109,9 +119,20 @@ The seven reported estimators are:
 | (e2) | `rej_equal_time` | Rejection sampling with the number of draws adjusted to the same measured GPU time. |
 | (e3) | `rej_equal_nfe` | Rejection sampling with the number of draws adjusted to the same number of network evaluations. |
 
+For (d), each sample from the box flow gets a weight using the physics-based density calculated
+by the $u$-quadrature, rather than the learned unconstrained flow. This corrects the box flow's
+sampling errors using the reference density. It is a comparison standard for (c), not a claim
+that the numerical quadrature has zero error.
+
+In (e3), a “network evaluation” means one call to the neural network to calculate its velocity
+at a solver step. An ODE solver may call the network several times per step, so NFE (“number of
+function evaluations”) counts actual calls, not just the number of steps. Equal NFE compares
+methods at roughly equal neural-network compute, even when their number of generated samples
+differs.
+
 Methods (a) and (b) test the conditional flow without density correction. Methods (c) and (d)
-test importance sampling with learned and exact densities, respectively. Rejection is included
-as a direct baseline and is necessarily wasteful for small boxes.
+test importance sampling with learned and quadrature densities, respectively. Rejection is
+included as a direct baseline and is necessarily wasteful for small boxes.
 
 ## Training and evaluation
 
@@ -153,7 +174,7 @@ The table gives the median RMSE across the five boxes, in physical momentum unit
 probability RMSE is unitless). The `q_raw` median conceals an extreme outlier and is qualified
 below; do not interpret it as uniformly reliable.
 
-| estimator | $|\vec p_2|$ RMSE | $p_{2z}$ RMSE | tail RMSE |
+| estimator | $\lVert\vec p_2\rVert$ RMSE | $p_{2z}$ RMSE | tail RMSE |
 | :--- | ---: | ---: | ---: |
 | (a) raw $q$ | 0.00080* | 0.00175* | 0.00082 |
 | (b) filtered $q$ | 0.00097 | 0.00161 | 0.00086 |
@@ -173,11 +194,24 @@ The per-observable error curves show how errors change with sample budget. Exact
 track one another closely; rejection improves as its draw budget grows, but is much noisier at
 equal $N$.
 
-![RMSE and estimates versus sample count for |p2|](images/thesis_pool/decay6d_is/error_vs_n_p2_norm.png)
+![RMSE and estimates versus sample count for p2 norm](images/thesis_pool/decay6d_is/error_vs_n_p2_norm.png)
 
 ![RMSE and estimates versus sample count for p2z](images/thesis_pool/decay6d_is/error_vs_n_p2_z.png)
 
 ![RMSE and estimates versus sample count for the tail indicator](images/thesis_pool/decay6d_is/error_vs_n_p2_tail.png)
+
+ESS (“effective sample size”) summarizes how evenly the importance weight is spread. Its
+formula is $\mathrm{ESS}=(\sum_i w_i)^2/\sum_i w_i^2$. If all weights are equal, ESS equals the
+sample count $N$; if a few samples carry nearly all the weight, ESS is much smaller. The plots
+show ESS divided by $N$, so values near 1 are healthy and values near 0 indicate that many draws
+contribute little useful information.
+
+In `weight_histograms`, each panel shows the distribution of normalized weights for one box.
+The horizontal axis is the weight divided by the average in-box weight, on a log scale: zero
+means “average weight,” values to the right are heavier-than-average samples, and values to the
+left are lighter. A narrow shape near zero means weights are similar; a long right tail means
+some samples dominate. The vertical axis is histogram density, shown on a log scale so the
+rare heavy weights remain visible.
 
 At $N=100{,}000$, the learned and exact IS estimates of $P(\mathcal B)$ agree with each other
 and the benchmark mass to within about 0.2% relative error in every box. Their effective

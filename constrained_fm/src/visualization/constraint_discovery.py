@@ -51,6 +51,7 @@ class DiscoveryStyle:
     hist_headroom: float = 1.15
     grid_alpha: float = 0.25
     panel_size: float = 4.5
+    strip_panel_size: float = 3.5
     title_size: float = 20.0
     caption_size: float = 15.0
     tick_size: float = 14.0
@@ -161,8 +162,8 @@ def plot_discovery_strip(fields: np.ndarray, steps: Sequence[int], points: np.nd
     y_max = style.hist_headroom * max([gt.max()] + [h.max() for h in hists])
 
     with plt.rc_context(SERIF_RC):
-        fig = plt.figure(figsize=(style.panel_size * k,
-                                  style.panel_size * (1.0 + style.hist_ratio) + 1.2),
+        fig = plt.figure(figsize=(style.strip_panel_size * k,
+                      style.strip_panel_size * (1.0 + style.hist_ratio) + 1.2),
                          layout="constrained")
         gs = fig.add_gridspec(2, k, height_ratios=[1.0, style.hist_ratio])
         top = [fig.add_subplot(gs[0, i]) for i in range(k)]

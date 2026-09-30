@@ -231,7 +231,7 @@ def render_summary(root_fig: Path, arrays: dict[str, np.ndarray], scale: float, 
         target_x=arrays["target_x"], mode_inside=arrays["mode_inside"][idx],
         bins=args.hist_bins, style=style)
     written += save_encoder_figure(fig, root_fig / "strip_exp", formats=args.formats,
-                                   dpi=args.dpi, pdf_dpi=600)
+                                   dpi=args.dpi, pdf_dpi=300)
     fig = cd.plot_likelihood_map(arrays["density"], PLANE_SCALE,
                                  float(arrays["likelihood_vmax"][0]))
     written += save_encoder_figure(fig, root_fig / "likelihood", formats=args.formats, dpi=300)

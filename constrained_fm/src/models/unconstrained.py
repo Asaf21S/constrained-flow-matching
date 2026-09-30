@@ -29,7 +29,7 @@ class UnconstrainedFM(BaseFM):
     def forward(self, x, t):
         sz = x.size()
         x = x.reshape(-1, self.input_dim)
-        t = t.reshape(-1, 1).float()
+        t = t.reshape(-1, 1).to(x.dtype)
         t_expanded = t.expand(x.shape[0], 1)
         t_emb = self.time_emb(t_expanded)
 

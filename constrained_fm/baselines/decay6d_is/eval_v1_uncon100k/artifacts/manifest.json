@@ -1,0 +1,237 @@
+{
+  "arrays": {
+    "estimates": {
+      "shape": [
+        5,
+        7,
+        3,
+        3,
+        20
+      ],
+      "dtype": "float32"
+    },
+    "gt_mean": {
+      "shape": [
+        5,
+        3
+      ],
+      "dtype": "float32"
+    },
+    "gt_se": {
+      "shape": [
+        5,
+        3
+      ],
+      "dtype": "float32"
+    },
+    "n_values": {
+      "shape": [
+        3
+      ],
+      "dtype": "int64"
+    },
+    "mass": {
+      "shape": [
+        5,
+        2,
+        3,
+        20
+      ],
+      "dtype": "float32"
+    },
+    "ess_frac": {
+      "shape": [
+        5,
+        2,
+        3,
+        20
+      ],
+      "dtype": "float32"
+    },
+    "max_weight": {
+      "shape": [
+        5,
+        2,
+        3,
+        20
+      ],
+      "dtype": "float32"
+    },
+    "rej_budget": {
+      "shape": [
+        5,
+        3,
+        3
+      ],
+      "dtype": "int64"
+    },
+    "rej_reps": {
+      "shape": [
+        5,
+        3,
+        3
+      ],
+      "dtype": "int64"
+    },
+    "gt_mass": {
+      "shape": [
+        5
+      ],
+      "dtype": "float32"
+    },
+    "q_p2_box0": {
+      "shape": [
+        500000,
+        3
+      ],
+      "dtype": "float32"
+    },
+    "q_inside_box0": {
+      "shape": [
+        500000
+      ],
+      "dtype": "bool"
+    },
+    "log_w_learned_box0": {
+      "shape": [
+        500000
+      ],
+      "dtype": "float32"
+    },
+    "log_w_exact_box0": {
+      "shape": [
+        500000
+      ],
+      "dtype": "float32"
+    },
+    "q_p2_box1": {
+      "shape": [
+        500000,
+        3
+      ],
+      "dtype": "float32"
+    },
+    "q_inside_box1": {
+      "shape": [
+        500000
+      ],
+      "dtype": "bool"
+    },
+    "log_w_learned_box1": {
+      "shape": [
+        500000
+      ],
+      "dtype": "float32"
+    },
+    "log_w_exact_box1": {
+      "shape": [
+        500000
+      ],
+      "dtype": "float32"
+    },
+    "q_p2_box2": {
+      "shape": [
+        500000,
+        3
+      ],
+      "dtype": "float32"
+    },
+    "q_inside_box2": {
+      "shape": [
+        500000
+      ],
+      "dtype": "bool"
+    },
+    "log_w_learned_box2": {
+      "shape": [
+        500000
+      ],
+      "dtype": "float32"
+    },
+    "log_w_exact_box2": {
+      "shape": [
+        500000
+      ],
+      "dtype": "float32"
+    },
+    "q_p2_box3": {
+      "shape": [
+        500000,
+        3
+      ],
+      "dtype": "float32"
+    },
+    "q_inside_box3": {
+      "shape": [
+        500000
+      ],
+      "dtype": "bool"
+    },
+    "log_w_learned_box3": {
+      "shape": [
+        500000
+      ],
+      "dtype": "float32"
+    },
+    "log_w_exact_box3": {
+      "shape": [
+        500000
+      ],
+      "dtype": "float32"
+    },
+    "q_p2_box4": {
+      "shape": [
+        500000,
+        3
+      ],
+      "dtype": "float32"
+    },
+    "q_inside_box4": {
+      "shape": [
+        500000
+      ],
+      "dtype": "bool"
+    },
+    "log_w_learned_box4": {
+      "shape": [
+        500000
+      ],
+      "dtype": "float32"
+    },
+    "log_w_exact_box4": {
+      "shape": [
+        500000
+      ],
+      "dtype": "float32"
+    }
+  },
+  "written_at": "2026-09-29T17:21:13",
+  "git_commit": "c6ef9e7dde8a20d87972c4ba2d104e2cdcbe5746",
+  "run_id": "decay6d_is-b060fc3b",
+  "estimators": [
+    "q_raw",
+    "q_filtered",
+    "is_learned",
+    "is_exact",
+    "rej_equal_n",
+    "rej_equal_time",
+    "rej_equal_nfe"
+  ],
+  "weights": [
+    "learned",
+    "exact"
+  ],
+  "observables": [
+    "p2_norm",
+    "p2_z",
+    "p2_tail"
+  ],
+  "boxes": [
+    "small_offcentre",
+    "thin_slab",
+    "offcentre_cube",
+    "elongated",
+    "bulk_cube"
+  ],
+  "benchmark_dir": "constrained_fm/baselines/decay6d_is/benchmark"
+}

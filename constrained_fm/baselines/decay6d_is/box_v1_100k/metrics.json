@@ -1,0 +1,32 @@
+{
+  "run_id": "decay6d_box-521b1e92",
+  "problem": "decay6d",
+  "mode": "box",
+  "model": "BoxConstrainedFM6D",
+  "evaluated_at": "2026-09-29T15:25:14",
+  "normalizer_std": [
+    0.32310558989627863,
+    0.32310558989627863,
+    0.32310558989627863,
+    0.32310558989627863,
+    0.32310558989627863,
+    0.32310558989627863
+  ],
+  "train": {
+    "iterations": 100000,
+    "batch_size": 4096,
+    "lr": 0.001,
+    "lr_min": 1e-05,
+    "hidden_dim": 1024,
+    "num_blocks": 3,
+    "time_dim": 64,
+    "seed": 0
+  },
+  "box_filter_acceptance": 0.3908717742919922,
+  "final_loss": 0.6588755096793175,
+  "diagnostics": {
+    "in_box_rate_mean": 0.966175,
+    "in_box_rate_min": 0.912,
+    "in_box_rate_max": 0.9892000000000001
+  }
+}

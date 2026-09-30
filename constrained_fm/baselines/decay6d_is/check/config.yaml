@@ -1,0 +1,12 @@
+method: decay6d_check
+run_id: decay6d_check-b6572264
+settings:
+  box_candidates: 200000
+  mc_boxes: 2000
+  mc_pool: 1000000
+  moment_samples: 2000000
+  noise_inflation: 1.5
+  norm_samples: 2000000
+  pit_samples: 20000
+  quadrature_samples: 2000
+  seed: 0

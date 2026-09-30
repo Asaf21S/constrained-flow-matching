@@ -1,0 +1,15 @@
+method: decay6d_uncon
+run_id: decay6d_uncon-b7ed8350
+settings:
+  batch_size: 4096
+  diag_boxes: 16
+  diag_samples: 5000
+  hidden_dim: 1024
+  iterations: 100000
+  log_every: 1000
+  lr: 0.001
+  lr_min: 1.0e-05
+  mode: uncon
+  num_blocks: 3
+  seed: 0
+  time_dim: 64

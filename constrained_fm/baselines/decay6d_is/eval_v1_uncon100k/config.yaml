@@ -1,0 +1,25 @@
+method: decay6d_is
+run_id: decay6d_is-b060fc3b
+settings:
+  atol: 1.0e-05
+  block_size: 500000
+  blocks_per_box: 4
+  box_ckpt: constrained_fm/baselines/decay6d_is/box/ckpt.pt
+  boxes: constrained_fm/baselines/decay6d_is/benchmark/boxes.json
+  calibration_chunks: 5
+  chunk: 10000
+  minibatch: 1000
+  n_values:
+  - 1000
+  - 10000
+  - 100000
+  plot_cap: 500000
+  reps: 20
+  rtol: 1.0e-05
+  seed: 0
+  uncon_block_size: 10000000
+  uncon_blocks: 8
+  uncon_ckpt: constrained_fm/baselines/decay6d_is/uncon/ckpt.pt
+box_ckpt_run_id: decay6d_box-521b1e92
+uncon_ckpt_run_id: decay6d_uncon-b7ed8350
+benchmark_run_id: decay6d_boxes-519394b0

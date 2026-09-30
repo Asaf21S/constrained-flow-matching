@@ -1,0 +1,32 @@
+{
+  "run_id": "decay6d_uncon-b7ed8350",
+  "problem": "decay6d",
+  "mode": "uncon",
+  "model": "UnconstrainedFM",
+  "evaluated_at": "2026-09-29T14:39:15",
+  "normalizer_std": [
+    0.32310558989627863,
+    0.32310558989627863,
+    0.32310558989627863,
+    0.32310558989627863,
+    0.32310558989627863,
+    0.32310558989627863
+  ],
+  "train": {
+    "iterations": 100000,
+    "batch_size": 4096,
+    "lr": 0.001,
+    "lr_min": 1e-05,
+    "hidden_dim": 1024,
+    "num_blocks": 3,
+    "time_dim": 64,
+    "seed": 0
+  },
+  "box_filter_acceptance": null,
+  "final_loss": 1.3045366607904434,
+  "diagnostics": {
+    "kl_p_uncon": 0.08293686375125119,
+    "kl_p_uncon_se": 0.005827437662191761,
+    "exact_nll": -2.643529599566774
+  }
+}

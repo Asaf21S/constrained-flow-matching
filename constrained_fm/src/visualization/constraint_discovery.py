@@ -78,9 +78,11 @@ def _draw_panel(ax, field: np.ndarray, points: np.ndarray, labels: np.ndarray, e
 
     excluded = labels == excluded_mode
     ax.scatter(points[~excluded, 0], points[~excluded, 1], s=style.point_size,
-               c=style.target_color, alpha=style.point_alpha, linewidths=0, zorder=2)
+               c=style.target_color, alpha=style.point_alpha, linewidths=0, zorder=2,
+               rasterized=True)
     ax.scatter(points[excluded, 0], points[excluded, 1], s=style.point_size,
-               c=style.excluded_color, alpha=style.point_alpha, linewidths=0, zorder=2)
+               c=style.excluded_color, alpha=style.point_alpha, linewidths=0, zorder=2,
+               rasterized=True)
 
     if traced.min() < 0.0 < traced.max():
         ax.contour(xx, yy, traced, levels=[0.0], colors=style.boundary_color,

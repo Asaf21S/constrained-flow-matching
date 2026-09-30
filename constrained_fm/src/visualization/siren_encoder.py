@@ -339,14 +339,16 @@ def plot_boundary_grid(pred_fields: np.ndarray, true_fields: np.ndarray, rows: i
 
 
 def save_encoder_figure(fig: Figure, stem: str | Path, formats: Sequence[str] = ("png", "pdf"),
-                        dpi: int = 300, close: bool = True) -> list[Path]:
+                        dpi: int = 300, pdf_dpi: int | None = None,
+                        close: bool = True) -> list[Path]:
     """Writes the same figure once per format under a shared stem, all tightly cropped."""
     stem = Path(stem)
     stem.parent.mkdir(parents=True, exist_ok=True)
     written = []
     for suffix in formats:
         path = stem.with_suffix(f".{suffix}")
-        fig.savefig(path, dpi=dpi, bbox_inches="tight")
+        fig.savefig(path, dpi=pdf_dpi if suffix == "pdf" and pdf_dpi is not None else dpi,
+                    bbox_inches="tight")
         written.append(path)
     if close:
         plt.close(fig)

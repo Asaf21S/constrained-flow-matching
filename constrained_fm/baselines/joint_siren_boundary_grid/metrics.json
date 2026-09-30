@@ -1,0 +1,215 @@
+{
+  "run_id": "joint_siren_boundary_grid-3a0ccbaf",
+  "siren_run_id": "joint_siren-490e48e3",
+  "checkpoint": "siren_best.pt",
+  "tau": 0.9,
+  "poly_gain": 9.0612051154481,
+  "scale": 4.5,
+  "degree": 3,
+  "seed": 0,
+  "cols": 4,
+  "num_grids": 3,
+  "pool_per_family": 12,
+  "selections": [
+    [
+      6,
+      8,
+      2,
+      9,
+      21,
+      13,
+      14,
+      22
+    ],
+    [
+      11,
+      4,
+      0,
+      10,
+      15,
+      20,
+      19,
+      12
+    ],
+    [
+      7,
+      1,
+      5,
+      3,
+      16,
+      23,
+      17,
+      18
+    ]
+  ],
+  "pool": [
+    {
+      "index": 0,
+      "family": "polygon",
+      "mass": 0.26075997948646545,
+      "mass_iou": 0.9674537181854248,
+      "extraction_mse": 0.0005648012738674879
+    },
+    {
+      "index": 1,
+      "family": "polygon",
+      "mass": 0.0725799947977066,
+      "mass_iou": 0.8376763463020325,
+      "extraction_mse": 0.0008348584524355829
+    },
+    {
+      "index": 2,
+      "family": "polygon",
+      "mass": 0.429639995098114,
+      "mass_iou": 0.9876788854598999,
+      "extraction_mse": 0.000556136597879231
+    },
+    {
+      "index": 3,
+      "family": "polygon",
+      "mass": 0.4471599757671356,
+      "mass_iou": 0.9906995296478271,
+      "extraction_mse": 0.0008122790022753179
+    },
+    {
+      "index": 4,
+      "family": "polygon",
+      "mass": 0.11960999667644501,
+      "mass_iou": 0.9297850131988525,
+      "extraction_mse": 0.0005114598316140473
+    },
+    {
+      "index": 5,
+      "family": "polygon",
+      "mass": 0.2690500020980835,
+      "mass_iou": 0.991043210029602,
+      "extraction_mse": 0.00022750624339096248
+    },
+    {
+      "index": 6,
+      "family": "polygon",
+      "mass": 0.07181999832391739,
+      "mass_iou": 0.9461118578910828,
+      "extraction_mse": 0.0008297816966660321
+    },
+    {
+      "index": 7,
+      "family": "polygon",
+      "mass": 0.052619997411966324,
+      "mass_iou": 0.9089595079421997,
+      "extraction_mse": 0.0006100824102759361
+    },
+    {
+      "index": 8,
+      "family": "polygon",
+      "mass": 0.2049800008535385,
+      "mass_iou": 0.9797847867012024,
+      "extraction_mse": 0.0003702128888107836
+    },
+    {
+      "index": 9,
+      "family": "polygon",
+      "mass": 0.5216699838638306,
+      "mass_iou": 0.9936966300010681,
+      "extraction_mse": 0.000290203228360042
+    },
+    {
+      "index": 10,
+      "family": "polygon",
+      "mass": 0.8164100050926208,
+      "mass_iou": 0.9901420474052429,
+      "extraction_mse": 0.0005924548022449017
+    },
+    {
+      "index": 11,
+      "family": "polygon",
+      "mass": 0.0508899986743927,
+      "mass_iou": 0.8348479270935059,
+      "extraction_mse": 0.0012026369804516435
+    },
+    {
+      "index": 12,
+      "family": "polynomial",
+      "mass": 0.8328099846839905,
+      "mass_iou": 0.9956192374229431,
+      "extraction_mse": 0.00023122264246921986
+    },
+    {
+      "index": 13,
+      "family": "polynomial",
+      "mass": 0.6380999684333801,
+      "mass_iou": 0.998731791973114,
+      "extraction_mse": 0.00012389484618324786
+    },
+    {
+      "index": 14,
+      "family": "polynomial",
+      "mass": 0.8109299540519714,
+      "mass_iou": 0.9934042096138,
+      "extraction_mse": 0.0003460693405941129
+    },
+    {
+      "index": 15,
+      "family": "polynomial",
+      "mass": 0.38554999232292175,
+      "mass_iou": 0.9926140904426575,
+      "extraction_mse": 0.000309703522361815
+    },
+    {
+      "index": 16,
+      "family": "polynomial",
+      "mass": 0.4413599967956543,
+      "mass_iou": 0.9933692812919617,
+      "extraction_mse": 0.00022117803746368736
+    },
+    {
+      "index": 17,
+      "family": "polynomial",
+      "mass": 0.8307399749755859,
+      "mass_iou": 0.9946966767311096,
+      "extraction_mse": 0.00020389858400449157
+    },
+    {
+      "index": 18,
+      "family": "polynomial",
+      "mass": 0.8391900062561035,
+      "mass_iou": 0.997795820236206,
+      "extraction_mse": 0.00031301952549256384
+    },
+    {
+      "index": 19,
+      "family": "polynomial",
+      "mass": 0.745169997215271,
+      "mass_iou": 0.9936789274215698,
+      "extraction_mse": 0.00020338169997557998
+    },
+    {
+      "index": 20,
+      "family": "polynomial",
+      "mass": 0.46136999130249023,
+      "mass_iou": 0.9901246428489685,
+      "extraction_mse": 0.00021077824931126088
+    },
+    {
+      "index": 21,
+      "family": "polynomial",
+      "mass": 0.2507700026035309,
+      "mass_iou": 0.981526255607605,
+      "extraction_mse": 0.00022174180776346475
+    },
+    {
+      "index": 22,
+      "family": "polynomial",
+      "mass": 0.840999960899353,
+      "mass_iou": 0.9980883598327637,
+      "extraction_mse": 0.0005161706358194351
+    },
+    {
+      "index": 23,
+      "family": "polynomial",
+      "mass": 0.5654999613761902,
+      "mass_iou": 0.9961945414543152,
+      "extraction_mse": 9.239457722287625e-05
+    }
+  ]
+}

@@ -1,0 +1,74 @@
+{
+  "arrays": {
+    "family": {
+      "shape": [
+        24
+      ],
+      "dtype": "int64"
+    },
+    "sign": {
+      "shape": [
+        24
+      ],
+      "dtype": "float32"
+    },
+    "C": {
+      "shape": [
+        24,
+        4,
+        4
+      ],
+      "dtype": "float32"
+    },
+    "normals": {
+      "shape": [
+        24,
+        11,
+        2
+      ],
+      "dtype": "float32"
+    },
+    "offsets": {
+      "shape": [
+        24,
+        11
+      ],
+      "dtype": "float32"
+    },
+    "active": {
+      "shape": [
+        24,
+        11
+      ],
+      "dtype": "bool"
+    },
+    "latents": {
+      "shape": [
+        24,
+        512
+      ],
+      "dtype": "float32"
+    },
+    "pool_pred_fields": {
+      "shape": [
+        24,
+        500,
+        500
+      ],
+      "dtype": "float32"
+    },
+    "pool_true_fields": {
+      "shape": [
+        24,
+        500,
+        500
+      ],
+      "dtype": "float32"
+    }
+  },
+  "written_at": "2026-09-30T16:57:39",
+  "git_commit": "c4eb2f0930e524b90bea743fbed7f1acff9cb970",
+  "run_id": "joint_siren_boundary_grid-3a0ccbaf",
+  "siren_run_id": "joint_siren-490e48e3",
+  "checkpoint": "siren_best.pt"
+}

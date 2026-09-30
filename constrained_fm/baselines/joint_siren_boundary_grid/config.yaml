@@ -1,0 +1,31 @@
+method: joint_siren_boundary_grid
+run_id: joint_siren_boundary_grid-3a0ccbaf
+settings:
+  checkpoint: siren_best.pt
+  chunk_size: 65536
+  clip_to_unit: false
+  cmap: null
+  colorbar_label: null
+  cols: 4
+  dpi: 300
+  field_render: null
+  formats:
+  - png
+  - pdf
+  gt_color: null
+  iou_points: 100000
+  legend: false
+  no_colorbar: false
+  no_ticks: false
+  num_grids: 3
+  pool_per_family: null
+  pred_color: null
+  proxy_points: 10000
+  resolution: 500
+  seed: 0
+  siren_dir: constrained_fm/functa_dataset/joint_siren_sharp
+  smooth_sigma: null
+  style: paper
+siren_run_id: joint_siren-490e48e3
+tau: 0.9
+poly_gain: 9.0612051154481

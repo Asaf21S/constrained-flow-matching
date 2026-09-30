@@ -232,8 +232,8 @@
       "dtype": "float32"
     }
   },
-  "written_at": "2026-09-30T18:20:46",
-  "git_commit": "c738fed790b5b2255326958b27c1415cafc34d0a",
+  "written_at": "2026-09-30T18:52:38",
+  "git_commit": "b99416c464629ee20e018f67984b70771fad7bde",
   "run_id": "decay6d_is-f07211bc",
   "estimators": [
     "q_raw",

@@ -1,7 +1,7 @@
 {
   "run_id": "decay6d_is-f07211bc",
   "benchmark_run_id": "decay6d_boxes-519394b0",
-  "evaluated_at": "2026-09-30T18:20:46",
+  "evaluated_at": "2026-09-30T18:52:38",
   "estimators": [
     "q_raw",
     "q_filtered",

@@ -7,8 +7,9 @@ valid repetitions; RMSE is one value per box, estimator, and observable, compute
 those repetitions. `valid reps` gives finite estimates out of 20, ordered by observable
 (norm / z / tail) and then by N (one line per N). A repetition is valid for an observable
 only if its estimate is finite. Raw $q$ includes every proposal, so a non-finite fallback
-output can invalidate its norm and z estimates; the tail indicator can remain finite
-because it is a threshold comparison. Filtered $q$ and IS exclude leaked proposals.
+output can invalidate its norm and z estimates; the tail indicator can remain numerically
+finite because a NaN threshold comparison is false. Thus valid means finite, not
+necessarily fallback-free. Filtered $q$ and IS exclude leaked proposals.
 
 Cost columns show mean values only, except draw/evaluation budgets which are fixed per
 repetition. `q draws` is the number from the box-conditioned proposal; `p_uncon draws`

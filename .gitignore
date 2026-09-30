@@ -29,6 +29,8 @@ runs/*/figures/
 # into summary.json which is tracked.
 constrained_fm/baselines/*/results/
 constrained_fm/baselines/*/samples/
+constrained_fm/baselines/decay6d_is/**/shards/
+constrained_fm/baselines/decay6d_is/smoke/
 
 !constrained_fm/functa_dataset/embed_best.pt
 !constrained_fm/functa_dataset/loss_history.npy

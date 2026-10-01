@@ -21,6 +21,8 @@ from constrained_fm.src.experiment.registry import summarize
 
 DEFAULT_OUTDIR = "constrained_fm/baselines/val1k"
 METRIC_KEYS = ("success_rate", "swd", "mmd", "jsd", "nll", "kld")
+# Per-constraint covariates merged alongside the metrics when a shard carries them.
+CARRIED_KEYS = ("mass", "n_inside")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -48,7 +50,7 @@ def load_shards(shard_dir: Path) -> dict[str, list[dict]]:
 
 def merge_method(shards: list[dict], expected: int, allow_partial: bool) -> dict:
     """Scatters every shard's rows into one array per metric, indexed by constraint."""
-    per_shape = {key: [float("nan")] * expected for key in (*METRIC_KEYS, "mass")}
+    per_shape = {key: [float("nan")] * expected for key in (*METRIC_KEYS, *CARRIED_KEYS)}
     seen: dict[int, str] = {}
 
     for shard in shards:

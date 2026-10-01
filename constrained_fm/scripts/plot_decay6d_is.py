@@ -29,6 +29,9 @@ OBSERVABLE_LABELS = {"p2_norm": r"$E[|\vec p_2|\,|\,\mathcal{B}]$",
                      "p2_tail": r"$P(|\vec p_2| > \tau_{\mathcal{B}}\,|\,\mathcal{B})$"}
 SUMMARY_OBSERVABLE = "p2_norm"
 SUMMARY_LABEL = r"$\Vert\vec p_2\Vert$ RMSE"
+RMSE_LABELS = {"p2_norm": SUMMARY_LABEL, "p2_z": r"$p_{2z}$ RMSE",
+               "p2_tail": r"$P(\Vert\vec p_2\Vert > \tau_{\mathcal{B}})$ RMSE"}
+MASS_N = 1000
 MASS_ESTIMATORS = ("is_learned", "rej_equal_time", "rej_equal_nfe", "rej_equal_n")
 TIME_ESTIMATORS = ("is_learned", "rej_equal_time", "rej_equal_nfe")
 TIME_BOX = "small_offcentre"
@@ -54,12 +57,12 @@ def plot_summaries(metrics: dict, out: Path) -> None:
     boxes = metrics["boxes"]
     names = list(boxes)
     n_values = np.asarray(metrics["n_values"])
-    top = str(n_values.max())
     masses = np.array([boxes[b]["gt_mass"] for b in names])
-    rmse = {e: np.array([boxes[b]["by_n"][top]["estimators"][e][SUMMARY_OBSERVABLE]["rmse"]
-                         for b in names]) for e in MASS_ESTIMATORS}
-    save(viz.plot_rmse_vs_mass(masses, rmse, names, SUMMARY_LABEL, int(top)),
-         out, f"rmse_vs_mass_{SUMMARY_OBSERVABLE}")
+    for obs, label in RMSE_LABELS.items():
+        rmse = {e: np.array([boxes[b]["by_n"][str(MASS_N)]["estimators"][e][obs]["rmse"]
+                             for b in names]) for e in MASS_ESTIMATORS}
+        save(viz.plot_rmse_vs_mass(masses, rmse, names, label, MASS_N),
+             out, f"rmse_vs_mass_{obs}_n{MASS_N}")
 
     by_n = [boxes[TIME_BOX]["by_n"][str(n)] for n in n_values]
     seconds = {e: np.array([c["cost"][e]["seconds"]["mean"] for c in by_n])

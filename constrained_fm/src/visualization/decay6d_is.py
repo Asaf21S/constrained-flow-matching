@@ -8,7 +8,7 @@ import numpy as np
 from matplotlib.colors import LogNorm
 from matplotlib.figure import Figure
 from matplotlib.patches import Rectangle
-from matplotlib.ticker import MaxNLocator
+from matplotlib.ticker import LogFormatterSciNotation, MaxNLocator, NullLocator
 
 from constrained_fm.src.visualization.style import PAPER_RC
 
@@ -275,6 +275,65 @@ def plot_dataset_p2_given_box(x: np.ndarray, boxes: list[dict]) -> Figure:
     return fig
 
 
+def plot_rmse_vs_mass(masses: np.ndarray, rmse: dict[str, np.ndarray], box_names: list[str],
+                      y_label: str, n: int) -> Figure:
+    """RMSE at one budget ``n`` against ``P(B)``, rarest box on the right of a reversed log axis.
+
+    ``rmse[estimator]`` is ``(boxes,)``, aligned with ``masses`` and ``box_names``.
+    """
+    order = np.argsort(masses)[::-1]
+    with plt.rc_context(PAPER_RC):
+        fig, ax = plt.subplots(figsize=(7.5, 5.2), layout="constrained")
+        for estimator, values in rmse.items():
+            style = ESTIMATOR_STYLE[estimator]
+            ax.plot(masses[order], values[order], color=style["color"], ls=style["ls"],
+                    marker=style["marker"], ms=9, label=style["label"])
+        ax.set(xscale="log", yscale="log", xlabel=r"True constraint mass $P(\mathcal{B})$",
+               ylabel=y_label, title=f"$N={n:,}$ samples per estimate")
+        ax.set_xticks(masses[order], [f"{box_names[i]}\n$P={m:.3g}$" for i, m in
+                                      zip(order, masses[order])], fontsize="x-small",
+                      rotation=25, ha="right", rotation_mode="anchor")
+        ax.xaxis.set_minor_locator(NullLocator())
+        ax.yaxis.set_minor_formatter(LogFormatterSciNotation(labelOnlyBase=False,
+                                                             minor_thresholds=(2, 0.5)))
+        ax.tick_params(axis="y", which="minor", labelsize="x-small")
+        ax.invert_xaxis()
+        ax.grid(True, which="major", alpha=0.3)
+        ax.legend(frameon=False, fontsize="small")
+    return fig
+
+
+def _count_label(count: float) -> str:
+    if count >= 1e6:
+        return f"{count / 1e6:.3g}M"
+    return f"{count / 1e3:.3g}k"
+
+
+def plot_rmse_vs_time(seconds: dict[str, np.ndarray], rmse: dict[str, np.ndarray],
+                      draws: dict[str, np.ndarray], y_label: str, box_name: str) -> Figure:
+    """Error-vs-cost frontier: one connected curve per estimator, one point per IS budget ``N``.
+
+    Points are labelled with the estimator's own model draws per estimate; marker size grows with ``N``.
+    """
+    sizes = np.linspace(6, 14, len(next(iter(draws.values()))))
+    with plt.rc_context(PAPER_RC):
+        fig, ax = plt.subplots(figsize=(7.5, 5.2), layout="constrained")
+        for estimator, time in seconds.items():
+            style = ESTIMATOR_STYLE[estimator]
+            ax.plot(time, rmse[estimator], color=style["color"], ls=style["ls"], lw=1.8,
+                    label=style["label"])
+            for t, err, size, count in zip(time, rmse[estimator], sizes, draws[estimator]):
+                ax.plot(t, err, color=style["color"], marker=style["marker"], ms=size)
+                ax.annotate(_count_label(count), (t, err), textcoords="offset points",
+                            xytext=(7, 5), fontsize="x-small", color=style["color"])
+        ax.set(xscale="log", yscale="log", xlabel="Mean time per estimate [s]",
+               ylabel=y_label, title=box_name)
+        ax.grid(True, which="major", alpha=0.3)
+        ax.legend(frameon=False, fontsize="small", title="labels: draws per estimate",
+                  title_fontsize="x-small")
+    return fig
+
+
 __all__ = ["ESTIMATOR_STYLE", "plot_error_vs_n", "plot_weight_histograms", "plot_ess",
            "plot_p2_marginals", "plot_dataset_p1_boxes", "plot_dataset_structure",
-           "plot_dataset_p2_given_box"]
+           "plot_dataset_p2_given_box", "plot_rmse_vs_mass", "plot_rmse_vs_time"]

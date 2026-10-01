@@ -8,12 +8,14 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
+import numpy as np  # noqa: E402
 
 from constrained_fm.src.experiment import artifacts  # noqa: E402
 from constrained_fm.src.visualization import decay6d_is as viz  # noqa: E402
@@ -25,6 +27,11 @@ SMOKE_FIGURE_DIR = "constrained_fm/baselines/decay6d_is/smoke/figures"
 OBSERVABLE_LABELS = {"p2_norm": r"$E[|\vec p_2|\,|\,\mathcal{B}]$",
                      "p2_z": r"$E[p_{2z}\,|\,\mathcal{B}]$",
                      "p2_tail": r"$P(|\vec p_2| > \tau_{\mathcal{B}}\,|\,\mathcal{B})$"}
+SUMMARY_OBSERVABLE = "p2_norm"
+SUMMARY_LABEL = r"$\Vert\vec p_2\Vert$ RMSE"
+MASS_ESTIMATORS = ("is_learned", "rej_equal_time", "rej_equal_nfe", "rej_equal_n")
+TIME_ESTIMATORS = ("is_learned", "rej_equal_time", "rej_equal_nfe")
+TIME_BOX = "small_offcentre"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -42,6 +49,29 @@ def save(fig, out: Path, name: str) -> None:
     print(f"  wrote {out / name}.{{png,pdf}}")
 
 
+def plot_summaries(metrics: dict, out: Path) -> None:
+    """Rare-event and cost-frontier summaries, read from the merged ``metrics.json``."""
+    boxes = metrics["boxes"]
+    names = list(boxes)
+    n_values = np.asarray(metrics["n_values"])
+    top = str(n_values.max())
+    masses = np.array([boxes[b]["gt_mass"] for b in names])
+    rmse = {e: np.array([boxes[b]["by_n"][top]["estimators"][e][SUMMARY_OBSERVABLE]["rmse"]
+                         for b in names]) for e in MASS_ESTIMATORS}
+    save(viz.plot_rmse_vs_mass(masses, rmse, names, SUMMARY_LABEL, int(top)),
+         out, f"rmse_vs_mass_{SUMMARY_OBSERVABLE}")
+
+    by_n = [boxes[TIME_BOX]["by_n"][str(n)] for n in n_values]
+    seconds = {e: np.array([c["cost"][e]["seconds"]["mean"] for c in by_n])
+               for e in TIME_ESTIMATORS}
+    rmse = {e: np.array([c["estimators"][e][SUMMARY_OBSERVABLE]["rmse"] for c in by_n])
+            for e in TIME_ESTIMATORS}
+    draws = {e: np.array([c["cost"][e]["q_draws"] + c["cost"][e]["uncon_draws"] for c in by_n])
+             for e in TIME_ESTIMATORS}
+    save(viz.plot_rmse_vs_time(seconds, rmse, draws, SUMMARY_LABEL, TIME_BOX),
+         out, f"rmse_vs_time_{TIME_BOX}_{SUMMARY_OBSERVABLE}")
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     eval_dir = Path(args.eval_dir or (SMOKE_EVAL_DIR if args.smoke else EVAL_DIR))
@@ -56,6 +86,10 @@ def main(argv: list[str] | None = None) -> int:
     bench_dir = Path(manifest["benchmark_dir"])
     arr = {k: artifacts.load_array(eval_dir, k) for k in
            ("estimates", "gt_mean", "gt_se", "n_values", "ess_frac", "max_weight")}
+    metrics_path = eval_dir / "metrics.json"
+    if not metrics_path.exists():
+        raise FileNotFoundError(f"missing {metrics_path}; run the merge stage")
+    plot_summaries(json.loads(metrics_path.read_text()), out)
 
     for k, name in enumerate(observables):
         save(viz.plot_error_vs_n(arr["n_values"], arr["estimates"], arr["gt_mean"], arr["gt_se"],

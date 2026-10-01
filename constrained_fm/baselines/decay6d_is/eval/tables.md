@@ -26,6 +26,19 @@ At $N=100{,}000$, equal-time windows contain 1.4--1.9 million draws; the observe
 window on average, which can raise realized cost above the median-chunk target.
 Timing/NFE costs for partial 10,000-sample chunks are prorated by sample count.
 
+#### Summary figures
+
+$\lVert\vec p_2\rVert$ RMSE at $N=100,000$ against $P(\mathcal B)$; the mass
+axis is reversed, so boxes become rarer to the right.
+
+![RMSE vs constraint mass](../../../images/thesis_pool/decay6d_is/rmse_vs_mass_p2_norm.png)
+
+small_offcentre error-cost frontier at IS budgets $N=1,000/10,000/100,000$, using mean time per estimate;
+point labels give each estimator's own model draws per estimate (rejection draws far more
+than $N$ to match IS time or NFE). Means include occasional fallback trajectories.
+
+![RMSE vs time, small_offcentre](../../../images/thesis_pool/decay6d_is/rmse_vs_time_small_offcentre_p2_norm.png)
+
 #### small_offcentre: $P(\mathcal B)=0.0050$, GT events=5,005,887
 
 | estimator | $q$ draws | $p_{\rm uncon}$ draws | density evals (learned/exact) | samples used (mean) | NFE (mean) | time [s] (mean) | valid reps (norm/z/tail per N) | $\lVert\vec p_2\rVert$ abs-error std | $\lVert\vec p_2\rVert$ RMSE | $p_{2z}$ abs-error std | $p_{2z}$ RMSE | tail abs-error std | tail RMSE |

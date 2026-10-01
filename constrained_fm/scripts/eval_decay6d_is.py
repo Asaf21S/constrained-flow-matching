@@ -303,6 +303,20 @@ def markdown_tables(report: dict) -> str:
         "window on average, which can raise realized cost above the median-chunk target.",
         "Timing/NFE costs for partial 10,000-sample chunks are prorated by sample count.",
         "",
+        "#### Summary figures",
+        "",
+        f"$\\lVert\\vec p_2\\rVert$ RMSE at $N={max(n_values):,}$ against $P(\\mathcal B)$; the mass",
+        "axis is reversed, so boxes become rarer to the right.",
+        "",
+        "![RMSE vs constraint mass](../../../images/thesis_pool/decay6d_is/rmse_vs_mass_p2_norm.png)",
+        "",
+        f"small_offcentre error-cost frontier at IS budgets $N={n_order}$, using mean time per estimate;",
+        "point labels give each estimator's own model draws per estimate (rejection draws far more",
+        "than $N$ to match IS time or NFE). Means include occasional fallback trajectories.",
+        "",
+        "![RMSE vs time, small_offcentre](../../../images/thesis_pool/decay6d_is/"
+        "rmse_vs_time_small_offcentre_p2_norm.png)",
+        "",
     ]
 
     for name, box in report["boxes"].items():

@@ -1,0 +1,102 @@
+{
+  "arrays": {
+    "n_values": {
+      "shape": [
+        6
+      ],
+      "dtype": "int64"
+    },
+    "indices": {
+      "shape": [
+        917
+      ],
+      "dtype": "int64"
+    },
+    "mass": {
+      "shape": [
+        917
+      ],
+      "dtype": "float32"
+    },
+    "n_inside": {
+      "shape": [
+        6,
+        917
+      ],
+      "dtype": "float32"
+    },
+    "functa__success_rate": {
+      "shape": [
+        6,
+        917
+      ],
+      "dtype": "float32"
+    },
+    "fewshot_ft__success_rate": {
+      "shape": [
+        6,
+        917
+      ],
+      "dtype": "float32"
+    },
+    "functa__swd": {
+      "shape": [
+        6,
+        917
+      ],
+      "dtype": "float32"
+    },
+    "fewshot_ft__swd": {
+      "shape": [
+        6,
+        917
+      ],
+      "dtype": "float32"
+    },
+    "functa__mmd": {
+      "shape": [
+        6,
+        917
+      ],
+      "dtype": "float32"
+    },
+    "fewshot_ft__mmd": {
+      "shape": [
+        6,
+        917
+      ],
+      "dtype": "float32"
+    },
+    "functa__kld": {
+      "shape": [
+        6,
+        917
+      ],
+      "dtype": "float32"
+    },
+    "fewshot_ft__kld": {
+      "shape": [
+        6,
+        917
+      ],
+      "dtype": "float32"
+    }
+  },
+  "written_at": "2026-10-01T17:12:28",
+  "git_commit": "88204b63697c6a4cc1a75210da208dfe02268c7a",
+  "run_id": "shared_budget_v1k-d0c34cd1",
+  "method": "shared_budget_v1k",
+  "validation_set": "v1k",
+  "poly_digest": "b139c109225e1cc1",
+  "num_constraints": 1000,
+  "num_eligible": 917,
+  "min_inside": 5,
+  "n_values": [
+    50,
+    100,
+    300,
+    500,
+    1000,
+    2000
+  ]
+}

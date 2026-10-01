@@ -7,6 +7,7 @@
    Jacobian ``8 u^3 (1-u)^3`` is u-dependent, so a wrong Jacobian shows up here.
 4. Relative normalization: ``E_g[p / g] = 1`` with ``g`` the same model at 1.5x the noise.
 5. Box filter: table ``P(B)`` vs Monte Carlo, acceptance rate, accepted-mass spread.
+6. Divergence: the batched-VJP trace in ``cnf.exact_divergence`` vs one VJP per dimension.
 
     python -m constrained_fm.scripts.check_decay6d
 """
@@ -16,6 +17,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import time
 from pathlib import Path
 
 import numpy as np
@@ -27,6 +29,7 @@ from constrained_fm.src.experiment.runtime import resolve_device, set_seed
 from constrained_fm.src.problems.decay6d import (PARTICLE_DIM, DecayProblem, DecayTarget,
                                                  boxes_contain, sample_anchored_boxes,
                                                  trapezoid_nodes)
+from constrained_fm.src.solvers.cnf import exact_divergence
 
 DEFAULT_OUTDIR = "constrained_fm/baselines/decay6d_is/check"
 PIT_BINS = 20
@@ -42,6 +45,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--box-candidates", type=int, default=200_000)
     parser.add_argument("--mc-boxes", type=int, default=2000)
     parser.add_argument("--mc-pool", type=int, default=1_000_000)
+    parser.add_argument("--divergence-samples", type=int, default=10_000)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--outdir", default=DEFAULT_OUTDIR)
     return parser
@@ -119,6 +123,33 @@ def check_box_filter(problem: DecayProblem, args, device) -> dict:
             "accepted_log10_mass_edges": edges.tolist()}
 
 
+def _timed(fn, device) -> tuple[torch.Tensor, float]:
+    if device.type == "cuda":
+        torch.cuda.synchronize(device)
+    start = time.perf_counter()
+    out = fn()
+    if device.type == "cuda":
+        torch.cuda.synchronize(device)
+    return out, time.perf_counter() - start
+
+
+def check_divergence(n: int, device) -> dict:
+    net = torch.nn.Sequential(torch.nn.Linear(6, 256), torch.nn.SiLU(), torch.nn.Linear(256, 256),
+                              torch.nn.SiLU(), torch.nn.Linear(256, 6)).to(device, torch.float64)
+    x = torch.randn(n, 6, device=device, dtype=torch.float64, requires_grad=True)
+
+    def loop() -> torch.Tensor:
+        v = net(x)
+        return sum(torch.autograd.grad(v[:, i].sum(), x, retain_graph=True)[0][:, i]
+                   for i in range(6))
+
+    exact_divergence(net(x), x)  # warm-up
+    batched, t_batched = _timed(lambda: exact_divergence(net(x), x), device)
+    looped, t_loop = _timed(loop, device)
+    return {"max_abs_diff": (batched - looped).abs().max().item(),
+            "seconds_batched": t_batched, "seconds_loop": t_loop}
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     device = resolve_device()
@@ -136,6 +167,7 @@ def main(argv: list[str] | None = None) -> int:
         "relative_normalization": check_relative_normalization(
             target, args.norm_samples, args.noise_inflation, device),
         "box_filter": check_box_filter(problem, args, device),
+        "divergence": check_divergence(args.divergence_samples, device),
     }
     (out / "metrics.json").write_text(json.dumps(report, indent=2))
     print(json.dumps(report, indent=2))

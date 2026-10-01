@@ -13,15 +13,18 @@
 # Merges the decay6d IS shards into metrics + artifacts, then draws the figures.
 # Pass the same flags as the eval array; chain it with --dependency=afterok:<array job id>.
 #
-#   sbatch --dependency=afterok:<jobid> scripts/run_decay6d_merge.sh
-#   sbatch --dependency=afterok:<jobid> scripts/run_decay6d_merge.sh --smoke
-#   sbatch scripts/run_decay6d_merge.sh --plot-only
+#   sbatch --dependency=afterok:<jobid> scripts/run_decay6d_merge.sh --steps 32
+#   sbatch --dependency=afterok:<jobid> scripts/run_decay6d_merge.sh --smoke --steps 8
+#   sbatch scripts/run_decay6d_merge.sh --plot-only --steps 32
 
 set -eo pipefail
 
 EXTRA="$*"
 PLOT_EXTRA=""
 [[ " ${EXTRA} " == *" --smoke "* ]] && PLOT_EXTRA="--smoke"
+if [[ " ${EXTRA} " =~ " --steps "([0-9]+)" " ]]; then
+    PLOT_EXTRA="${PLOT_EXTRA} --steps ${BASH_REMATCH[1]}"
+fi
 # --plot-only redraws figures from saved artifacts without re-merging.
 MERGE_CMD="python -m constrained_fm.scripts.eval_decay6d_is --stage merge ${EXTRA}"
 if [[ " ${EXTRA} " == *" --plot-only "* ]]; then

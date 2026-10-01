@@ -4,15 +4,24 @@ This experiment tests whether a flow trained to sample directly inside a box on 
 momentum can estimate observables of the other particle more efficiently than rejection sampling.
 It also checks that importance sampling (IS) corrects errors in the learned conditional sampler.
 
+This is the third version of the experiment (v3). Compared with v2, it uses a fixed-step
+midpoint ODE solver evaluated at 8, 16, 32 and 64 steps. The proposal density is integrated
+during sampling, and the divergence is a single batched Jacobian product. Rejection runs with a
+real per-repetition equal-time budget. The box flow was retrained on masses 0.1%–20%, and six
+cubes with masses 0.2%–10% serve as test boxes. The v2 results are archived; see
+[Previous version](#previous-version-v2-adaptive-dopri5).
+
 ## Contents
 
 1. [Problem and target](#problem-and-target)
 2. [Evaluation boxes](#evaluation-boxes)
 3. [Models and estimators](#models-and-estimators)
 4. [Training and evaluation](#training-and-evaluation)
-5. [Results](#results)
-6. [Interpretation and limitations](#interpretation-and-limitations)
-7. [Reproduction and artifacts](#reproduction-and-artifacts)
+5. [Solver, timing, and budgets](#solver-timing-and-budgets)
+6. [Results](#results)
+7. [Interpretation and limitations](#interpretation-and-limitations)
+8. [Reproduction and artifacts](#reproduction-and-artifacts)
+9. [Previous version (v2, adaptive dopri5)](#previous-version-v2-adaptive-dopri5)
 
 ## Problem and target
 
@@ -43,7 +52,7 @@ The three observables are $\lVert\vec p_2\rVert$, $p_{2z}$, and the tail indicat
 $\mathbb 1[\lVert\vec p_2\rVert>\tau_{\mathcal B}]$. Here $\tau_{\mathcal B}$ is a cutoff
 chosen separately for each box: 95% of true events inside that box have a smaller
 $\lVert\vec p_2\rVert$, and about 5% have a larger one. It is not a universal physics constant;
-it makes the tail observable similarly rare in all five boxes.
+it makes the tail observable similarly rare in all six boxes.
 
 The target density formula contains the hidden split fraction $u$. For a given observed pair
 $(\vec p_1,\vec p_2)$, the density is found by adding up the contributions from all possible
@@ -71,28 +80,30 @@ The physical coupling explains why conditioning on $\vec p_1$ changes $\vec p_2$
 
 ## Evaluation boxes
 
-Five fixed test boxes target different probabilities and geometries. They were selected by
-bisecting a scale against a large simulated pool; their final probabilities were independently
-measured from ground-truth samples.
+Six cubes share one centre on $\vec p_1$, $(-0.35,0.25,-0.20)$, and differ only in size.
+This isolates the effect of constraint mass. Each half-width was found by bisection against a
+10-million-event pool. The final probabilities were measured independently on one billion
+simulator events (`gt_mass` in `boxes.json`).
 
-| box | target mass | measured mass | centre of $\vec p_1$ | half-widths | $\tau_{\mathcal B}$ |
-| :--- | ---: | ---: | :--- | :--- | ---: |
-| small_offcentre | 0.5% | 0.501% | $(0.45,0.45,0.35)$ | $(0.153,0.153,0.153)$ | 0.461 |
-| thin_slab | 2% | 1.996% | $(0,0,0)$ | $(0.139,0.139,0.035)$ | 1.055 |
-| offcentre_cube | 5% | 4.997% | $(-0.35,0.25,-0.20)$ | $(0.232,0.232,0.232)$ | 0.848 |
-| elongated | 10% | 10.018% | $(0.30,0,0)$ | $(0.395,0.132,0.132)$ | 1.028 |
-| bulk_cube | 30% | 30.012% | $(0,0,0)$ | $(0.278,0.278,0.278)$ | 0.979 |
+| box | target mass | measured mass | half-width | $\tau_{\mathcal B}$ |
+| :--- | ---: | ---: | ---: | ---: |
+| cube_0.2pct | 0.2% | 0.2029% | 0.0827 | 0.651 |
+| cube_0.5pct | 0.5% | 0.5033% | 0.1116 | 0.680 |
+| cube_1pct | 1% | 1.0020% | 0.1398 | 0.712 |
+| cube_2pct | 2% | 1.9979% | 0.1745 | 0.757 |
+| cube_5pct | 5% | 4.9965% | 0.2316 | 0.848 |
+| cube_10pct | 10% | 9.9938% | 0.2842 | 0.926 |
 
-The panels below show three projections of the $\vec p_1$ distribution and the five box outlines.
+The panels below show three projections of the $\vec p_1$ distribution and the six box outlines.
 In each panel a box is a two-dimensional projection: points can lie inside the drawn rectangle
 but outside the box along the omitted axis.
 
 ![The particle-1 dataset and projected test boxes](images/thesis_pool/decay6d_is/dataset/dataset_p1_boxes.png)
 
-The boxes induce quite different $\vec p_2$ distributions. The top row compares
-$\lVert\vec p_2\rVert$ for all events and in-box events. All five panels share one vertical
-density scale, so their heights can be compared directly. The bottom row shows the in-box
-$(p_{2x},p_{2z})$ density.
+The boxes induce different $\vec p_2$ distributions. The top row compares
+$\lVert\vec p_2\rVert$ for all events and in-box events, and all panels share one vertical
+density scale. The bottom row shows the in-box $(p_{2x},p_{2z})$ density. Because the cubes
+are nested around one centre, the conditional distributions shift smoothly with mass.
 
 ![Particle-2 distributions induced by each evaluation box](images/thesis_pool/decay6d_is/dataset/dataset_p2_given_box.png)
 
@@ -101,11 +112,12 @@ Ground-truth conditional means are listed below. Tail means vary slightly around
 
 | box | $\mathbb E[\lVert\vec p_2\rVert]$ | $\mathbb E[p_{2z}]$ | tail probability |
 | :--- | ---: | ---: | ---: |
-| small_offcentre | 0.29728 | -0.13535 | 0.04950 |
-| thin_slab | 0.89792 | 0.00000 | 0.04995 |
-| offcentre_cube | 0.58085 | 0.19881 | 0.05011 |
-| elongated | 0.82484 | 0.00006 | 0.05016 |
-| bulk_cube | 0.78744 | 0.00001 | 0.05012 |
+| cube_0.2pct | 0.52883 | 0.21178 | 0.05038 |
+| cube_0.5pct | 0.53345 | 0.21143 | 0.04885 |
+| cube_1pct | 0.53989 | 0.21072 | 0.04901 |
+| cube_2pct | 0.55100 | 0.20876 | 0.05020 |
+| cube_5pct | 0.58085 | 0.19881 | 0.05011 |
+| cube_10pct | 0.61756 | 0.17402 | 0.04946 |
 
 ## Models and estimators
 
@@ -113,7 +125,8 @@ The conditional flow $q(\vec p_1,\vec p_2\mid\mathcal B)$ receives the box centr
 logarithm of each half-width. A half-width is the distance from the box centre to a face; its
 logarithm keeps the value positive when converted back and makes narrow and wide boxes easier
 to represent on one numerical scale. The model is trained on simulator events conditioned to
-lie inside the box. Its samples are not perfectly confined, so its measured leakage is reported. The unconstrained flow
+lie inside the box. Training boxes have masses between 0.1% and 20% (v2 used 0.5%–50%), so all
+test boxes lie inside the training range. Its samples are not perfectly confined, so its measured leakage is reported. The unconstrained flow
 $p_{\mathrm{uncon}}$ models the full six-dimensional target.
 
 For a proposal sample $x\sim q$, the importance weight is
@@ -135,19 +148,20 @@ The seven reported estimators are:
 | (c) | `is_learned` | IS using the learned unconstrained density $p_{\mathrm{uncon}}$. |
 | (d) | `is_exact` | IS using the exact quadrature density; this is the density-corrected reference. |
 | (e1) | `rej_equal_n` | Rejection sampling from $p_{\mathrm{uncon}}$ with the same number of draws. |
-| (e2) | `rej_equal_time` | Rejection sampling with the number of draws adjusted to the same measured GPU time. |
-| (e3) | `rej_equal_nfe` | Rejection sampling with the number of draws adjusted to the same number of network evaluations. |
+| (e2) | `rej_equal_time` | Rejection sampling that draws until it has used the measured wall time of the same repetition's learned IS. |
+| (e3) | `rej_equal_nfe` | Rejection sampling with as many velocity-network calls as learned IS; this is $2N$ draws. |
 
 For (d), each sample from the box flow gets a weight using the physics-based density calculated
 by the $u$-quadrature, rather than the learned unconstrained flow. This corrects the box flow's
 sampling errors using the reference density. It is a comparison standard for (c), not a claim
 that the numerical quadrature has zero error.
 
-In (e3), a “network evaluation” means one call to the neural network to calculate its velocity
-at a solver step. An ODE solver may call the network several times per step, so NFE (“number of
-function evaluations”) counts actual calls, not just the number of steps. Equal NFE compares
-methods at roughly equal neural-network compute, even when their number of generated samples
-differs.
+In (e3), a “network evaluation” (NFE) is one call to the velocity network. The midpoint
+solver makes two calls per step, so an $S$-step solve costs $2S$ NFE per sample. Learned IS
+needs two solves per proposal: a forward solve for $q$ and a backward solve for
+$p_{\mathrm{uncon}}$. A rejection draw needs one, so equal NFE means exactly $2N$ draws.
+NFE does not count the divergence derivatives. Equal NFE therefore ignores the main extra
+cost of IS, which equal time does include.
 
 Methods (a) and (b) test the conditional flow without density correction. Methods (c) and (d)
 test importance sampling with learned and quadrature densities, respectively. Rejection is
@@ -163,235 +177,240 @@ for evaluation.
 
 | run | run id | steps | diagnostic |
 | :--- | :--- | ---: | :--- |
-| unconstrained flow | `decay6d_uncon-cb36fa75` | 500,000 | $D_{KL}(p\Vert p_{uncon})=0.00043\pm0.00062$ |
-| box-conditioned flow | `decay6d_box-cdea812c` | 100,000 | mean in-box rate 98.74%; range 97.64%–99.52% |
-| box benchmark | `decay6d_boxes-519394b0` | — | fixed boxes and ground truth |
-| final evaluation | `decay6d_is-f07211bc` | — | 20 repetitions at each $N\in\{10^3,10^4,10^5\}$ |
+| unconstrained flow (reused from v2) | `decay6d_uncon-cb36fa75` | 500,000 | $D_{KL}(p\Vert p_{uncon})=0.00043\pm0.00062$ |
+| box-conditioned flow | `decay6d_box-f2ff7b7d` | 100,000 | mean in-box rate 97.0%; range 94.0%–99.0% |
+| box benchmark | `decay6d_boxes-519394b0` | — | six cubes, $10^9$ ground-truth events |
+| evaluation, 8 / 16 / 32 / 64 steps | `decay6d_is-e53848a3` / `-83fe43b2` / `-c0c5f76c` / `-6a7ae6dd` | — | 20 repetitions at each $N\in\{10^3,10^4,10^5\}$ |
 
-Here $N$ is the number of samples used to make ONE estimate. For each box, each proposal method
-forms 20 estimates from non-overlapping groups of $N$ samples. At $N=100{,}000$, that consumes
-2 million samples per box across the 20 estimates; four shards of 500,000 samples provide them.
-But each individual estimate still uses 100,000 samples, not 2 million. The smaller-$N$ estimates
-use smaller groups from the same stored proposal draws, so results at different $N$ are not
-independent of one another.
+The box-flow diagnostic samples fresh boxes from the training distribution and integrates
+64 midpoint steps. Its in-box rate is lower than in v2 (98.7%) because training now
+covers boxes five times smaller.
 
-Rejection uses 80 million candidate draws from the unconstrained model in total, shared across
-all five boxes. These are draws before filtering, not 80 million accepted in-box events. For each
-rejection comparison, the number of candidates in one repetition is set to $N$ for equal draw
-count, or increased to match measured time or NFE. The same candidate stream can be checked
-against each box. The estimate is calculated only from candidates that land inside that box.
-In the final rerun, all three rejection budgets have 20 finite estimates for every box,
-observable, and $N$. Raw $q$ can still
-have fewer than 20 finite estimates because it deliberately includes leaked samples, including
-rare non-finite fallback outputs. At $N=100{,}000$, raw $q$ has 14--20 valid estimates depending
-on box and observable; filtered $q$ and both IS estimators have 20.
-
-The probability-flow ODE uses adaptive dopri5 in float64 with
-exact divergence for density evaluation, absolute and relative tolerances $10^{-5}$, and a
-max-over-batch error norm. A small number of underflowing trajectories are isolated and retried
-with 10,000 fixed RK4 steps; fallback counts are included in the evaluation metrics. The final
-run used fallback for 12 of 10 million box-proposal trajectories, 20 backward-density solves
-(8 in-box), and 60 of 80 million unconstrained draws.
+Here $N$ is the number of proposals used to make ONE estimate. Every repetition draws fresh
+samples for every estimator: $N$ new proposals for IS, and new candidates for each rejection
+budget. Estimates at different $N$ and repetitions are therefore independent. For rejection,
+only candidates that land inside the box enter the estimate.
 
 The simulator and density checks passed before the full run: analytic moment errors were below
 $3.7\times10^{-4}$ relative, changing the quadrature resolution four-fold changed its result by
 $1.3\times10^{-4}$, the PIT/KS statistic was 0.0056 versus a 0.0096 critical value, and
 $\mathbb E_g[p/g]=0.9996\pm0.0006$.
 
-The first 100,000-step unconstrained training was not reliable: a large loss spike occurred
-near step 20,000, and its final KL was 0.083. With clipping, EMA, and 500,000 steps, the final
-KL fell to 0.00043. The box model also improved, from 96.6% average in-box rate to 98.7%.
+## Solver, timing, and budgets
+
+Every ODE uses the explicit midpoint method in float64 with a fixed number of steps
+$S\in\{8,16,32,64\}$. Each $S$ is a separate evaluation run with its own metrics and figures.
+Proposal sampling, learned-density solves, and unconstrained rejection draws all use the same
+$S$, so every method has the same discretization.
+
+Learned IS processes each batch of proposals in two solves:
+
+1. **Forward, with density.** The box flow is integrated from the prior to $t=1$ together with
+   $\tfrac{d}{dt}\log q=-\nabla\cdot v$. The sample and $\log q$ come out of the same solve
+   ([`cnf.sample_with_log_prob_fixed`](src/solvers/cnf.py)); no density solve is needed
+   afterwards.
+2. **Backward, unconstrained density.** The unconstrained flow is integrated from the sample
+   back to the prior with its divergence, giving $\log p_{\mathrm{uncon}}$
+   ([`cnf.log_prob_fixed`](src/solvers/cnf.py)). This cannot be merged into step 1 because its
+   starting point is the final sample.
+
+The exact quadrature density for (d) is timed separately and excluded from learned-IS time.
+
+The divergence is the trace of the $6\times6$ velocity Jacobian. It is computed with one batched
+vector-Jacobian product over the six basis vectors
+(`torch.autograd.grad(..., is_grads_batched=True)`), instead of six sequential backward passes.
+The check job confirms that both forms agree to $2.8\times10^{-17}$. On its small test network
+both took about 2.2 ms because that network is limited by kernel-launch overhead. The check
+therefore shows correctness, not a speedup.
+
+**Equal time is measured, not estimated.** In each repetition, the learned-IS wall time
+becomes the budget for a rejection loop on the same GPU in the same job. That time covers
+both solves, with CUDA synchronization. The loop draws batches of 10,000 while they fit in the
+remaining time. The last batch is sized from a per-task calibration of batch time against batch
+size (median of repeated timings from 1 to 10,000 samples), so the loop stops at the budget.
+Realized rejection/IS time ratios are 0.997–1.011 at $N=1{,}000$ and 1.000–1.002 at
+$N\ge10{,}000$.
+
+At every $S$, equal time buys about 14.6 unconstrained draws per IS proposal. The ratio does not
+depend on $S$ because both costs are linear in $S$. Each midpoint step of an IS solve adds a
+batched VJP to the velocity call, and IS needs two such solves. A rejection draw needs one solve
+with no divergence. Learned-IS time is linear in $N$: at 64 steps it is 1.8 s, 17 s and 171 s
+for $N=10^3,10^4,10^5$, about 1.7 ms per proposal.
+
+| steps | wall time per box task (all $N$, 20 repetitions, all estimators) |
+| ---: | ---: |
+| 8 | ~19 min |
+| 16 | ~36 min |
+| 32 | ~71 min |
+| 64 | ~141 min |
 
 ## Results
 
-### Accuracy at $N=100{,}000$
+### RMSE versus constraint mass
 
-For each box, estimator, observable, and $N$, the code first has up to 20 estimates
-$\hat\mu_r$, each based on $N$ samples. It computes that box's RMSE across repetitions,
-$\sqrt{\mathrm{mean}_r[(\hat\mu_r-\mu_{\rm gt})^2]}$. The table then reports the median of
-those five box-level RMSEs, in physical momentum units (tail-probability RMSE is unitless).
-It does not pool the samples or calculate an RMSE over $5\times20\times N$ events. The `q_raw`
-median conceals an extreme outlier and is qualified below; do not interpret it as uniformly
-reliable.
+Each grid has one observable per row and one $N$ per column. The horizontal axis runs from the
+largest box (10%, left) to the rarest (0.2%, right). For each box, estimator, observable and
+$N$, the RMSE is $\sqrt{\mathrm{mean}_r[(\hat\mu_r-\mu_{\rm gt})^2]}$ over the 20 repetitions,
+so it includes both bias and spread. The grids show learned IS and the three rejection budgets.
+Raw $q$, filtered $q$ and exact IS are in the per-step tables
+([64 steps](baselines/decay6d_is/eval/steps64/tables.md),
+[32](baselines/decay6d_is/eval/steps32/tables.md),
+[16](baselines/decay6d_is/eval/steps16/tables.md),
+[8](baselines/decay6d_is/eval/steps8/tables.md)).
 
-In the detailed [per-box tables](baselines/decay6d_is/eval/tables.md), each pool of $N$ points
-produces one estimate, not one RMSE. For each observable, the table reports standard deviation
-of absolute error across the valid repetitions and RMSE across those errors. Slash-separated
-values are ordered by $N=10^3/10^4/10^5$.
+![RMSE versus constraint mass, 64 midpoint steps](images/thesis_pool/decay6d_is/steps64/rmse_vs_mass_grid.png)
 
-The evaluation also computes the standard deviation of repeated estimates within each box; it
-is recorded separately as `std` in `metrics.json`. It is not shown beside the across-box median
-RMSE because these are different summaries: RMSE includes both bias and repetition spread,
-while `std` measures the spread around the repetition mean. The detailed tables show absolute-
-error summaries per box and keep RMSE as a separate column. They also report valid repetition
-counts per observable; in this run raw $q$ has some invalid estimates, while filtered $q$, IS,
-and rejection have 20.
+![RMSE versus constraint mass, 32 midpoint steps](images/thesis_pool/decay6d_is/steps32/rmse_vs_mass_grid.png)
 
-### Reading the Cost Columns
+![RMSE versus constraint mass, 16 midpoint steps](images/thesis_pool/decay6d_is/steps16/rmse_vs_mass_grid.png)
 
-Each per-box table reports cost means only; draw budgets and density-evaluation counts are fixed
-per repetition. `q draws` is the number sampled from the box-conditioned proposal;
-`$p_{uncon}$ draws` is the number sampled from the unconstrained model for rejection.
-`learned / exact density evals` counts target-density evaluations made by learned- or
-exact-density IS. `samples used` is the mean number entering the estimate: all proposals for raw
-$q$, in-box proposals for filtered $q$ and IS, and accepted events for rejection. The heading's
-`GT events` is the number of simulator-generated benchmark events inside that box used to compute
-the ground-truth reference; it is not a per-estimator sample budget. The benchmark generated one
-billion target events total.
+![RMSE versus constraint mass, 8 midpoint steps](images/thesis_pool/decay6d_is/steps8/rmse_vs_mass_grid.png)
 
-`NFE` counts calls to the ODE velocity network. Proposal generation tracks density, learned IS
-adds a backward learned-density solve, exact IS adds quadrature time but no extra network NFEs,
-and rejection uses unconstrained sampling only. Density solves also compute divergence
-derivatives that are not extra NFEs, but are included in wall time. The time column reports
-seconds for the sampling and density work used by that estimator. Timings and NFEs were recorded
-per 10,000-sample ODE chunk; if a repetition uses only part of a recorded chunk, its cost is
-prorated by sample count and is an estimate rather than a separately timed solver run.
+1. **With 64 steps, IS beats every rejection budget on rare boxes, and the gap widens as mass
+   falls.** For every box at or below 2%, learned IS has a lower RMSE than equal-time rejection
+   on all three observables and all $N$. At 5% the two are close; at 10% equal-time rejection
+   is equal or better. In the rarest box (0.2%), the $\lVert\vec p_2\rVert$ RMSE at $N=10^5$ is
+   $1.9\times10^{-4}$ for IS versus $1.05\times10^{-3}$ for equal-time rejection (5.6×). At
+   $N=10^3$ it is $1.7\times10^{-3}$ versus $1.0\times10^{-2}$.
+2. **IS error is nearly flat in mass; rejection error grows as mass falls.** Rejection keeps
+   only a fraction $P(\mathcal B)$ of its draws, so its noise grows roughly like
+   $P(\mathcal B)^{-1/2}$. The box flow puts almost all proposals inside the box at every size.
+3. **The step count decides whether IS works.** With 32 steps, IS beats equal-time rejection
+   for boxes at or below 1% on every observable and $N$. The crossover lies between 2% and 10%,
+   depending on observable and $N$. With 8 or 16 steps, IS is worse than equal-time rejection
+   almost everywhere, and at 8 steps its curves are erratic.
+4. **Rejection barely depends on the step count.** Equal-time rejection always gets about 14.6
+   draws per IS proposal, and its RMSE is similar at 8 and 64 steps. Equal-$N$ and equal-NFE
+   rejection are the worst everywhere.
 
-Equal-time and equal-NFE rejection budgets are approximate matches, not exact per-repetition
-equalities. Their draw counts are chosen from the median costs of 10,000-sample chunks and
-rounded to 1,000-draw minibatches. The tables show mean realized costs across repetitions;
-adaptive solver work and rare fallback trajectories can make those means differ from the
-median-calibrated IS target. At $N=100{,}000$, equal-time windows contain 1.4--1.9 million
-draws; the observed 60 fallbacks in 80 million draws imply about 1.1--1.5 fallback trajectories
-per such window on average. This can raise realized time above the median-chunk target, while
-even a few expensive trajectories can substantially raise mean NFE.
+### Why few steps break IS
 
-| estimator | $\lVert\vec p_2\rVert$ RMSE | $p_{2z}$ RMSE | tail RMSE |
-| :--- | ---: | ---: | ---: |
-| (a) raw $q$ | 0.00080* | 0.00175* | 0.00082 |
-| (b) filtered $q$ | 0.00097 | 0.00161 | 0.00086 |
-| (c) learned-$p$ IS | 0.00044 | 0.00102 | 0.00087 |
-| (d) exact-$p$ IS | 0.00038 | 0.00083 | 0.00086 |
-| (e1) rejection, equal $N$ | 0.00229 | 0.00365 | 0.00360 |
-| (e2) rejection, equal time | 0.00052 | 0.00096 | 0.00080 |
-| (e3) rejection, equal NFE | 0.00120 | 0.00252 | 0.00210 |
+The weight $p/q$ is a ratio of two discretized densities, so solver error in $\log q$ and
+$\log p_{\mathrm{uncon}}$ enters the weights directly. The table gives ranges over the six boxes
+at $N=10^5$; the gap column is the mean of $\log p_{\mathrm{uncon}}-\log p$ on in-box
+proposals.
 
-*For raw $q$, the elongated-box RMSE is $6.25\times10^{124}$ for $|\vec p_2|$ and
-$5.39\times10^{124}$ for $p_{2z}$. One sample in that box required the RK4 fallback; its
-extreme value dominates the ordinary averages. The median shown above is across five boxes and
-therefore hides the failure. The filtered estimator removes leaked samples and has ordinary
-errors in every box.*
+| steps | ESS / $N$, learned | $\hat P(\mathcal B)/P(\mathcal B)$, learned | $\hat P(\mathcal B)/P(\mathcal B)$, exact | learned − exact $\log p$ | leakage |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 8 | 0.03–0.08 | 1.24–1.52 | 1.06–1.37 | +0.10 to +0.15 | 0.10–0.57% |
+| 16 | 0.09–0.42 | 1.05–1.22 | 1.03–1.20 | +0.018 to +0.026 | 0.16–0.80% |
+| 32 | 0.75–0.92 | 1.01–1.05 | 1.01–1.04 | +0.005 | 0.25–0.67% |
+| 64 | 0.95–0.97 | 0.995–1.000 | 0.992–0.998 | +0.002 to +0.003 | 0.60–2.08% |
 
-The per-observable error curves show how errors change with sample budget. Exact and learned IS
-track one another closely; rejection improves as its draw budget grows, but is much noisier at
-equal $N$.
+Exact-density IS is also biased at 8 steps. Its mass estimate is too high, which means the
+coarse forward solve makes $\log q$ too small on in-box samples. So the error is not only in
+$p_{\mathrm{uncon}}$. Between 8 and 64 steps, the learned-versus-exact density gap shrinks
+from about 0.1 to 0.002 nats. At 64 steps, mass estimates are within 0.8% of the benchmark.
 
-![RMSE and estimates versus sample count for p2 norm](images/thesis_pool/decay6d_is/error_vs_n_p2_norm.png)
+Leakage is the fraction of proposals outside the box. It is higher at 64 steps (up to 2.1% for
+the 0.2% box) than at 32. Leaked proposals get zero weight, so this costs samples but not bias;
+the cause was not investigated. No proposal was non-finite. At most one in-box backward density
+per box and step count was non-finite, and it was dropped from the weights. At most eight
+unconstrained draws per box were non-finite; they fail the box test and are discarded.
 
-![RMSE and estimates versus sample count for p2z](images/thesis_pool/decay6d_is/error_vs_n_p2_z.png)
+### Error versus time in the rarest box
 
-![RMSE and estimates versus sample count for the tail indicator](images/thesis_pool/decay6d_is/error_vs_n_p2_tail.png)
+Each point is the mean wall time of one estimate and the RMSE across repetitions; labels give
+the draws per estimate. At 64 steps, the IS RMSE in the 0.2% box is about 5.6× lower than
+equal-time rejection. Since RMSE falls like $t^{-1/2}$, rejection would need roughly 30× more
+time to match it.
 
-ESS (“effective sample size”) summarizes how evenly the importance weight is spread. Its
-formula is $\mathrm{ESS}=(\sum_i w_i)^2/\sum_i w_i^2$. If all weights are equal, ESS equals the
-sample count $N$; if a few samples carry nearly all the weight, ESS is much smaller. The plots
-show ESS divided by $N$, so values near 1 are healthy and values near 0 indicate that many draws
-contribute little useful information.
+![RMSE versus wall time, 0.2% box, 64 steps](images/thesis_pool/decay6d_is/steps64/rmse_vs_time_cube_0.2pct_p2_norm.png)
 
-In `weight_histograms`, each panel shows the distribution of normalized weights for one box.
-The horizontal axis is the weight divided by the average in-box weight, on a log scale: zero
-means “average weight,” values to the right are heavier-than-average samples, and values to the
-left are lighter. A narrow shape near zero means weights are similar; a long right tail means
-some samples dominate. The vertical axis is histogram density, shown on a log scale so the
-rare heavy weights remain visible.
+### Further figures
 
-At $N=100{,}000$, the learned and exact IS estimates of $P(\mathcal B)$ agree with each other
-and the benchmark mass to within about 0.2% relative error in every box. Their effective
-sample-size fractions are 0.929–0.979 for learned IS and 0.931–0.981 for exact IS. The high,
-nearly identical ESS indicates that the box proposal and unconstrained density now match well
-on the tested support.
+Each `images/thesis_pool/decay6d_is/steps{S}/` folder also contains:
 
-![ESS fraction and maximum normalized weight versus sample count](images/thesis_pool/decay6d_is/ess_vs_n.png)
+- `error_vs_n_*`: RMSE and estimates versus $N$ for every box.
+- `ess_vs_n` and `weight_histograms`: weight diagnostics.
+- `p2_marginals_box*`: ground truth versus raw and reweighted $q$ marginals.
+- `rmse_vs_time_cube_0.2pct_p2_norm`: the time figure above.
 
-![Learned and exact importance-weight distributions](images/thesis_pool/decay6d_is/weight_histograms.png)
-
-Cost ratios use median per-chunk timings so an occasional solver retry does not dominate the
-comparison. NFE counts calls to the velocity network made by the ODE solver. During a density
-solve, each such call also computes six derivatives to get the exact divergence; this extra work
-is not counted as six NFEs. An unconstrained rejection draw only needs a forward velocity call,
-without those derivatives. Thus time and NFE are not interchangeable: across boxes, IS costs
-14.1--19.4 times as much wall-clock time per proposal sample, but 2.1--2.9 times as many
-network calls, as unconstrained rejection draws. At equal
-sample count, IS is substantially more accurate than rejection. At equal wall time, rejection
-is competitive and is slightly better on the median $|\vec p_2|$ RMSE; therefore the result
-does not show a universal wall-clock advantage for IS at these model sizes. However, the
-equal-time rejection comparison has very few usable momentum estimates at $N=100{,}000$, so
-that apparent tie should be treated as provisional rather than a strong conclusion.
-
-### Marginal distributions
-
-Each panel compares the ground truth, the raw $q$ samples, and the same $q$ samples reweighted
-with learned or exact $p$. The density maps make the conditional shape differences visible.
-The plotting range is centered on the ground-truth quantiles, so the extreme raw-$q$ fallback
-sample is not visible in the elongated marginal; use the RMSE warning above when reading it.
-
-![Particle-2 marginals for small_offcentre](images/thesis_pool/decay6d_is/p2_marginals_box0_small_offcentre.png)
-
-![Particle-2 marginals for thin_slab](images/thesis_pool/decay6d_is/p2_marginals_box1_thin_slab.png)
-
-![Particle-2 marginals for offcentre_cube](images/thesis_pool/decay6d_is/p2_marginals_box2_offcentre_cube.png)
-
-![Particle-2 marginals for elongated](images/thesis_pool/decay6d_is/p2_marginals_box3_elongated.png)
-
-![Particle-2 marginals for bulk_cube](images/thesis_pool/decay6d_is/p2_marginals_box4_bulk_cube.png)
+ESS (“effective sample size”) is $(\sum_i w_i)^2/\sum_i w_i^2$. It equals $N$ when all weights
+are equal and is much smaller when a few samples carry most of the weight; the plots show
+ESS$/N$.
 
 ## Interpretation and limitations
 
-1. **Importance sampling is validated.** Exact-density IS recovers the reference observables,
-   gets box mass right, and has stable weights. Learned-density IS is nearly indistinguishable
-   from exact-density IS after retraining.
-2. **The unconstrained flow was the original bottleneck.** The first model had KL 0.083 and
-   badly misestimated the thin-slab and elongated box masses. Retraining reduced KL to 0.00043;
-   learned IS now gives accurate box masses and observable means.
-3. **The conditional proposal is accurate but not numerically flawless.** Leakage is only
-   0.22%–1.76%, and filtering it gives stable direct estimates. However, rare adaptive-solver
-   underflows require fixed-step fallbacks. One fallback sample creates an astronomically large
-   raw-$q$ estimate in the elongated box. That raw estimator and its plotted range should not be
-   used as evidence of sampler quality until the fallback trajectory is made stable or its
-   contribution is otherwise validated.
-4. **The efficiency result depends on the budget.** IS clearly beats rejection at equal $N$;
-   at equal wall time, rejection is comparable because an unconstrained sample is much cheaper.
-   The current experiment establishes accuracy and sample-efficiency, not a blanket runtime win.
+1. **IS wins in wall time on rare constraints once the ODE is accurate.** With 64 midpoint
+   steps, learned IS beats equal-time rejection on every box at or below 2%, by up to 5.6× in
+   RMSE at 0.2%. Rejection noise grows like $P(\mathcal B)^{-1/2}$ and IS noise barely changes,
+   so the gap should keep widening below 0.2%. That is an extrapolation and was not tested.
+2. **IS needs an accurate density; rejection does not.** Discretization error in $\log q$ and
+   $\log p_{\mathrm{uncon}}$ biases the weights. At 8–16 steps this dominates and rejection
+   wins. At 32 steps IS wins only on the rarer boxes.
+3. **Both methods use the same $S$, which favours IS.** Rejection accuracy barely changes
+   between 8 and 64 steps, so rejection could run with fewer steps. 8-step rejection under a
+   64-step IS time budget would get about 8× more draws, which is about 2.8× less noise. That
+   would still leave IS ahead at 0.2%, but not at 2%. This mixed-step comparison was not run, and
+   the 8-step rejection bias at that larger budget is unknown.
+4. **Speed comes from the solver, not from a measured divergence speedup.** IS now needs no
+   separate density solve for $q$, and all costs are fixed by $S$. The batched divergence
+   matches the loop exactly, but its speedup was not measured on the production networks.
+5. **The box flow is less confined than in v2.** Its mean in-box rate is 97.0% versus
+   98.7%, likely because training now covers boxes five times smaller. IS gives leaked samples
+   zero weight, so this costs samples but adds no bias.
+6. **Provenance caveat.** The benchmark run id `decay6d_boxes-519394b0` is unchanged from v2.
+   Its fingerprint covers only the command-line settings, while the box geometry lives in
+   `src/consts.py`. The v3 benchmark is identified by its `git_commit` and `created_at` in
+   `provenance.json` and by the six cube names in `boxes.json`.
 
 ## Reproduction and artifacts
 
-All jobs ran on the DLC2 cluster in the local PyTorch container. Final successful jobs were:
+All jobs ran on the DLC2 cluster in the local PyTorch container. The v3 jobs were:
 
 | stage | job |
 | :--- | ---: |
-| simulator/density validation | 274833 |
-| build full evaluation boxes | 274870 |
-| train unconstrained flow (500k) | 274973 |
-| train box-conditioned flow (100k) | 274981 |
-| dataset overview figures | 274972 |
-| evaluation retry array | 275140 |
-| merge metrics and result figures | 275141 |
+| simulator, density and divergence check | 275548 |
+| build the six cube boxes | 275549 |
+| train box-conditioned flow (100k) | 275550 |
+| box-flow diagnostic rerun (`--skip-train`) | 275566 |
+| dataset overview figures | 275564 |
+| evaluation arrays, 8 / 16 / 32 / 64 steps | 275567 / 275569 / 275571 / 275573 |
+| merge and figures, 8 / 16 / 32 / 64 steps | 275568 / 275570 / 275572 / 275574 |
 
-The evaluation retry was needed because the first adaptive-solver recovery only handled
-backward density solves; forward conditional sampling and unconstrained sampling also
-underflowed. The 19 affected tasks were rerun with sample isolation, while successful shards
-were reused. A subsequent merge compatibility issue with the older shard format was fixed
-before the final successful merge.
+The unconstrained flow is reused from v2 (job 274973). Job 275550 finished training and saved
+its checkpoint. Its final diagnostic then failed because it still used adaptive dopri5, which
+underflowed. The diagnostic was switched to fixed midpoint steps and rerun on the saved
+checkpoint.
 
-From the project root, the main commands are:
+From the project root:
 
 ```bash
 sbatch scripts/run_decay6d_check.sh
 sbatch scripts/run_decay6d_boxes.sh
-sbatch scripts/run_decay6d_train.sh --mode uncon --iterations 500000
 sbatch scripts/run_decay6d_train.sh --mode box
-sbatch --dependency=afterok:<boxes>:<uncon>:<box> scripts/run_decay6d_eval.sh
-sbatch --dependency=afterok:<eval> scripts/run_decay6d_merge.sh
 sbatch scripts/run_decay6d_dataset.sh
+for s in 8 16 32 64; do
+  eval_id=$(sbatch --parsable scripts/run_decay6d_eval.sh --steps $s)
+  sbatch --dependency=afterok:${eval_id} scripts/run_decay6d_merge.sh --steps $s
+done
 ```
 
-The final metrics are in [`baselines/decay6d_is/eval/metrics.json`](baselines/decay6d_is/eval/metrics.json),
-with run configuration and provenance beside them. Benchmark box definitions and ground-truth
-means are in [`baselines/decay6d_is/benchmark/boxes.json`](baselines/decay6d_is/benchmark/boxes.json).
-The earlier 100k unconstrained-model comparison is retained in
-[`baselines/decay6d_is/eval_v1_uncon100k/metrics.json`](baselines/decay6d_is/eval_v1_uncon100k/metrics.json),
-and the corresponding plots are in `images/thesis_pool/decay6d_is/v1_uncon100k/`.
+Per-step metrics, configuration and provenance are in
+`baselines/decay6d_is/eval/steps{S}/` (for example
+[`steps64/metrics.json`](baselines/decay6d_is/eval/steps64/metrics.json)). Benchmark boxes and
+ground truth are in [`baselines/decay6d_is/benchmark/boxes.json`](baselines/decay6d_is/benchmark/boxes.json).
+Per-task shards and model checkpoints are not committed.
 
-Intermediate per-task shards and model checkpoints are intentionally not part of this report;
-the aggregate metrics, run metadata, plotting manifests, and final figures are the committed
-results.
+## Previous version (v2, adaptive dopri5)
+
+v2 used adaptive dopri5 with tolerance $10^{-5}$ and five boxes of different shapes (0.5%–30%).
+The box flow was trained on 0.5%–50% masses. Equal-time rejection budgets came from
+median chunk timings rather than a per-repetition measurement. Its main results were:
+
+- Learned IS matched exact IS closely, with ESS fractions of 0.93–0.98.
+- At equal wall time, rejection was competitive; IS cost 14–19× the time per proposal.
+- Rare adaptive-solver underflows needed RK4 fallbacks, and one corrupted a raw-$q$ estimate.
+
+The v2 artifacts are archived, not deleted:
+
+- [`eval_v2_dopri5/`](baselines/decay6d_is/eval_v2_dopri5/), with its
+  [`tables.md`](baselines/decay6d_is/eval_v2_dopri5/tables.md).
+- [`benchmark_v2_dopri5/`](baselines/decay6d_is/benchmark_v2_dopri5/) and
+  [`box_v2_dopri5/`](baselines/decay6d_is/box_v2_dopri5/).
+- Figures in `images/thesis_pool/decay6d_is/v2_dopri5/`.
+
+The earlier 100k-step unconstrained-model comparison (v1) is in
+[`eval_v1_uncon100k/`](baselines/decay6d_is/eval_v1_uncon100k/metrics.json) and
+`images/thesis_pool/decay6d_is/v1_uncon100k/`.

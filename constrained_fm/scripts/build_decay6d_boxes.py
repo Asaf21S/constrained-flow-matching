@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-"""Builds the five fixed decay6d evaluation boxes and their simulator ground truth.
+"""Builds the fixed decay6d evaluation boxes and their simulator ground truth.
 
-Each box has a fixed physical centre and aspect ratio; one scale ``s`` sets the normalized
-half-widths ``s * aspect`` and is bisected on a simulator pool to hit the target ``P(B)``. The
+Every box is a cube at one physical centre; only its scale ``s`` differs, bisected on a simulator
+pool to hit each target ``P(B)``, so mass is the only variable across boxes. The
 builder refuses boxes outside the training distribution (half-widths or table mass outside the
 ranges the box model saw). Ground truth for ``E[f(p2) | p1 in B]`` comes from rejection on a
 large simulator stream, and up to ``--keep`` in-box ``p2`` per box are stored for the figures.
@@ -20,7 +20,8 @@ from pathlib import Path
 
 import torch
 
-from constrained_fm.src.consts import DECAY_EVAL_BOX_MASSES, DECAY_TAIL_QUANTILE
+from constrained_fm.src.consts import (DECAY_EVAL_BOX_ASPECT, DECAY_EVAL_BOX_CENTRE,
+                                       DECAY_EVAL_BOX_MASSES, DECAY_TAIL_QUANTILE)
 from constrained_fm.src.experiment import artifacts
 from constrained_fm.src.experiment.registry import pin_baseline_run
 from constrained_fm.src.experiment.runtime import resolve_device
@@ -32,14 +33,9 @@ SMOKE_OUTDIR = "constrained_fm/baselines/decay6d_is/smoke/benchmark"
 BOXES_NAME = "boxes.json"
 BISECT_STEPS = 60
 
-# (name, physical centre of p1, per-axis aspect of the normalized half-widths)
-BOX_SPECS = (
-    ("small_offcentre", (0.45, 0.45, 0.35), (1.0, 1.0, 1.0)),
-    ("thin_slab", (0.0, 0.0, 0.0), (1.0, 1.0, 0.25)),
-    ("offcentre_cube", (-0.35, 0.25, -0.2), (1.0, 1.0, 1.0)),
-    ("elongated", (0.3, 0.0, 0.0), (3.0, 1.0, 1.0)),
-    ("bulk_cube", (0.0, 0.0, 0.0), (1.0, 1.0, 1.0)),
-)
+
+def box_name(mass: float) -> str:
+    return f"cube_{100 * mass:g}pct"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -107,10 +103,11 @@ def main(argv: list[str] | None = None) -> int:
     del pool
 
     boxes = []
-    for (name, centre, aspect), mass in zip(BOX_SPECS, DECAY_EVAL_BOX_MASSES):
-        centre = torch.tensor(centre, device=device, dtype=torch.float64)
-        aspect = torch.tensor(aspect, device=device, dtype=torch.float64)
-        centre_n = (centre - mean_1) / std_1
+    centre = torch.tensor(DECAY_EVAL_BOX_CENTRE, device=device, dtype=torch.float64)
+    aspect = torch.tensor(DECAY_EVAL_BOX_ASPECT, device=device, dtype=torch.float64)
+    centre_n = (centre - mean_1) / std_1
+    for mass in DECAY_EVAL_BOX_MASSES:
+        name = box_name(mass)
         scale = bisect_scale(p1_n, centre_n, aspect, mass, problem.half_width_range)
         half_n = scale * aspect
         table_mass = table.mass((centre_n - half_n)[None], (centre_n + half_n)[None]).item()

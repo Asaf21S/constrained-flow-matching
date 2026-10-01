@@ -1,15 +1,15 @@
 {
-  "run_id": "decay6d_box-cdea812c",
+  "run_id": "decay6d_box-f2ff7b7d",
   "method": "decay6d_box",
-  "fingerprint": "cdea812c5d1d343bd31124f8ab8ed27de429da87345d53a67f40e87fc2788bfe",
-  "git_commit": "c6ef9e7dde8a20d87972c4ba2d104e2cdcbe5746",
-  "created_at": "2026-09-29T18:00:04",
+  "fingerprint": "f2ff7b7d65efaaa759dc5078278f7f45beafb4cf6325a7a8354ba5f9a147cd1c",
+  "git_commit": "9010e65c25a50ba1617ebadb48848179b7f362e5",
+  "created_at": "2026-10-01T12:42:22",
   "half_width_range": [
     0.05,
     1.5
   ],
   "mass_range": [
-    0.004,
-    0.5
+    0.001,
+    0.2
   ]
 }

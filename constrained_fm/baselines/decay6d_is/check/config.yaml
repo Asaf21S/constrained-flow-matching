@@ -1,7 +1,8 @@
 method: decay6d_check
-run_id: decay6d_check-b6572264
+run_id: decay6d_check-e4b20cf4
 settings:
   box_candidates: 200000
+  divergence_samples: 10000
   mc_boxes: 2000
   mc_pool: 1000000
   moment_samples: 2000000

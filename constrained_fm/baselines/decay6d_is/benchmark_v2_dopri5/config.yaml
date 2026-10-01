@@ -1,0 +1,8 @@
+method: decay6d_boxes
+run_id: decay6d_boxes-519394b0
+settings:
+  chunk: 10000000
+  gt_samples: 1000000000
+  keep: 1000000
+  pool: 10000000
+  seed: 2024

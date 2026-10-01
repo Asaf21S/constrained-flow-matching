@@ -28,7 +28,7 @@ from tqdm import tqdm
 
 from constrained_fm.src.consts import (DECAY_BOX_HALF_WIDTH_RANGE, DECAY_BOX_MASS_RANGE,
                                        DECAY_EMA_DECAY, DECAY_GRAD_CLIP, DECAY_ODE_ATOL,
-                                       DECAY_ODE_RTOL)
+                                       DECAY_ODE_RTOL, DECAY_ODE_STEPS)
 from constrained_fm.src.experiment.registry import pin_baseline_run
 from constrained_fm.src.experiment.runtime import resolve_device, set_seed
 from constrained_fm.src.models.constrained_box6d import BoxConstrainedFM6D
@@ -168,7 +168,7 @@ def diagnose_box(model, problem: DecayProblem, args, device) -> dict[str, float]
     rates = []
     for box in boxes:
         x0 = torch.randn(args.diag_samples, 6, device=device, dtype=torch.float64)
-        x1, _ = cnf.sample(model, x0, {"box": box[None]}, DECAY_ODE_ATOL, DECAY_ODE_RTOL)
+        x1, _ = cnf.sample_fixed(model, x0, max(DECAY_ODE_STEPS), {"box": box[None]})
         constraint = conditioning_to_box(box, normalizer)
         rates.append(constraint.contains(normalizer.inverse(x1)).double().mean().item())
     return {"in_box_rate_mean": float(np.mean(rates)), "in_box_rate_min": float(np.min(rates)),

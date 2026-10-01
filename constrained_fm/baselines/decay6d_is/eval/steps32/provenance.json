@@ -1,0 +1,10 @@
+{
+  "run_id": "decay6d_is-c0c5f76c",
+  "method": "decay6d_is",
+  "fingerprint": "c0c5f76ca2c692f1ca6f66b33642d3ab076ff2f5b8cd6505305ada894f049ec8",
+  "git_commit": "b59d446bd4c55edabbfb752be24623c7af43b369",
+  "created_at": "2026-10-01T13:54:02",
+  "box_ckpt_run_id": "decay6d_box-f2ff7b7d",
+  "uncon_ckpt_run_id": "decay6d_uncon-cb36fa75",
+  "benchmark_run_id": "decay6d_boxes-519394b0"
+}

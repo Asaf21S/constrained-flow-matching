@@ -34,16 +34,24 @@
         3
       ],
       "dtype": "float32"
+    },
+    "gt_p2_box5": {
+      "shape": [
+        1000000,
+        3
+      ],
+      "dtype": "float32"
     }
   },
-  "written_at": "2026-09-29T14:32:45",
-  "git_commit": "c6ef9e7dde8a20d87972c4ba2d104e2cdcbe5746",
+  "written_at": "2026-10-01T12:01:47",
+  "git_commit": "9010e65c25a50ba1617ebadb48848179b7f362e5",
   "run_id": "decay6d_boxes-519394b0",
   "boxes": [
-    "small_offcentre",
-    "thin_slab",
-    "offcentre_cube",
-    "elongated",
-    "bulk_cube"
+    "cube_0.2pct",
+    "cube_0.5pct",
+    "cube_1pct",
+    "cube_2pct",
+    "cube_5pct",
+    "cube_10pct"
   ]
 }

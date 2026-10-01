@@ -2,25 +2,25 @@
 r"""Importance-sampling evaluation of ``E[f(p2) | p1 in B]`` on the fixed decay6d boxes.
 
 The box-conditioned flow ``q`` is the proposal and ``w = p 1_B / q`` corrects it, with ``p`` the
-unconstrained flow (learned) or the quadrature density (exact). Estimators per box and ``N``:
+unconstrained flow (learned) or the quadrature density (exact). Every ODE solve uses ``--steps``
+fixed midpoint steps. Estimators per box, ``N`` and repetition:
 
-    q_raw        mean of f over all q samples, violators included
-    q_filtered   mean of f over the in-box q samples
-    is_learned   self-normalized IS with p = p_uncon
-    is_exact     self-normalized IS with the exact p
-    rej_equal_n / rej_equal_time / rej_equal_nfe
-                 rejection from p_uncon with N samples, or with the sample count whose cost
-                 matches is_learned in wall-clock or in network evaluations
+    q_raw           mean of f over all q samples, violators included
+    q_filtered      mean of f over the in-box q samples
+    is_learned      self-normalized IS with p = p_uncon
+    is_exact        self-normalized IS with the exact p
+    rej_equal_n     rejection from p_uncon with N draws
+    rej_equal_time  rejection from p_uncon for the measured wall time of this is_learned repetition
+    rej_equal_nfe   rejection from p_uncon until its network calls match this is_learned repetition
 
 ``(1/N) sum w`` estimates ``P(B)`` and checks that both flows share one normalization.
 
-The work is a SLURM array. Tasks ``[0, boxes * blocks_per_box)`` each draw one block of ``q``
-samples for one box; the next ``uncon_blocks`` tasks draw ``p_uncon`` samples and record per
-minibatch, per box in-box counts and sums of f. ``--stage merge`` forms the estimates from
-disjoint slices of those blocks and writes metrics and plotting artifacts.
+One SLURM array task per box runs every repetition, IS and rejection alternating in one process on
+one GPU. ``--stage merge`` collects the per-box shards into metrics, tables and plotting artifacts
+under ``eval/steps<S>``.
 
-    python -m constrained_fm.scripts.eval_decay6d_is --stage shard --task-id 0
-    python -m constrained_fm.scripts.eval_decay6d_is --stage merge
+    python -m constrained_fm.scripts.eval_decay6d_is --stage shard --task-id 0 --steps 32
+    python -m constrained_fm.scripts.eval_decay6d_is --stage merge --steps 32
 """
 
 from __future__ import annotations
@@ -37,12 +37,11 @@ import numpy as np
 import torch
 
 from constrained_fm.scripts.train_decay6d_fm import build_model, freeze_fp64
-from constrained_fm.src.consts import DECAY_ODE_ATOL, DECAY_ODE_FALLBACK_STEPS, DECAY_ODE_RTOL
 from constrained_fm.src.experiment import artifacts
 from constrained_fm.src.experiment.registry import pin_baseline_run
 from constrained_fm.src.experiment.runtime import resolve_device
 from constrained_fm.src.problems.decay6d import (OBSERVABLE_NAMES, PARTICLE_DIM, BoxConstraint,
-                                                 DecayProblem, boxes_contain, observables)
+                                                 DecayProblem, observables)
 from constrained_fm.src.solvers import cnf
 
 ROOT = "constrained_fm/baselines/decay6d_is"
@@ -51,31 +50,25 @@ SHARDS_DIR = "shards"
 ESTIMATORS = ("q_raw", "q_filtered", "is_learned", "is_exact",
               "rej_equal_n", "rej_equal_time", "rej_equal_nfe")
 WEIGHTS = ("learned", "exact")
+DEFAULT_STEPS = 32
+CALIBRATION_REPEATS = 3
 _EVAL_UNTRACKED = frozenset({"stage", "task_id"})
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="decay6d CFM + importance sampling evaluation.")
     parser.add_argument("--stage", choices=("shard", "merge"), required=True)
-    parser.add_argument("--task-id", type=int, default=None)
+    parser.add_argument("--task-id", type=int, default=None, help="box index")
     parser.add_argument("--box-ckpt", default=None)
     parser.add_argument("--uncon-ckpt", default=None)
     parser.add_argument("--boxes", default=None)
-    parser.add_argument("--blocks-per-box", type=int, default=4)
-    parser.add_argument("--block-size", type=int, default=500_000)
+    parser.add_argument("--steps", type=int, default=DEFAULT_STEPS,
+                        help="fixed midpoint steps for every ODE solve")
     parser.add_argument("--chunk", type=int, default=10_000,
-                        help="ODE batch for every solve, q and p_uncon alike")
-    parser.add_argument("--uncon-blocks", type=int, default=8)
-    parser.add_argument("--uncon-block-size", type=int, default=10_000_000)
-    parser.add_argument("--minibatch", type=int, default=1000,
-                        help="granularity at which rejection counts are stored")
-    parser.add_argument("--calibration-chunks", type=int, default=5,
-                        help="p_uncon sampling chunks timed inside every IS task")
+                        help="largest ODE batch, q and p_uncon alike")
     parser.add_argument("--n-values", type=int, nargs="+", default=[1000, 10_000, 100_000])
     parser.add_argument("--reps", type=int, default=20)
     parser.add_argument("--plot-cap", type=int, default=500_000)
-    parser.add_argument("--atol", type=float, default=DECAY_ODE_ATOL)
-    parser.add_argument("--rtol", type=float, default=DECAY_ODE_RTOL)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--outdir", default=None)
     parser.add_argument("--smoke", action="store_true")
@@ -85,16 +78,11 @@ def build_parser() -> argparse.ArgumentParser:
 def resolve_args(args: argparse.Namespace) -> argparse.Namespace:
     root = SMOKE_ROOT if args.smoke else ROOT
     if args.smoke:
-        args.blocks_per_box, args.block_size, args.chunk = 1, 2000, 1000
-        args.uncon_blocks, args.uncon_block_size, args.calibration_chunks = 1, 20_000, 1
-        args.n_values, args.reps, args.plot_cap = [1000], 2, 2000
+        args.chunk, args.n_values, args.reps, args.plot_cap = 1000, [1000, 3000], 2, 2000
     args.box_ckpt = args.box_ckpt or f"{root}/box/ckpt.pt"
     args.uncon_ckpt = args.uncon_ckpt or f"{root}/uncon/ckpt.pt"
     args.boxes = args.boxes or f"{root}/benchmark/boxes.json"
-    args.outdir = args.outdir or f"{root}/eval"
-    if args.block_size % args.chunk or args.uncon_block_size % args.chunk \
-            or args.chunk % args.minibatch:
-        raise ValueError("block sizes must be multiples of --chunk, --chunk of --minibatch")
+    args.outdir = args.outdir or f"{root}/eval/steps{args.steps}"
     return args
 
 
@@ -108,16 +96,17 @@ def load_checkpoint(path: str, problem: DecayProblem, device) -> tuple[torch.nn.
     return freeze_fp64(model.to(device)), ckpt["run_id"]
 
 
-def shard_path(out: Path, task_id: int, num_is_tasks: int, blocks_per_box: int) -> Path:
-    if task_id < num_is_tasks:
-        box, block = divmod(task_id, blocks_per_box)
-        return out / SHARDS_DIR / f"is_box{box}_block{block}.npz"
-    return out / SHARDS_DIR / f"uncon_block{task_id - num_is_tasks}.npz"
+def shard_path(out: Path, box_index: int) -> Path:
+    return out / SHARDS_DIR / f"box{box_index}.npz"
 
 
-def _uncon_chunk(model, n: int, generator, device, atol: float, rtol: float):
-    x0 = torch.randn(n, 6, device=device, dtype=torch.float64, generator=generator)
-    return cnf.sample_isolating(model, x0, None, atol, rtol, DECAY_ODE_FALLBACK_STEPS)
+def _sync(device: torch.device) -> None:
+    if device.type == "cuda":
+        torch.cuda.synchronize(device)
+
+
+def _pieces(n: int, chunk: int) -> list[int]:
+    return [chunk] * (n // chunk) + ([n % chunk] if n % chunk else [])
 
 
 def _timed_log_prob(target, x: torch.Tensor) -> tuple[torch.Tensor, float]:
@@ -130,94 +119,201 @@ def _timed_log_prob(target, x: torch.Tensor) -> tuple[torch.Tensor, float]:
     return log_p, time.perf_counter() - start
 
 
-def run_is_task(args, box: dict, box_model, uncon_model, problem, generator, device) -> dict:
-    target = problem.target()
-    normalizer = problem.normalizer(torch.float64).to(device)
-    log_det = normalizer.log_det_forward.item()
-    constraint = BoxConstraint(box["lo"], box["hi"])
-    cond = {"box": torch.tensor(box["conditioning"], device=device, dtype=torch.float64)[None]}
+class BoxRunner:
+    """Timed IS repetitions and p_uncon rejection runs for one box on one device."""
 
-    fields = {k: [] for k in ("log_q", "log_p_learned", "log_p_exact", "inside", "f", "p2",
-                              "q_fallback", "p_fallback")}
-    timing = {k: [] for k in ("q_seconds", "q_nfe", "p_seconds", "p_nfe", "exact_seconds")}
-    for _ in range(args.block_size // args.chunk):
-        x0 = torch.randn(args.chunk, 6, device=device, dtype=torch.float64, generator=generator)
-        x_n, log_q, q_stats, q_fallback = cnf.sample_with_log_prob_isolating(
-            box_model, x0, cond, args.atol, args.rtol, DECAY_ODE_FALLBACK_STEPS)
-        log_p, p_stats, fallback = cnf.log_prob_isolating(uncon_model, x_n, args.atol, args.rtol,
-                                                          DECAY_ODE_FALLBACK_STEPS)
-        x = normalizer.inverse(x_n)
-        log_exact, exact_seconds = _timed_log_prob(target, x)
-        if fallback.any():
-            print(f"p_uncon fallback on {int(fallback.sum())} samples, "
-                  f"{int((fallback & constraint.contains(x)).sum())} in box", flush=True)
+    def __init__(self, args, box: dict, box_model, uncon_model, problem, device) -> None:
+        self.args, self.box_model, self.uncon_model, self.device = args, box_model, uncon_model, device
+        self.target = problem.target()
+        self.normalizer = problem.normalizer(torch.float64).to(device)
+        self.log_det = self.normalizer.log_det_forward.item()
+        self.constraint = BoxConstraint(box["lo"], box["hi"])
+        self.tau = box["tail_threshold"]
+        self.cond = {"box": torch.tensor(box["conditioning"], device=device,
+                                         dtype=torch.float64)[None]}
+        # Separate streams keep the IS draws independent of how many draws rejection consumed.
+        seed = 2 * (1000 * args.seed + args.task_id)
+        self.gen_q = torch.Generator(device=device).manual_seed(seed)
+        self.gen_p = torch.Generator(device=device).manual_seed(seed + 1)
+        self.sizes = self.costs = None
 
-        fields["log_q"].append(log_q + log_det)
-        fields["log_p_learned"].append(log_p + log_det)
-        fields["log_p_exact"].append(log_exact)
-        fields["inside"].append(constraint.contains(x))
-        fields["p_fallback"].append(fallback)
-        fields["q_fallback"].append(q_fallback)
-        fields["f"].append(observables(x, box["tail_threshold"]))
-        fields["p2"].append(x[:, PARTICLE_DIM:].float())
-        timing["q_seconds"].append(q_stats.seconds)
-        timing["q_nfe"].append(q_stats.nfe)
-        timing["p_seconds"].append(p_stats.seconds)
-        timing["p_nfe"].append(p_stats.nfe)
-        timing["exact_seconds"].append(exact_seconds)
+    def _noise(self, m: int, generator) -> torch.Tensor:
+        return torch.randn(m, 6, device=self.device, dtype=torch.float64, generator=generator)
 
-    calib = [_uncon_chunk(uncon_model, args.chunk, generator, device, args.atol, args.rtol)[1]
-             for _ in range(args.calibration_chunks)]
-    out = {k: torch.cat(v).cpu().numpy() for k, v in fields.items()}
-    out.update({k: np.asarray(v) for k, v in timing.items()})
-    out["calib_seconds"] = np.asarray([s.seconds for s in calib])
-    out["calib_nfe"] = np.asarray([s.nfe for s in calib])
-    return out
+    def is_rep(self, n: int) -> tuple[dict[str, np.ndarray], dict[str, float]]:
+        """N proposals with log q (forward), log p_uncon (backward) and the exact log p."""
+        steps = self.args.steps
+        parts = {k: [] for k in ("log_q", "log_p", "log_exact", "inside", "finite", "f", "p2")}
+        cost = {"p_seconds": 0.0, "exact_seconds": 0.0, "q_nfe": 0, "p_nfe": 0}
+        _sync(self.device)
+        start = time.perf_counter()
+        for m in _pieces(n, self.args.chunk):
+            x_n, log_q, q_stats = cnf.sample_with_log_prob_fixed(
+                self.box_model, self._noise(m, self.gen_q), steps, self.cond)
+            log_p, p_stats = cnf.log_prob_fixed(self.uncon_model, x_n, steps)
+            x = self.normalizer.inverse(x_n)
+            log_exact, exact_seconds = _timed_log_prob(self.target, x)
+            parts["log_q"].append(log_q + self.log_det)
+            parts["log_p"].append(log_p + self.log_det)
+            parts["log_exact"].append(log_exact)
+            parts["inside"].append(self.constraint.contains(x))
+            parts["finite"].append(torch.isfinite(x).all(1))
+            parts["f"].append(observables(x, self.tau))
+            parts["p2"].append(x[:, PARTICLE_DIM:].float())
+            cost["p_seconds"] += p_stats.seconds
+            cost["exact_seconds"] += exact_seconds
+            cost["q_nfe"] += q_stats.nfe
+            cost["p_nfe"] += p_stats.nfe
+        _sync(self.device)
+        cost["total"] = time.perf_counter() - start
+        return {k: torch.cat(v).cpu().numpy() for k, v in parts.items()}, cost
+
+    def draw_uncon(self, m: int) -> tuple[int, torch.Tensor, int, int]:
+        """One p_uncon batch: in-box count, in-box sum of f, NFE, non-finite samples."""
+        x_n, stats = cnf.sample_fixed(self.uncon_model, self._noise(m, self.gen_p),
+                                      self.args.steps)
+        x = self.normalizer.inverse(x_n)
+        inside = self.constraint.contains(x)
+        # where, not a product: a non-finite out-of-box sample would give 0 * NaN = NaN.
+        f_sum = torch.where(inside[:, None], observables(x, self.tau), 0.0).sum(0)
+        return int(inside.sum()), f_sum, stats.nfe, int((~torch.isfinite(x).all(1)).sum())
+
+    def calibrate(self) -> None:
+        """Median wall time of one p_uncon batch per size, used to size the final batch."""
+        chunk = self.args.chunk
+        self.sizes = np.unique([1, max(1, chunk // 100), max(1, chunk // 10), max(1, chunk // 4),
+                                max(1, chunk // 2), chunk])
+        costs = []
+        for m in self.sizes:
+            runs = []
+            for _ in range(CALIBRATION_REPEATS):
+                _sync(self.device)
+                start = time.perf_counter()
+                self.draw_uncon(int(m))
+                _sync(self.device)
+                runs.append(time.perf_counter() - start)
+            costs.append(float(np.median(runs)))
+        self.costs = np.maximum.accumulate(costs)
+
+    def _fit(self, remaining: float) -> int:
+        """Largest batch whose calibrated time fits in ``remaining`` seconds."""
+        if remaining < self.costs[0]:
+            return 0
+        return int(np.interp(remaining, self.costs, self.sizes))
+
+    def rejection(self, piece: int, *, draws: int | None = None, nfe: int | None = None,
+                  seconds: float | None = None) -> tuple[np.ndarray, dict[str, float]]:
+        """Rejection from p_uncon under one budget: draws, network calls, or wall time."""
+        count = drawn = calls = nonfinite = 0
+        f_sum = torch.zeros(len(OBSERVABLE_NAMES), device=self.device, dtype=torch.float64)
+        _sync(self.device)
+        start = time.perf_counter()
+        while True:
+            if draws is not None:
+                m = min(piece, draws - drawn)
+            elif nfe is not None:
+                m = piece if calls < nfe else 0
+            else:
+                m = min(piece, self._fit(seconds - (time.perf_counter() - start)))
+            if m <= 0:
+                break
+            c, s, k, bad = self.draw_uncon(m)
+            count, drawn, calls, nonfinite = count + c, drawn + m, calls + k, nonfinite + bad
+            f_sum += s
+        _sync(self.device)
+        elapsed = time.perf_counter() - start
+        estimate = (f_sum / count).cpu().numpy() if count else np.full(len(OBSERVABLE_NAMES), np.nan)
+        return estimate, {"used": count, "draws": drawn, "nfe": calls, "seconds": elapsed,
+                          "nonfinite": nonfinite}
 
 
-def run_uncon_task(args, boxes: list[dict], uncon_model, problem, generator, device) -> dict:
-    normalizer = problem.normalizer(torch.float64).to(device)
-    lo = torch.tensor([b["lo"] for b in boxes], device=device, dtype=torch.float64)
-    hi = torch.tensor([b["hi"] for b in boxes], device=device, dtype=torch.float64)
-    per_chunk = args.chunk // args.minibatch
+def run_box(args, runner: BoxRunner) -> dict[str, np.ndarray]:
+    n_values = sorted(args.n_values)
+    num_e, num_f, num_n, reps = len(ESTIMATORS), len(OBSERVABLE_NAMES), len(n_values), args.reps
+    col = {e: i for i, e in enumerate(ESTIMATORS)}
+    estimates = np.full((num_e, num_f, num_n, reps), np.nan)
+    cost = {k: np.full((num_e, num_n, reps), np.nan) for k in ("seconds", "nfe", "used", "draws")}
+    weight = {k: np.full((len(WEIGHTS), num_n, reps), np.nan)
+              for k in ("mass", "ess_frac", "max_weight")}
+    counts = {k: 0 for k in ("q_total", "q_in_box", "q_nonfinite", "p_uncon_nonfinite_in_box",
+                             "rejection_nonfinite")}
+    plot = {k: [] for k in ("q_p2", "q_inside", "log_w_learned", "log_w_exact")}
+    plotted = 0
 
-    counts, sums, seconds, nfe, fallbacks = [], [], [], [], []
-    for _ in range(args.uncon_block_size // args.chunk):
-        x_n, stats, fallback = _uncon_chunk(uncon_model, args.chunk, generator, device,
-                                            args.atol, args.rtol)
-        x = normalizer.inverse(x_n)
-        inside = boxes_contain(x[:, None, :PARTICLE_DIM], lo, hi).to(x.dtype)
-        counts.append(inside.view(per_chunk, args.minibatch, -1).sum(1))
-        # where, not a product: out-of-box fallback samples may be NaN and 0 * NaN = NaN.
-        sums.append(torch.stack([
-            torch.where(inside[:, b, None] > 0, observables(x, box["tail_threshold"]), 0.0)
-            .view(per_chunk, args.minibatch, -1).sum(1) for b, box in enumerate(boxes)], dim=1))
-        seconds.append(stats.seconds)
-        nfe.append(stats.nfe)
-        fallbacks.append(fallback.sum().item())
-    return {"counts": torch.cat(counts).cpu().numpy(), "sums": torch.cat(sums).cpu().numpy(),
-            "seconds": np.asarray(seconds), "nfe": np.asarray(nfe),
-            "fallbacks": np.asarray(fallbacks)}
+    runner.is_rep(min(n_values[0], args.chunk))  # warm-up: kernels, allocator, autograd graph
+    runner.draw_uncon(args.chunk)
+    runner.calibrate()
+
+    for j, n in enumerate(n_values):
+        start = time.perf_counter()
+        for r in range(reps):
+            s, t = runner.is_rep(n)
+            inside, f = s["inside"], s["f"]
+            log_w = {"learned": np.where(inside, s["log_p"] - s["log_q"], -np.inf),
+                     "exact": np.where(inside, s["log_exact"] - s["log_q"], -np.inf)}
+            estimates[col["q_raw"], :, j, r] = f.mean(0)
+            if inside.any():
+                estimates[col["q_filtered"], :, j, r] = f[inside].mean(0)
+            for w, (kind, e) in enumerate(zip(WEIGHTS, ("is_learned", "is_exact"))):
+                stats = _weight_stats(log_w[kind], f, n)
+                estimates[col[e], :, j, r] = stats["estimate"]
+                for k in weight:
+                    weight[k][w, j, r] = stats[k]
+
+            q_seconds = t["total"] - t["p_seconds"] - t["exact_seconds"]
+            for e, sec, calls in (("q_raw", q_seconds, t["q_nfe"]),
+                                  ("q_filtered", q_seconds, t["q_nfe"]),
+                                  ("is_learned", t["total"] - t["exact_seconds"],
+                                   t["q_nfe"] + t["p_nfe"]),
+                                  ("is_exact", t["total"] - t["p_seconds"], t["q_nfe"])):
+                cost["seconds"][col[e], j, r], cost["nfe"][col[e], j, r] = sec, calls
+                cost["used"][col[e], j, r] = n if e == "q_raw" else inside.sum()
+                cost["draws"][col[e], j, r] = n
+
+            budgets = {"rej_equal_n": (args.chunk, {"draws": n}),
+                       "rej_equal_time": (args.chunk, {"seconds": cost["seconds"][col["is_learned"], j, r]}),
+                       "rej_equal_nfe": (min(n, args.chunk), {"nfe": t["q_nfe"] + t["p_nfe"]})}
+            for e, (piece, budget) in budgets.items():
+                estimates[col[e], :, j, r], c = runner.rejection(piece, **budget)
+                for k in cost:
+                    cost[k][col[e], j, r] = c[k]
+                counts["rejection_nonfinite"] += c["nonfinite"]
+
+            counts["q_total"] += n
+            counts["q_in_box"] += int(inside.sum())
+            counts["q_nonfinite"] += int((~s["finite"]).sum())
+            counts["p_uncon_nonfinite_in_box"] += int((inside & ~np.isfinite(s["log_p"])).sum())
+            if j == num_n - 1 and plotted < args.plot_cap:
+                take = min(n, args.plot_cap - plotted)
+                for k, v in (("q_p2", s["p2"]), ("q_inside", inside),
+                             ("log_w_learned", log_w["learned"]), ("log_w_exact", log_w["exact"])):
+                    plot[k].append(v[:take])
+                plotted += take
+        ratio = cost["seconds"][col["rej_equal_time"], j] / cost["seconds"][col["is_learned"], j]
+        print(f"N={n}: {reps} reps in {time.perf_counter() - start:.1f}s, is_learned "
+              f"{np.median(cost['seconds'][col['is_learned'], j]):.3f}s, equal-time ratio "
+              f"{ratio.min():.3f}..{ratio.max():.3f}", flush=True)
+
+    return {"estimates": estimates, **{f"rep_{k}": v for k, v in cost.items()}, **weight,
+            **{k: np.asarray(v) for k, v in counts.items()},
+            **{k: np.concatenate(v) for k, v in plot.items()},
+            "calib_sizes": runner.sizes, "calib_seconds": runner.costs}
 
 
 def run_shard(args, run_id: str, out: Path, device) -> None:
     problem = DecayProblem()
-    bench = json.loads(Path(args.boxes).read_text())
-    boxes = bench["boxes"]
-    num_is = len(boxes) * args.blocks_per_box
-    if args.task_id is None or not 0 <= args.task_id < num_is + args.uncon_blocks:
-        raise ValueError(f"--task-id must lie in [0, {num_is + args.uncon_blocks})")
+    boxes = json.loads(Path(args.boxes).read_text())["boxes"]
+    if args.task_id is None or not 0 <= args.task_id < len(boxes):
+        raise ValueError(f"--task-id must lie in [0, {len(boxes)})")
 
+    box_model, _ = load_checkpoint(args.box_ckpt, problem, device)
     uncon_model, _ = load_checkpoint(args.uncon_ckpt, problem, device)
-    generator = torch.Generator(device=device).manual_seed(args.seed + args.task_id)
-    if args.task_id < num_is:
-        box_model, _ = load_checkpoint(args.box_ckpt, problem, device)
-        payload = run_is_task(args, boxes[args.task_id // args.blocks_per_box], box_model,
-                              uncon_model, problem, generator, device)
-    else:
-        payload = run_uncon_task(args, boxes, uncon_model, problem, generator, device)
+    box = boxes[args.task_id]
+    print(f"box {args.task_id} {box['name']}: P(B)={box['gt_mass']:.4g}, steps={args.steps}",
+          flush=True)
+    payload = run_box(args, BoxRunner(args, box, box_model, uncon_model, problem, device))
 
-    path = shard_path(out, args.task_id, num_is, args.blocks_per_box)
+    path = shard_path(out, args.task_id)
     path.parent.mkdir(parents=True, exist_ok=True)
     np.savez(path, run_id=np.asarray(run_id), **payload)
     print(f"task {args.task_id} -> {path}")
@@ -247,16 +343,6 @@ def _weight_stats(log_w: np.ndarray, f: np.ndarray, n: int) -> dict[str, float |
             "ess_frac": total ** 2 / (w @ w) / n, "max_weight": w.max() / total}
 
 
-def _cumulative(per_chunk: np.ndarray) -> np.ndarray:
-    return np.concatenate([[0.0], np.cumsum(per_chunk, dtype=np.float64)])
-
-
-def _span_cost(cum: np.ndarray, start: int, stop: int, chunk: int) -> float:
-    """Cost of samples ``[start, stop)``, pro-rating chunks that are only partly used."""
-    grid = np.arange(cum.size)
-    return float(np.interp(stop / chunk, grid, cum) - np.interp(start / chunk, grid, cum))
-
-
 def _summary(values: np.ndarray) -> dict[str, float]:
     return {"mean": float(np.nanmean(values)), "median": float(np.nanmedian(values)),
             "std": float(np.nanstd(values))}
@@ -270,53 +356,50 @@ def markdown_tables(report: dict) -> str:
     """One combined cost and accuracy table per box, with values ordered by N."""
     n_values = report["n_values"]
     n_order = "/".join(f"{n:,}" for n in n_values)
+    steps = report["steps"]
+    figures = f"../../../../images/thesis_pool/decay6d_is/steps{steps}"
+    rarest = min(report["boxes"], key=lambda name: report["boxes"][name]["gt_mass"])
 
     def triplet(values, fmt: str) -> str:
         return "<br>".join(format(value, fmt).replace("e-", "e&#8209;") for value in values)
 
     lines = [
-        "# Decay6D per-box accuracy and cost",
+        f"# Decay6D per-box accuracy and cost ({steps} midpoint steps)",
+        "",
+        f"Every ODE solve (q sampling with its log-density, the backward $p_{{\\rm uncon}}$ density,",
+        f"and $p_{{\\rm uncon}}$ sampling for rejection) uses {steps} fixed midpoint steps, i.e.",
+        f"{2 * steps} velocity calls per batch. Each box is one SLURM task on one GPU, and its IS",
+        "and rejection repetitions alternate in the same process.",
         "",
         f"Each box has one combined table. Its values are ordered by $N={n_order}$, one value per line within each cell.",
-        "One repetition uses $N$ proposal samples or its listed rejection draw budget to produce",
-        "one estimate. Each accuracy cell gives the standard deviation of absolute error across",
-        "valid repetitions; RMSE is one value per box, estimator, and observable, computed across",
-        "those repetitions. `valid reps` gives finite estimates out of 20, ordered by observable",
-        "(norm / z / tail) and then by N (one line per N). A repetition is valid for an observable",
-        "only if its estimate is finite. Raw $q$ includes every proposal, so a non-finite fallback",
-        "output can invalidate its norm and z estimates; the tail indicator can remain numerically",
-        "finite because a NaN threshold comparison is false. Thus valid means finite, not",
-        "necessarily fallback-free. Filtered $q$ and IS exclude leaked proposals.",
+        "Each accuracy cell gives the standard deviation of absolute error across valid",
+        "repetitions; RMSE is computed across those repetitions. `valid reps` gives finite",
+        f"estimates out of {report['reps']}, ordered by observable (norm / z / tail) and then by N.",
+        "A rejection repetition with no accepted event has no estimate and is not valid.",
         "",
-        "Cost columns show mean values only, except draw/evaluation budgets which are fixed per",
-        "repetition. `q draws` is the number from the box-conditioned proposal; `p_uncon draws`",
-        "is the number from the unconstrained model. Density evals are learned / exact. Samples",
-        "used are all proposals for raw $q$, in-box proposals for filtered $q$ and IS, and accepted",
-        "events for rejection. NFE counts velocity-network calls. Exact IS adds quadrature time but",
-        "no extra network NFE; all times include the estimator's density work.",
+        "Cost columns show means over repetitions. `q draws` is the number from the box-conditioned",
+        "proposal; `p_uncon draws` is the mean number from the unconstrained model. Samples used",
+        "are all proposals for raw $q$, in-box proposals for filtered $q$ and IS, and accepted",
+        "events for rejection. NFE counts velocity-network calls. Times are measured wall clock",
+        "for each repetition and include the estimator's own density work only.",
         "",
-        "Equal-time and equal-NFE draw budgets are calibrated from median per-chunk costs, then",
-        "rounded to 1,000-draw minibatches. The table reports mean realized costs, which need not",
-        "match exactly: adaptive solver work and fallback trajectories vary between repetitions.",
-        "At $N=100{,}000$, equal-time windows contain 1.4--1.9 million draws; the observed",
-        "60 fallbacks in 80 million draws imply about 1.1--1.5 fallback trajectories per such",
-        "window on average, which can raise realized cost above the median-chunk target.",
-        "Timing/NFE costs for partial 10,000-sample chunks are prorated by sample count.",
+        "Budgets are per repetition, not calibrated averages: `rej_equal_time` samples",
+        "$p_{\\rm uncon}$ until the measured wall time of the same repetition's `is_learned` run is",
+        "used up, sizing its last batch from the measured batch-time curve so it does not overrun;",
+        "`rej_equal_nfe` draws batches of $\\min(N, 10^4)$ until its velocity calls reach the",
+        "`is_learned` count, which is $2N$ draws; `rej_equal_n` draws exactly $N$.",
         "",
         "#### Summary figures",
         "",
-        "RMSE at $N=1,000$ against $P(\\mathcal B)$ for $\\lVert\\vec p_2\\rVert$, $p_{2z}$, and the tail",
-        "probability; the mass axis is reversed, so boxes become rarer to the right.",
+        "RMSE against $P(\\mathcal B)$; rows are $\\Vert\\vec p_2\\Vert$, $p_{2z}$ and the tail",
+        "probability, columns are $N$. The mass axis is reversed, so boxes become rarer to the right.",
         "",
-        *(f"![RMSE vs constraint mass, {obs}](../../../images/thesis_pool/decay6d_is/"
-          f"rmse_vs_mass_{obs}_n1000.png)" for obs in OBSERVABLE_NAMES),
+        f"![RMSE vs constraint mass]({figures}/rmse_vs_mass_grid.png)",
         "",
-        f"small_offcentre error-cost frontier at IS budgets $N={n_order}$, using mean time per estimate;",
-        "point labels give each estimator's own model draws per estimate (rejection draws far more",
-        "than $N$ to match IS time or NFE). Means include occasional fallback trajectories.",
+        f"{rarest} error-cost frontier at IS budgets $N={n_order}$, using mean time per estimate;",
+        "point labels give each estimator's own model draws per estimate.",
         "",
-        "![RMSE vs time, small_offcentre](../../../images/thesis_pool/decay6d_is/"
-        "rmse_vs_time_small_offcentre_p2_norm.png)",
+        f"![RMSE vs time, {rarest}]({figures}/rmse_vs_time_{rarest}_p2_norm.png)",
         "",
     ]
 
@@ -335,7 +418,7 @@ def markdown_tables(report: dict) -> str:
             costs = [entry["cost"][estimator] for entry in per_n]
             scores = [entry["estimators"][estimator] for entry in per_n]
             q_draws = triplet([c["q_draws"] for c in costs], ",")
-            p_draws = triplet([c["uncon_draws"] for c in costs], ",")
+            p_draws = triplet([c["uncon_draws"] for c in costs], ",.0f")
             density_evals = "<br>".join(
                 f"{c['learned_density_evals']:,} / {c['exact_density_evals']:,}" for c in costs)
             samples = triplet([c["used"]["mean"] for c in costs], ",.0f")
@@ -360,119 +443,14 @@ def merge(args, run_id: str, out: Path) -> None:
     bench = json.loads(Path(args.boxes).read_text())
     boxes = bench["boxes"]
     n_values = sorted(args.n_values)
-    num_b, num_f, num_n, reps = len(boxes), len(OBSERVABLE_NAMES), len(n_values), args.reps
-    num_is = num_b * args.blocks_per_box
-
-    uncon = [_load_shard(shard_path(out, num_is + k, num_is, args.blocks_per_box), run_id)
-             for k in range(args.uncon_blocks)]
-    rej_counts = np.concatenate([s["counts"] for s in uncon])
-    rej_sums = np.concatenate([s["sums"] for s in uncon])
-    uncon_nfe = float(np.median(np.concatenate([s["nfe"] for s in uncon])))
-    uncon_fallbacks = int(np.sum([s.get("fallbacks", np.zeros(1)).sum() for s in uncon]))
-    rej_cum = {k: _cumulative(np.concatenate([s[k] for s in uncon])) for k in ("seconds", "nfe")}
-
-    estimates = np.full((num_b, len(ESTIMATORS), num_f, num_n, reps), np.nan)
-    mass = np.full((num_b, len(WEIGHTS), num_n, reps), np.nan)
-    ess_frac = np.full_like(mass, np.nan)
-    max_weight = np.full_like(mass, np.nan)
-    rej_budget = np.zeros((num_b, 3, num_n), dtype=np.int64)
-    rej_reps = np.zeros_like(rej_budget)
-    rep_seconds = np.full((num_b, len(ESTIMATORS), num_n, reps), np.nan)
-    rep_nfe = np.full_like(rep_seconds, np.nan)
-    rep_used = np.full_like(rep_seconds, np.nan)
+    shards = [_load_shard(shard_path(out, b), run_id) for b in range(len(boxes))]
+    estimates = np.stack([s["estimates"] for s in shards])
+    rep = {k: np.stack([s[f"rep_{k}"] for s in shards]) for k in ("seconds", "nfe", "used", "draws")}
+    mass, ess_frac, max_weight = (np.stack([s[k] for s in shards])
+                                  for k in ("mass", "ess_frac", "max_weight"))
     gt_mean = np.array([[b["gt"][k]["mean"] for k in OBSERVABLE_NAMES] for b in boxes])
     gt_se = np.array([[b["gt"][k]["se"] for k in OBSERVABLE_NAMES] for b in boxes])
-    box_report, plot_arrays = {}, {}
-
-    for b, box in enumerate(boxes):
-        blocks = [_load_shard(out / SHARDS_DIR / f"is_box{b}_block{k}.npz", run_id)
-                  for k in range(args.blocks_per_box)]
-        data = {k: np.concatenate([blk[k] for blk in blocks])
-            for k in ("log_q", "log_p_learned", "log_p_exact", "inside", "f", "p2",
-                  "p_fallback")}
-        inside, f = data["inside"], data["f"]
-        p_fallback = data["p_fallback"]
-        q_fallback = np.concatenate([blk.get("q_fallback", np.zeros(blk["inside"].shape,
-                                          dtype=bool))
-                         for blk in blocks])
-        log_w = {"learned": np.where(inside, data["log_p_learned"] - data["log_q"], -np.inf),
-                 "exact": np.where(inside, data["log_p_exact"] - data["log_q"], -np.inf)}
-
-        timing = {k: np.concatenate([blk[k] for blk in blocks]) for k in
-                  ("q_seconds", "q_nfe", "p_seconds", "p_nfe", "exact_seconds", "calib_seconds",
-                   "calib_nfe")}
-        # Median per chunk: one stalled solve (see cnf.log_prob_isolating) must not set the cost.
-        med = {k: float(np.median(v)) for k, v in timing.items()}
-        is_seconds = (med["q_seconds"] + med["p_seconds"]) / args.chunk
-        is_nfe = med["q_nfe"] + med["p_nfe"]
-        rej_seconds = med["calib_seconds"] / args.chunk
-        cost_ratio = {"equal_n": 1.0, "equal_time": is_seconds / rej_seconds,
-                      "equal_nfe": is_nfe / med["calib_nfe"]}
-        cum = {k: _cumulative(timing[k]) for k in
-               ("q_seconds", "q_nfe", "p_seconds", "p_nfe", "exact_seconds")}
-
-        for j, n in enumerate(n_values):
-            for r in range(min(reps, inside.shape[0] // n)):
-                sl = slice(r * n, (r + 1) * n)
-                span = {k: _span_cost(c, sl.start, sl.stop, args.chunk) for k, c in cum.items()}
-                rep_seconds[b, :4, j, r] = [span["q_seconds"], span["q_seconds"],
-                                            span["q_seconds"] + span["p_seconds"],
-                                            span["q_seconds"] + span["exact_seconds"]]
-                rep_nfe[b, :4, j, r] = [span["q_nfe"], span["q_nfe"],
-                                        span["q_nfe"] + span["p_nfe"], span["q_nfe"]]
-                rep_used[b, 0, j, r] = n
-                rep_used[b, 1:4, j, r] = inside[sl].sum()
-                estimates[b, 0, :, j, r] = f[sl].mean(0)
-                if inside[sl].any():
-                    estimates[b, 1, :, j, r] = f[sl][inside[sl]].mean(0)
-                for w_idx, name in enumerate(WEIGHTS):
-                    stats = _weight_stats(log_w[name][sl], f[sl], n)
-                    estimates[b, 2 + w_idx, :, j, r] = stats["estimate"]
-                    mass[b, w_idx, j, r] = stats["mass"]
-                    ess_frac[b, w_idx, j, r] = stats["ess_frac"]
-                    max_weight[b, w_idx, j, r] = stats["max_weight"]
-
-            for v, ratio in enumerate(cost_ratio.values()):
-                k = max(1, round(n * ratio / args.minibatch))
-                rej_budget[b, v, j] = k * args.minibatch
-                rej_reps[b, v, j] = min(reps, rej_counts.shape[0] // k)
-                for r in range(rej_reps[b, v, j]):
-                    count = rej_counts[r * k:(r + 1) * k, b].sum()
-                    draws = (r * k * args.minibatch, (r + 1) * k * args.minibatch)
-                    rep_seconds[b, 4 + v, j, r] = _span_cost(rej_cum["seconds"], *draws, args.chunk)
-                    rep_nfe[b, 4 + v, j, r] = _span_cost(rej_cum["nfe"], *draws, args.chunk)
-                    rep_used[b, 4 + v, j, r] = count
-                    if count > 0:
-                        estimates[b, 4 + v, :, j, r] = rej_sums[r * k:(r + 1) * k, b].sum(0) / count
-
-        gap = (data["log_p_learned"] - data["log_p_exact"])[inside]
-        finite_gap = gap[np.isfinite(gap)]
-        box_report[box["name"]] = {
-            "gt_mass": box["gt_mass"],
-            "gt_count": box["gt_count"],
-            "leakage": float(1.0 - inside.mean()),
-            "p_uncon_fallback": {"total": int(p_fallback.sum()),
-                                 "in_box": int((p_fallback & inside).sum())},
-            "q_fallback": int(q_fallback.sum()),
-            "log_p_uncon_minus_exact_on_q": {
-                "mean": float(finite_gap.mean()) if finite_gap.size else float("nan"),
-                "std": float(finite_gap.std()) if finite_gap.size else float("nan"),
-                "p1": float(np.percentile(finite_gap, 1)) if finite_gap.size else float("nan"),
-                "p99": float(np.percentile(finite_gap, 99)) if finite_gap.size else float("nan"),
-                "finite_samples": int(finite_gap.size),
-                "total_samples": int(gap.size)},
-            "cost_ratio_vs_rejection": cost_ratio,
-            "seconds_per_sample": {"is_learned": float(is_seconds),
-                                   "exact_density": med["exact_seconds"] / args.chunk,
-                                   "uncon_sample": float(rej_seconds)},
-            "nfe_per_chunk": {"q": med["q_nfe"], "p_uncon_backward": med["p_nfe"],
-                              "p_uncon_sample": med["calib_nfe"]},
-        }
-
-        cap = min(args.plot_cap, inside.shape[0])
-        plot_arrays.update({f"q_p2_box{b}": data["p2"][:cap], f"q_inside_box{b}": inside[:cap],
-                            f"log_w_learned_box{b}": log_w["learned"][:cap],
-                            f"log_w_exact_box{b}": log_w["exact"][:cap]})
+    col = {e: i for i, e in enumerate(ESTIMATORS)}
 
     err = estimates - gt_mean[:, None, :, None, None]
     bias = np.nanmean(err, axis=-1)
@@ -480,7 +458,11 @@ def merge(args, run_id: str, out: Path) -> None:
     spread = np.nanstd(estimates, axis=-1)
     valid = np.isfinite(estimates).sum(-1)
 
-    for b, box in enumerate(boxes):
+    box_report, plot_arrays = {}, {}
+    for b, (box, shard) in enumerate(zip(boxes, shards)):
+        inside = shard["q_inside"]
+        gap = (shard["log_w_learned"] - shard["log_w_exact"])[inside]
+        finite_gap = gap[np.isfinite(gap)]
         per_n = {}
         for j, n in enumerate(n_values):
             per_n[str(n)] = {
@@ -492,15 +474,13 @@ def merge(args, run_id: str, out: Path) -> None:
                                    for k, fname in enumerate(OBSERVABLE_NAMES)}
                                for i, e in enumerate(ESTIMATORS)},
                 "cost": {e: {"q_draws": n if i < 4 else 0,
-                              "uncon_draws": int(rej_budget[b, i - 4, j]) if i >= 4 else 0,
+                              "uncon_draws": float(np.mean(rep["draws"][b, i, j])) if i >= 4 else 0,
                               "learned_density_evals": n if e == "is_learned" else 0,
                               "exact_density_evals": n if e == "is_exact" else 0,
-                              "used": _summary(rep_used[b, i, j]),
-                              "nfe": _summary(rep_nfe[b, i, j]),
-                              "seconds": _summary(rep_seconds[b, i, j])}
+                              **{k: _summary(v[b, i, j]) for k, v in rep.items()}}
                          for i, e in enumerate(ESTIMATORS)},
-                "rejection_budget": dict(zip(("equal_n", "equal_time", "equal_nfe"),
-                                             rej_budget[b, :, j].tolist())),
+                "equal_time_ratio": _summary(rep["seconds"][b, col["rej_equal_time"], j]
+                                             / rep["seconds"][b, col["is_learned"], j]),
                 "mass": {w: {"mean": float(np.nanmean(mass[b, i, j])),
                              "std": float(np.nanstd(mass[b, i, j]))}
                          for i, w in enumerate(WEIGHTS)},
@@ -508,12 +488,31 @@ def merge(args, run_id: str, out: Path) -> None:
                 "max_weight": {w: float(np.nanmean(max_weight[b, i, j]))
                                for i, w in enumerate(WEIGHTS)},
             }
-        box_report[box["name"]]["by_n"] = per_n
+        box_report[box["name"]] = {
+            "gt_mass": box["gt_mass"],
+            "gt_count": box["gt_count"],
+            "leakage": float(1.0 - shard["q_in_box"] / shard["q_total"]),
+            "nonfinite": {"q": int(shard["q_nonfinite"]),
+                          "p_uncon_on_q_in_box": int(shard["p_uncon_nonfinite_in_box"]),
+                          "rejection": int(shard["rejection_nonfinite"])},
+            "log_p_uncon_minus_exact_on_q": {
+                "mean": float(finite_gap.mean()) if finite_gap.size else float("nan"),
+                "std": float(finite_gap.std()) if finite_gap.size else float("nan"),
+                "p1": float(np.percentile(finite_gap, 1)) if finite_gap.size else float("nan"),
+                "p99": float(np.percentile(finite_gap, 99)) if finite_gap.size else float("nan"),
+                "finite_samples": int(finite_gap.size),
+                "total_samples": int(gap.size)},
+            "uncon_batch_seconds": dict(zip(map(str, shard["calib_sizes"].tolist()),
+                                            shard["calib_seconds"].tolist())),
+            "by_n": per_n,
+        }
+        plot_arrays.update({f"{k}_box{b}": shard[k] for k in
+                            ("q_p2", "q_inside", "log_w_learned", "log_w_exact")})
 
     artifacts.save_arrays(out, estimates=estimates, gt_mean=gt_mean, gt_se=gt_se,
                           n_values=np.asarray(n_values), mass=mass, ess_frac=ess_frac,
-                          max_weight=max_weight, rej_budget=rej_budget, rej_reps=rej_reps,
-                          rep_seconds=rep_seconds, rep_nfe=rep_nfe, rep_used=rep_used,
+                          max_weight=max_weight,
+                          **{f"rep_{k}": v for k, v in rep.items()},
                           gt_mass=np.array([b["gt_mass"] for b in boxes]), **plot_arrays)
     artifacts.write_manifest(out, run_id=run_id, estimators=list(ESTIMATORS),
                              weights=list(WEIGHTS), observables=list(OBSERVABLE_NAMES),
@@ -524,23 +523,22 @@ def merge(args, run_id: str, out: Path) -> None:
         "run_id": run_id,
         "benchmark_run_id": bench["run_id"],
         "evaluated_at": datetime.now().isoformat(timespec="seconds"),
+        "ode_method": cnf.FIXED_METHOD,
+        "steps": args.steps,
         "estimators": list(ESTIMATORS),
         "observables": list(OBSERVABLE_NAMES),
         "n_values": n_values,
-        "reps": reps,
-        "uncon_pool_samples": int(rej_counts.shape[0] * args.minibatch),
-        "uncon_nfe_per_chunk": uncon_nfe,
-        "uncon_sample_fallbacks": uncon_fallbacks,
+        "reps": args.reps,
         "boxes": box_report,
     }
     (out / "metrics.json").write_text(json.dumps(report, indent=2))
     (out / "tables.md").write_text(markdown_tables(report))
 
-    print(f"### decay6d IS ({run_id})")
+    print(f"### decay6d IS ({run_id}, {args.steps} midpoint steps)")
     for b, box in enumerate(boxes):
-        j = num_n - 1
+        j = len(n_values) - 1
         row = "  ".join(f"{e}={rmse[b, i, 0, j]:.2e}" for i, e in enumerate(ESTIMATORS))
-        print(f"  {box['name']:16s} N={n_values[j]} RMSE |p2|: {row}")
+        print(f"  {box['name']:14s} N={n_values[j]} RMSE |p2|: {row}")
 
 
 def main(argv: list[str] | None = None) -> int:

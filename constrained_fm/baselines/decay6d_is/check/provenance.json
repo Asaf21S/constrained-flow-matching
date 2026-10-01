@@ -1,7 +1,7 @@
 {
-  "run_id": "decay6d_check-b6572264",
+  "run_id": "decay6d_check-e4b20cf4",
   "method": "decay6d_check",
-  "fingerprint": "b6572264742ca8cf86d5095d094a462666e7a7620a05e618478198d80e9e568f",
-  "git_commit": "c6ef9e7dde8a20d87972c4ba2d104e2cdcbe5746",
-  "created_at": "2026-09-29T13:09:47"
+  "fingerprint": "e4b20cf4a70cdc03f2cc51b59baeff9597bb1944ee4e11d8538c77f97e0c5705",
+  "git_commit": "9010e65c25a50ba1617ebadb48848179b7f362e5",
+  "created_at": "2026-10-01T12:01:44"
 }

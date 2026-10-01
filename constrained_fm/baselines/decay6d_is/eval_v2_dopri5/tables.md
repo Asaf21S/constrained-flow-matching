@@ -31,15 +31,15 @@ Timing/NFE costs for partial 10,000-sample chunks are prorated by sample count.
 RMSE at $N=1,000$ against $P(\mathcal B)$ for $\lVert\vec p_2\rVert$, $p_{2z}$, and the tail
 probability; the mass axis is reversed, so boxes become rarer to the right.
 
-![RMSE vs constraint mass, p2_norm](../../../images/thesis_pool/decay6d_is/rmse_vs_mass_p2_norm_n1000.png)
-![RMSE vs constraint mass, p2_z](../../../images/thesis_pool/decay6d_is/rmse_vs_mass_p2_z_n1000.png)
-![RMSE vs constraint mass, p2_tail](../../../images/thesis_pool/decay6d_is/rmse_vs_mass_p2_tail_n1000.png)
+![RMSE vs constraint mass, p2_norm](../../../images/thesis_pool/decay6d_is/v2_dopri5/rmse_vs_mass_p2_norm_n1000.png)
+![RMSE vs constraint mass, p2_z](../../../images/thesis_pool/decay6d_is/v2_dopri5/rmse_vs_mass_p2_z_n1000.png)
+![RMSE vs constraint mass, p2_tail](../../../images/thesis_pool/decay6d_is/v2_dopri5/rmse_vs_mass_p2_tail_n1000.png)
 
 small_offcentre error-cost frontier at IS budgets $N=1,000/10,000/100,000$, using mean time per estimate;
 point labels give each estimator's own model draws per estimate (rejection draws far more
 than $N$ to match IS time or NFE). Means include occasional fallback trajectories.
 
-![RMSE vs time, small_offcentre](../../../images/thesis_pool/decay6d_is/rmse_vs_time_small_offcentre_p2_norm.png)
+![RMSE vs time, small_offcentre](../../../images/thesis_pool/decay6d_is/v2_dopri5/rmse_vs_time_small_offcentre_p2_norm.png)
 
 #### small_offcentre: $P(\mathcal B)=0.0050$, GT events=5,005,887
 

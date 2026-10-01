@@ -1,9 +1,9 @@
 {
-  "run_id": "decay6d_box-cdea812c",
+  "run_id": "decay6d_box-f2ff7b7d",
   "problem": "decay6d",
   "mode": "box",
   "model": "BoxConstrainedFM6D",
-  "evaluated_at": "2026-09-29T18:51:20",
+  "evaluated_at": "2026-10-01T12:42:33",
   "normalizer_std": [
     0.32310558989627863,
     0.32310558989627863,
@@ -24,11 +24,11 @@
     "time_dim": 64,
     "seed": 0
   },
-  "box_filter_acceptance": 0.3908717742919922,
-  "final_loss": 0.6571073778271675,
+  "box_filter_acceptance": null,
+  "final_loss": null,
   "diagnostics": {
-    "in_box_rate_mean": 0.987425,
-    "in_box_rate_min": 0.9764,
-    "in_box_rate_max": 0.9952000000000001
+    "in_box_rate_mean": 0.969975,
+    "in_box_rate_min": 0.9402,
+    "in_box_rate_max": 0.9896
   }
 }

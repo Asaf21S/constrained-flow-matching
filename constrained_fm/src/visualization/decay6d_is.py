@@ -35,7 +35,7 @@ MAX_TICKS = 5
 DATASET_BINS = 200
 DATASET_PERCENTILE = 99.9
 # Readable both on the dark end of viridis and on white.
-BOX_COLORS = ("tab:red", "tab:orange", "magenta", "tab:cyan", "limegreen")
+BOX_COLORS = ("tab:red", "tab:orange", "magenta", "tab:cyan", "limegreen", "tab:brown")
 AXIS_NAMES = "xyz"
 
 
@@ -303,6 +303,42 @@ def plot_rmse_vs_mass(masses: np.ndarray, rmse: dict[str, np.ndarray], box_names
     return fig
 
 
+def plot_rmse_vs_mass_grid(masses: np.ndarray, rmse: dict[str, dict[int, dict[str, np.ndarray]]],
+                           row_labels: dict[str, str], title: str) -> Figure:
+    """RMSE against ``P(B)``: one row per observable, one column per budget ``N``.
+
+    ``rmse[observable][n][estimator]`` is ``(boxes,)``, aligned with ``masses``; the mass axis is
+    reversed so rarer boxes sit to the right.
+    """
+    order = np.argsort(masses)[::-1]
+    n_values = list(next(iter(rmse.values())))
+    with plt.rc_context(PAPER_RC):
+        fig, axes = plt.subplots(len(rmse), len(n_values), sharex=True, sharey="row",
+                                 squeeze=False, layout="constrained",
+                                 figsize=(4.4 * len(n_values), 3.4 * len(rmse)))
+        for row, (observable, by_n) in zip(axes, rmse.items()):
+            for ax, n in zip(row, n_values):
+                for estimator, values in by_n[n].items():
+                    style = ESTIMATOR_STYLE[estimator]
+                    ax.plot(masses[order], values[order], color=style["color"], ls=style["ls"],
+                            marker=style["marker"], ms=6, label=style["label"])
+                ax.set(xscale="log", yscale="log")
+                ax.grid(True, which="major", alpha=0.3)
+            row[0].set_ylabel(row_labels[observable])
+        for ax, n in zip(axes[0], n_values):
+            ax.set_title(f"$N={n:,}$")
+        for ax in axes[-1]:
+            ax.set_xticks(masses[order], [f"{100 * m:.{1 if m < 0.01 else 0}f}%"
+                                          for m in masses[order]], fontsize="small")
+            ax.xaxis.set_minor_locator(NullLocator())
+            ax.set_xlabel(r"Constraint mass $P(\mathcal{B})$")
+        axes[0, 0].invert_xaxis()
+        fig.legend(*axes[0, 0].get_legend_handles_labels(), loc="outside lower center",
+                   ncol=len(rmse[next(iter(rmse))][n_values[0]]), frameon=False)
+        fig.suptitle(title)
+    return fig
+
+
 def _count_label(count: float) -> str:
     if count >= 1e6:
         return f"{count / 1e6:.3g}M"
@@ -336,4 +372,5 @@ def plot_rmse_vs_time(seconds: dict[str, np.ndarray], rmse: dict[str, np.ndarray
 
 __all__ = ["ESTIMATOR_STYLE", "plot_error_vs_n", "plot_weight_histograms", "plot_ess",
            "plot_p2_marginals", "plot_dataset_p1_boxes", "plot_dataset_structure",
-           "plot_dataset_p2_given_box", "plot_rmse_vs_mass", "plot_rmse_vs_time"]
+           "plot_dataset_p2_given_box", "plot_rmse_vs_mass", "plot_rmse_vs_mass_grid",
+           "plot_rmse_vs_time"]

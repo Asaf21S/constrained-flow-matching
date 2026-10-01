@@ -2,20 +2,20 @@
 #SBATCH --job-name=decay6d_eval
 #SBATCH --output=/users/rosenbaum/asolomiak/constrained-flow-matching/logs/decay6d_eval_%A_%a.out
 #SBATCH --error=/users/rosenbaum/asolomiak/constrained-flow-matching/logs/decay6d_eval_%A_%a.err
-#SBATCH --time=12:00:00
+#SBATCH --time=04:00:00
 #SBATCH --partition=dlc
 #SBATCH --gpus-per-node=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=64G
-#SBATCH --array=0-27
+#SBATCH --array=0-5
 #SBATCH --mail-user=asafucho@gmail.com
 #SBATCH --mail-type=FAIL
 
-# decay6d IS shards: tasks 0-19 draw q blocks (box = id / 4), tasks 20-27 draw p_uncon blocks.
+# decay6d IS shards: one task per box; IS and equal-time rejection alternate on the same GPU.
 # Merge afterwards with scripts/run_decay6d_merge.sh (same flags).
 #
-#   sbatch scripts/run_decay6d_eval.sh
-#   sbatch --array=0-5 scripts/run_decay6d_eval.sh --smoke
+#   sbatch scripts/run_decay6d_eval.sh --steps 32
+#   sbatch scripts/run_decay6d_eval.sh --smoke --steps 8
 
 set -eo pipefail
 

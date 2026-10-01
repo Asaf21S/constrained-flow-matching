@@ -1,0 +1,23 @@
+method: decay6d_box
+run_id: decay6d_box-cdea812c
+settings:
+  batch_size: 4096
+  diag_boxes: 16
+  diag_samples: 5000
+  ema_decay: 0.9999
+  grad_clip: 1.0
+  hidden_dim: 1024
+  iterations: 100000
+  log_every: 1000
+  lr: 0.001
+  lr_min: 1.0e-05
+  mode: box
+  num_blocks: 3
+  seed: 0
+  time_dim: 64
+half_width_range:
+- 0.05
+- 1.5
+mass_range:
+- 0.004
+- 0.5

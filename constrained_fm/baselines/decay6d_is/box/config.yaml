@@ -1,5 +1,5 @@
 method: decay6d_box
-run_id: decay6d_box-cdea812c
+run_id: decay6d_box-f2ff7b7d
 settings:
   batch_size: 4096
   diag_boxes: 16
@@ -19,5 +19,5 @@ half_width_range:
 - 0.05
 - 1.5
 mass_range:
-- 0.004
-- 0.5
+- 0.001
+- 0.2

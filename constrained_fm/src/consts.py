@@ -131,8 +131,8 @@ DECAY_SPLIT_RANGE = (0.1, 0.9)
 DECAY_QUADRATURE_NODES = 4096
 # Training boxes live in the normalized frame: log-uniform per-axis half-widths, then a P(B) filter.
 DECAY_BOX_HALF_WIDTH_RANGE = (0.05, 1.5)
-# Floor sits below the smallest eval target (0.5%) so that box stays strictly inside the support.
-DECAY_BOX_MASS_RANGE = (0.004, 0.5)
+# Floor sits below the smallest eval target (0.2%) so that box stays strictly inside the support.
+DECAY_BOX_MASS_RANGE = (0.001, 0.2)
 # Piecewise-linear 3D CDF of normalized p1, used only to evaluate the P(B) filter.
 DECAY_MASS_TABLE_BINS = 128
 DECAY_MASS_TABLE_EXTENT = 4.5
@@ -141,13 +141,16 @@ DECAY_MASS_TABLE_SEED = 1234
 # Sharpness of the softplus face barriers, in normalized units.
 BOX_SOFTPLUS_SCALE = 10.0
 DECAY_TAIL_QUANTILE = 0.95
-DECAY_EVAL_BOX_MASSES = (0.005, 0.02, 0.05, 0.10, 0.30)
+DECAY_EVAL_BOX_MASSES = (0.002, 0.005, 0.01, 0.02, 0.05, 0.10)
+# One cube shape and physical p1 centre for every eval box, so P(B) is the only variable.
+DECAY_EVAL_BOX_CENTRE = (-0.35, 0.25, -0.2)
+DECAY_EVAL_BOX_ASPECT = (1.0, 1.0, 1.0)
 DECAY_ODE_ATOL = 1e-5
 DECAY_ODE_RTOL = 1e-5
 # Both 100k-step runs spiked to loss ~1e6-1e8 near step 20k without clipping.
 DECAY_GRAD_CLIP = 1.0
 DECAY_EMA_DECAY = 0.9999
-# RK4 steps for the rare single sample whose adaptive solve underflows.
-DECAY_ODE_FALLBACK_STEPS = 10_000
+# Fixed midpoint step counts swept by the IS evaluation.
+DECAY_ODE_STEPS = (8, 16, 32, 64)
 # Asymptotic one-sample Kolmogorov-Smirnov critical value at 5%, divided by sqrt(n) at use.
 KS_CRITICAL_95 = 1.358

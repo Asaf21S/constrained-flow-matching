@@ -31,12 +31,15 @@ def visualize_true_gmm_likelihood(means=GMM_MEANS, covs=GMM_COVS, weights=GMM_WE
     norm = cm.colors.Normalize(vmax=true_vmax, vmin=0.0)
     ax.imshow(density_grid.cpu().numpy(), extent=(-4.5, 4.5, -4.5, 4.5), origin='lower', cmap='viridis', norm=norm)
     ax.grid(False)
-    cbar = fig.colorbar(cm.ScalarMappable(norm=norm, cmap='viridis'), ax=ax, orientation='vertical')
+    ax.set_aspect('equal')
+    fig.canvas.draw()
+    bounds = ax.get_position()
+    cax = fig.add_axes([bounds.x1 + 0.02, bounds.y0, 0.035, bounds.height])
+    cbar = fig.colorbar(cm.ScalarMappable(norm=norm, cmap='viridis'), cax=cax, orientation='vertical')
     cbar.set_label('True Density', family='serif')
     cbar.ax.tick_params(labelsize=10)
     for label in cbar.ax.get_yticklabels():
         label.set_family('serif')
-    ax.set_aspect('equal')
 
     if save_path is not None:
         save_path = Path(save_path)

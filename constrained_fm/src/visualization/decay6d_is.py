@@ -303,6 +303,24 @@ def plot_rmse_vs_mass(masses: np.ndarray, rmse: dict[str, np.ndarray], box_names
     return fig
 
 
+def _draw_rmse_vs_mass(ax, masses: np.ndarray, by_estimator: dict[str, np.ndarray]) -> None:
+    order = np.argsort(masses)[::-1]
+    for estimator, values in by_estimator.items():
+        style = ESTIMATOR_STYLE[estimator]
+        ax.plot(masses[order], values[order], color=style["color"], ls=style["ls"],
+                marker=style["marker"], ms=6, label=style["label"])
+    ax.set(xscale="log", yscale="log")
+    ax.grid(True, which="major", alpha=0.3)
+
+
+def _mass_axis(ax, masses: np.ndarray) -> None:
+    ordered = np.sort(masses)[::-1]
+    ax.set_xticks(ordered, [f"{100 * m:.{1 if m < 0.01 else 0}f}%" for m in ordered],
+                  fontsize="small")
+    ax.xaxis.set_minor_locator(NullLocator())
+    ax.set_xlabel(r"Constraint mass $P(\mathcal{B})$")
+
+
 def plot_rmse_vs_mass_grid(masses: np.ndarray, rmse: dict[str, dict[int, dict[str, np.ndarray]]],
                            row_labels: dict[str, str], title: str) -> Figure:
     """RMSE against ``P(B)``: one row per observable, one column per budget ``N``.
@@ -310,7 +328,6 @@ def plot_rmse_vs_mass_grid(masses: np.ndarray, rmse: dict[str, dict[int, dict[st
     ``rmse[observable][n][estimator]`` is ``(boxes,)``, aligned with ``masses``; the mass axis is
     reversed so rarer boxes sit to the right.
     """
-    order = np.argsort(masses)[::-1]
     n_values = list(next(iter(rmse.values())))
     with plt.rc_context(PAPER_RC):
         fig, axes = plt.subplots(len(rmse), len(n_values), sharex=True, sharey="row",
@@ -318,24 +335,35 @@ def plot_rmse_vs_mass_grid(masses: np.ndarray, rmse: dict[str, dict[int, dict[st
                                  figsize=(4.4 * len(n_values), 3.4 * len(rmse)))
         for row, (observable, by_n) in zip(axes, rmse.items()):
             for ax, n in zip(row, n_values):
-                for estimator, values in by_n[n].items():
-                    style = ESTIMATOR_STYLE[estimator]
-                    ax.plot(masses[order], values[order], color=style["color"], ls=style["ls"],
-                            marker=style["marker"], ms=6, label=style["label"])
-                ax.set(xscale="log", yscale="log")
-                ax.grid(True, which="major", alpha=0.3)
+                _draw_rmse_vs_mass(ax, masses, by_n[n])
             row[0].set_ylabel(row_labels[observable])
         for ax, n in zip(axes[0], n_values):
             ax.set_title(f"$N={n:,}$")
         for ax in axes[-1]:
-            ax.set_xticks(masses[order], [f"{100 * m:.{1 if m < 0.01 else 0}f}%"
-                                          for m in masses[order]], fontsize="small")
-            ax.xaxis.set_minor_locator(NullLocator())
-            ax.set_xlabel(r"Constraint mass $P(\mathcal{B})$")
+            _mass_axis(ax, masses)
         axes[0, 0].invert_xaxis()
         fig.legend(*axes[0, 0].get_legend_handles_labels(), loc="outside lower center",
                    ncol=len(rmse[next(iter(rmse))][n_values[0]]), frameon=False)
         fig.suptitle(title)
+    return fig
+
+
+def plot_rmse_vs_mass_row(masses: np.ndarray, rmse: dict[str, dict[str, np.ndarray]],
+                          y_labels: dict[str, str]) -> Figure:
+    """RMSE against ``P(B)`` at one budget, one panel per observable side by side.
+
+    ``rmse[observable][estimator]`` is ``(boxes,)``, aligned with ``masses``.
+    """
+    with plt.rc_context(PAPER_RC):
+        fig, axes = plt.subplots(1, len(rmse), sharex=True, squeeze=False, layout="constrained",
+                                 figsize=(4.4 * len(rmse), 3.6))
+        for ax, (observable, by_estimator) in zip(axes[0], rmse.items()):
+            _draw_rmse_vs_mass(ax, masses, by_estimator)
+            _mass_axis(ax, masses)
+            ax.set_ylabel(y_labels[observable])
+        axes[0, 0].invert_xaxis()
+        fig.legend(*axes[0, 0].get_legend_handles_labels(), loc="outside upper center",
+                   ncol=len(next(iter(rmse.values()))), frameon=False)
     return fig
 
 
@@ -345,32 +373,58 @@ def _count_label(count: float) -> str:
     return f"{count / 1e3:.3g}k"
 
 
+def _draw_rmse_vs_time(ax, seconds: dict[str, np.ndarray], rmse: dict[str, np.ndarray],
+                       draws: dict[str, np.ndarray]) -> None:
+    sizes = np.linspace(6, 14, len(next(iter(draws.values()))))
+    for estimator, time in seconds.items():
+        style = ESTIMATOR_STYLE[estimator]
+        ax.plot(time, rmse[estimator], color=style["color"], ls=style["ls"], lw=1.8,
+                label=style["label"])
+        # Equal-time labels sit below-left so they don't collide with equal-NFE labels.
+        below = estimator == "rej_equal_time"
+        offset, ha, va = ((-7, -5), "right", "top") if below else ((7, 5), "left", "baseline")
+        for t, err, size, count in zip(time, rmse[estimator], sizes, draws[estimator]):
+            ax.plot(t, err, color=style["color"], marker=style["marker"], ms=size)
+            ax.annotate(_count_label(count), (t, err), textcoords="offset points",
+                        xytext=offset, ha=ha, va=va, fontsize="x-small", color=style["color"])
+    ax.set(xscale="log", yscale="log", xlabel="Mean time per estimate [s]")
+    ax.grid(True, which="major", alpha=0.3)
+
+
 def plot_rmse_vs_time(seconds: dict[str, np.ndarray], rmse: dict[str, np.ndarray],
                       draws: dict[str, np.ndarray], y_label: str, box_name: str) -> Figure:
     """Error-vs-cost frontier: one connected curve per estimator, one point per IS budget ``N``.
 
     Points are labelled with the estimator's own model draws per estimate; marker size grows with ``N``.
     """
-    sizes = np.linspace(6, 14, len(next(iter(draws.values()))))
     with plt.rc_context(PAPER_RC):
         fig, ax = plt.subplots(figsize=(7.5, 5.2), layout="constrained")
-        for estimator, time in seconds.items():
-            style = ESTIMATOR_STYLE[estimator]
-            ax.plot(time, rmse[estimator], color=style["color"], ls=style["ls"], lw=1.8,
-                    label=style["label"])
-            for t, err, size, count in zip(time, rmse[estimator], sizes, draws[estimator]):
-                ax.plot(t, err, color=style["color"], marker=style["marker"], ms=size)
-                ax.annotate(_count_label(count), (t, err), textcoords="offset points",
-                            xytext=(7, 5), fontsize="x-small", color=style["color"])
-        ax.set(xscale="log", yscale="log", xlabel="Mean time per estimate [s]",
-               ylabel=y_label, title=box_name)
-        ax.grid(True, which="major", alpha=0.3)
+        _draw_rmse_vs_time(ax, seconds, rmse, draws)
+        ax.set(ylabel=y_label, title=box_name)
         ax.legend(frameon=False, fontsize="small", title="labels: draws per estimate",
                   title_fontsize="x-small")
+    return fig
+
+
+def plot_rmse_vs_time_row(seconds: dict[str, np.ndarray], rmse: dict[str, dict[str, np.ndarray]],
+                          draws: dict[str, np.ndarray], y_labels: dict[str, str]) -> Figure:
+    """Error-vs-cost frontier, one panel per observable side by side.
+
+    ``rmse[observable][estimator]`` is ``(N,)``, aligned with ``seconds[estimator]``.
+    """
+    with plt.rc_context(PAPER_RC):
+        fig, axes = plt.subplots(1, len(rmse), squeeze=False, layout="constrained",
+                                 figsize=(5.0 * len(rmse), 4.0))
+        for ax, (observable, by_estimator) in zip(axes[0], rmse.items()):
+            _draw_rmse_vs_time(ax, seconds, by_estimator, draws)
+            ax.set_ylabel(y_labels[observable])
+        fig.legend(*axes[0, 0].get_legend_handles_labels(), loc="outside upper center",
+                   ncol=len(seconds), frameon=False, title="Point labels: draws per estimate",
+                   title_fontsize="small")
     return fig
 
 
 __all__ = ["ESTIMATOR_STYLE", "plot_error_vs_n", "plot_weight_histograms", "plot_ess",
            "plot_p2_marginals", "plot_dataset_p1_boxes", "plot_dataset_structure",
            "plot_dataset_p2_given_box", "plot_rmse_vs_mass", "plot_rmse_vs_mass_grid",
-           "plot_rmse_vs_time"]
+           "plot_rmse_vs_mass_row", "plot_rmse_vs_time", "plot_rmse_vs_time_row"]

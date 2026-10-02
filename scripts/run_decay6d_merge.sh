@@ -16,6 +16,7 @@
 #   sbatch --dependency=afterok:<jobid> scripts/run_decay6d_merge.sh --steps 32
 #   sbatch --dependency=afterok:<jobid> scripts/run_decay6d_merge.sh --smoke --steps 8
 #   sbatch scripts/run_decay6d_merge.sh --plot-only --steps 32
+#   sbatch scripts/run_decay6d_merge.sh --paper --steps 64
 
 set -eo pipefail
 
@@ -28,6 +29,11 @@ fi
 # --plot-only redraws figures from saved artifacts without re-merging.
 MERGE_CMD="python -m constrained_fm.scripts.eval_decay6d_is --stage merge ${EXTRA}"
 if [[ " ${EXTRA} " == *" --plot-only "* ]]; then
+    MERGE_CMD="true"
+fi
+# --paper draws only the paper row figures (implies --plot-only).
+if [[ " ${EXTRA} " == *" --paper "* ]]; then
+    PLOT_EXTRA="${PLOT_EXTRA} --paper"
     MERGE_CMD="true"
 fi
 

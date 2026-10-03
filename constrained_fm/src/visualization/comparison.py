@@ -33,8 +33,8 @@ METHOD_ORDER = ("gt", "coeff", "functa", "explicit", "fewshot", "eci", "hardflow
 
 METHOD_LABELS = {
     "gt": "Ground Truth (rejection sampling)",
-    "coeff": "Coefficients (ours)",
-    "functa": "Functa (ours)",
+    "coeff": "Explicit (ours)",
+    "functa": "Implicit (ours)",
     "explicit": "Explicit conditioning (ours)",
     "fewshot": "Few-Shot",
     "eci": "ECI",
@@ -44,8 +44,8 @@ METHOD_LABELS = {
 # Used wherever panels sit side by side and the full legend labels would collide.
 METHOD_SHORT = {
     "gt": "Ground Truth",
-    "coeff": "Coefficients",
-    "functa": "Functa (ours)",
+    "coeff": "Explicit (ours)",
+    "functa": "Implicit (ours)",
     "explicit": "Explicit (ours)",
     "fewshot": "Few-Shot",
     "eci": "ECI",

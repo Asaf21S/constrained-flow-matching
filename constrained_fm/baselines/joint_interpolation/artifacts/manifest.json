@@ -95,10 +95,10 @@
       "dtype": "float32"
     }
   },
-  "written_at": "2026-09-25T14:07:12",
-  "git_commit": "1ab644f05c32ea3e5a58010650b31a4de94b17d9",
-  "run_id": "joint_interpolation-69759c47",
-  "siren_run_id": "joint_siren-bcdeba79",
+  "written_at": "2026-10-03T19:57:16",
+  "git_commit": "3510253938d97a6623107ac43573e863863f486a",
+  "run_id": "joint_interpolation-f96820ed",
+  "siren_run_id": "joint_siren-490e48e3",
   "checkpoint": "siren_best.pt",
-  "tau": 8.15508460390329
+  "tau": 0.9
 }

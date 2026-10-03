@@ -214,7 +214,7 @@ def render_frame(root_fig: Path, step: int, field: np.ndarray, points: np.ndarra
                  labels: np.ndarray, inside: np.ndarray, scale: float, args,
                  style: cd.DiscoveryStyle) -> Path:
     fig = cd.plot_discovery_frame(field, points, labels, args.exclude_mode, scale,
-                                  f"$z_c$ optimisation, step {step}", mode_inside=inside, style=style)
+                                  f"$\\psi$ optimisation, step {step}", mode_inside=inside, style=style)
     return save_encoder_figure(fig, root_fig / "frames" / f"step_{step:05d}",
                                formats=["png"], dpi=args.dpi)[0]
 

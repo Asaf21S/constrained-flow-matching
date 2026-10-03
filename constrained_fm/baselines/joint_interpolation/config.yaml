@@ -1,5 +1,5 @@
 method: joint_interpolation
-run_id: joint_interpolation-69759c47
+run_id: joint_interpolation-f96820ed
 settings:
   checkpoint: siren_best.pt
   chunk_size: 65536
@@ -14,8 +14,8 @@ settings:
   proxy_points: 10000
   resolution: 400
   seed: 0
-  siren_dir: constrained_fm/functa_dataset/joint_siren
+  siren_dir: constrained_fm/functa_dataset/joint_siren_sharp
   steps: 9
   style: strip
-siren_run_id: joint_siren-bcdeba79
-tau: 8.15508460390329
+siren_run_id: joint_siren-490e48e3
+tau: 0.9

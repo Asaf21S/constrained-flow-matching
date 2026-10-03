@@ -19,10 +19,13 @@
 #
 #   sbatch scripts/run_val1k_plots.sh
 #   sbatch scripts/run_val1k_plots.sh --window 150 --step 50
+#   SKIP_MERGE=1 sbatch scripts/run_val1k_plots.sh   # redraw only, keep metrics.json untouched
 
 set -eo pipefail
 
 EXTRA="$*"
+MERGE="python -m constrained_fm.scripts.merge_val1k &&"
+[[ "${SKIP_MERGE:-0}" == "1" ]] && MERGE=""
 
 export ENROOT_CACHE_PATH=/users/rosenbaum/asolomiak/.enroot_cache
 mkdir -p "$ENROOT_CACHE_PATH"
@@ -32,7 +35,7 @@ srun --container-image=/users/rosenbaum/asolomiak/nvidia+pytorch+24.03-py3.sqsh 
      bash -c "set -eo pipefail && \
               cd /workspace && \
               pip install --user -q -r requirements.txt && \
-              python -m constrained_fm.scripts.merge_val1k && \
+              ${MERGE} \
               python -m constrained_fm.scripts.plot_val1k ${EXTRA}"
 
 echo "v1k figures rendered."

@@ -62,7 +62,7 @@ class EncoderStyle:
 
     # --- colorbar ---
     show_colorbar: bool = True
-    colorbar_label: str = r"$f_\theta(x, z)$"
+    colorbar_label: str = r"$f_\omega(x, \psi)$"
     colorbar_fraction: float = 0.046
     colorbar_pad: float = 0.04
     label_size: float = 22.0
@@ -70,7 +70,7 @@ class EncoderStyle:
     # --- legend ---
     show_legend: bool = False
     gt_label: str = r"ground truth  $P(x) = 0$"
-    pred_label: str = r"decoded  $f_\theta(x, z) = 0$"
+    pred_label: str = r"decoded  $f_\omega(x, \psi) = 0$"
     legend_loc: str = "upper right"
     legend_size: float = 18.0
 

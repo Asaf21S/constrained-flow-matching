@@ -1,9 +1,9 @@
 {
-  "run_id": "joint_interpolation-69759c47",
+  "run_id": "joint_interpolation-f96820ed",
   "method": "joint_interpolation",
-  "fingerprint": "69759c476d0e2bd3b5614a31797f740b05fc5191a1df8b496f337b211f07a0b0",
-  "git_commit": "1ab644f05c32ea3e5a58010650b31a4de94b17d9",
-  "created_at": "2026-09-25T14:07:12",
-  "siren_run_id": "joint_siren-bcdeba79",
-  "tau": 8.15508460390329
+  "fingerprint": "f96820ededd4de377cb4ef9825171e459b0e829bf116a579cad01b7a9bb12fce",
+  "git_commit": "3510253938d97a6623107ac43573e863863f486a",
+  "created_at": "2026-10-03T19:57:16",
+  "siren_run_id": "joint_siren-490e48e3",
+  "tau": 0.9
 }

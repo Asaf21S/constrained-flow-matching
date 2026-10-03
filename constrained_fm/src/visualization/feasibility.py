@@ -29,7 +29,7 @@ from constrained_fm.src.visualization.style import PAPER_RC
 
 # Short name and format string per metric, so panel captions stay compact enough to read.
 METRIC_FORMATS: dict[str, tuple[str, str]] = {
-    "success_rate": ("SR", "{:.1f}%"),
+    "success_rate": ("AR", "{:.1f}%"),
     "swd": ("SWD", "{:.3f}"),
     # Spans ~4 decades between the GT noise floor and a projection sampler; fixed-point
     # rounds the noise floor to 0.0000 and throws away the reference the panel exists to set.
@@ -137,7 +137,7 @@ def to_numpy(data: Any) -> np.ndarray:
 
 def format_metrics(metrics: Mapping[str, float] | None, keys: Sequence[str],
                    separator: str = "   ") -> str:
-    """Compact caption such as ``SR 100.0%   SWD 0.689``."""
+    """Compact caption such as ``AR 100.0%   SWD 0.689``."""
     if not metrics:
         return ""
     parts = []

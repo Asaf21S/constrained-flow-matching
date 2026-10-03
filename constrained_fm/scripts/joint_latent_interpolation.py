@@ -38,7 +38,7 @@ from constrained_fm.src.experiment.runtime import resolve_device, set_seed
 from constrained_fm.src.inference.latent_extractor import extract_latents_batched
 from constrained_fm.src.visualization import siren_encoder as se
 
-SIREN_DIR = "constrained_fm/functa_dataset/joint_siren"
+SIREN_DIR = "constrained_fm/functa_dataset/joint_siren_sharp"
 OUTDIR = "constrained_fm/baselines/joint_interpolation"
 FIGURE_DIR = "constrained_fm/images/thesis_pool/joint_interpolation"
 

@@ -100,7 +100,7 @@ def _legend_handles(style: DiscoveryStyle) -> list[Line2D]:
         Line2D([], [], marker="o", ls="", color=style.target_color, label="target modes"),
         Line2D([], [], marker="o", ls="", color=style.excluded_color, label="excluded mode"),
         Line2D([], [], color=style.boundary_color, lw=style.boundary_linewidth,
-               label=r"decoded $f_\theta(x, z_c) = 0$"),
+               label=r"decoded $f_\omega(x, \psi) = 0$"),
     ]
 
 
@@ -195,7 +195,7 @@ def plot_discovery_strip(fields: np.ndarray, steps: Sequence[int], points: np.nd
         if style.show_legend:
             handles = _legend_handles(style) + [
                 Patch(facecolor=style.hist_color, alpha=style.hist_fill_alpha,
-                      edgecolor=style.hist_color, label=r"GMM inside $f_\theta \leq 0$"),
+                      edgecolor=style.hist_color, label=r"GMM inside $f_\omega \leq 0$"),
                 Line2D([], [], color=style.gt_color, lw=style.gt_linewidth,
                        ls=style.gt_linestyle, label="target (3 modes)"),
             ]
@@ -255,7 +255,7 @@ def plot_discovery_history(losses: np.ndarray, snapshot_steps: np.ndarray,
                       label=f"mode {m}" + (" (excluded)" if is_excluded else ""))
         ax_m.set_ylim(-0.02, 1.02)
         ax_m.set_xlabel("step", fontsize=style.caption_size)
-        ax_m.set_ylabel(r"fraction with $f_\theta(x, z_c) \leq 0$", fontsize=style.caption_size)
+        ax_m.set_ylabel(r"fraction with $f_\omega(x, \psi) \leq 0$", fontsize=style.caption_size)
         ax_m.tick_params(labelsize=style.tick_size)
         ax_m.legend(fontsize=style.legend_size)
         fig.tight_layout()

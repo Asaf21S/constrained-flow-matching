@@ -70,6 +70,8 @@ LEGEND_SPEC = {
     "kld": (False, 1, "upper right"),
     "nll": (True, 1, "upper right"),
 }
+# Legend entries exchanged in place, by label.
+LEGEND_SWAP = {"swd": ("ECI", GT_REFERENCE_LABEL)}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -187,7 +189,8 @@ def render_trends(by_method: dict[str, dict[str, np.ndarray]], mass: np.ndarray,
                                      "", logx=log, logy=log, window=window, step=step,
                                      identity=True, identity_label=GT_REFERENCE_LABEL,
                                      identity_color=METHOD_COLORS["gt"], labels=labels,
-                                     legend=show, legend_ncol=ncol, legend_loc=loc)
+                                     legend=show, legend_ncol=ncol, legend_loc=loc,
+                                     legend_swap=LEGEND_SWAP.get(metric))
 
         written += save_both_variants(gt_axis, figure_dir, f"trend_{metric}", has_fewshot)
 

@@ -144,6 +144,7 @@ def plot_metric_trend(series: dict[str, tuple[np.ndarray, np.ndarray]], xlabel: 
                       labels: dict[str, str] | None = None,
                       legend: bool = True, legend_loc: str = "lower right",
                       legend_ncol: int = 1,
+                      legend_swap: tuple[str, str] | None = None,
                       figsize: tuple[float, float] = (8.4, 5.8)) -> Figure:
     """One rolling-median line with an interquartile band per method, on shared axes.
 
@@ -190,8 +191,13 @@ def plot_metric_trend(series: dict[str, tuple[np.ndarray, np.ndarray]], xlabel: 
     ax.grid(True, which="both", **GRID_STYLE)
     ax.set_axisbelow(True)
     if legend:
-        ax.legend(loc=legend_loc, ncol=legend_ncol, frameon=False, columnspacing=1.2,
-                  handlelength=2.0, labelspacing=0.35)
+        handles, texts = ax.get_legend_handles_labels()
+        if legend_swap is not None and all(t in texts for t in legend_swap):
+            i, j = (texts.index(t) for t in legend_swap)
+            handles[i], handles[j] = handles[j], handles[i]
+            texts[i], texts[j] = texts[j], texts[i]
+        ax.legend(handles, texts, loc=legend_loc, ncol=legend_ncol, frameon=False,
+                  columnspacing=1.2, handlelength=2.0, labelspacing=0.35)
     fig.tight_layout()
     return fig
 

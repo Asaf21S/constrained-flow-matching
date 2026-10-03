@@ -24,7 +24,8 @@ def visualize_true_gmm_likelihood(means=GMM_MEANS, covs=GMM_COVS, weights=GMM_WE
     display (e.g. when running on a headless cluster node).
     """
     density = compute_gmm_density(means=means, covs=covs, weights=weights, grid_size=grid_size, device=device)
-    density_grid = density.reshape(grid_size, grid_size)
+    # compute_gmm_density grids with indexing='ij' (axis 0 = x); imshow expects axis 0 = y.
+    density_grid = density.reshape(grid_size, grid_size).T
     true_vmax = torch.max(density_grid).item()
 
     fig, ax = plt.subplots(figsize=(6, 6))

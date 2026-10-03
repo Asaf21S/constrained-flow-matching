@@ -20,7 +20,7 @@
   - Their x-axis is the ground-truth SWD/MMD (the noise floor). Only the AR and KLD plots use mass.
   - Fix: either replot SWD/MMD against mass (plot-only change), or correct the caption and text.
 
-- [ ] **4. The GMM density figure (setup, left) is transposed.**
+- [fixed] **4. The GMM density figure (setup, left) is transposed.**
   - The modes appear mirrored across the diagonal compared with all the sample plots.
   - Fix: in `density.py`, use `density_grid.T`, then rerender.
 
@@ -28,17 +28,20 @@
   - Our HardFlow *projects the predicted terminal state*; it is not "gradient guidance". Both ECI and HardFlow are feasible **by construction** (final projection), so "ECI by design, HardFlow empirically" is inaccurate.
   - Fix the 5-panel figure label "(inference guidance)" to match.
 
-- [ ] **6. The exactness claim is unsupported, and the loss is written incorrectly.**
-  - Problem: the text calls the sign-flip trick a "heuristic". It is exact, and the abstract claims "we show" this.
-  - Problem: "geometric inversions" are not implemented.
-  - Problem: the constraints seen in training are **size-biased**, $q(\phi)\propto\pi(\phi)Z_\phi$, not $p(\phi)$.
-  - Fix: add a short proposition:
+- [ ] **6. The exactness claim is stated but not shown, and the loss's $\phi$-distribution is wrong.**
+  - Problem: the text calls the pairing an "orientation heuristic". It is exact, and the abstract says "we show" this.
+  - Problem: "geometric inversions" don't exist in the code. The two real mechanisms are the polynomial sign flip and the decay6d anchored box.
+  - Problem: Eq. 2 writes $\phi\sim p(\phi)$. With x-first pairing, the constraint the model sees has marginal $q(\phi)\propto g(\phi)Z_\phi$, so it is **size-biased**. This is not a filtering effect; it follows from drawing $x_1$ first.
+  - Fix: add one proposition that covers both constructions:
     ```latex
-    \begin{proposition}\label{prop:orientation}
-    Let $\pi(\phi)=\pi(-\phi)$ and $C_{-\phi}=-C_\phi$. Draw $x_1\sim p_{\text{data}}$, $\tilde\phi\sim\pi$, and set $\phi=\tilde\phi$ if $C_{\tilde\phi}(x_1)\le0$, else $\phi=-\tilde\phi$. Then $q(x_1\mid\phi)=p(x_1\mid\phi)$ exactly, and $q(\phi)=2\pi(\phi)Z_\phi$.
+    \begin{proposition}\label{prop:pairing}
+    Draw $x_1\sim p_{\text{data}}$ and then $\phi\sim q(\phi\mid x_1)$ with $q(\phi\mid x_1)=g(\phi)\,\mathds{1}[x_1\in\Omega_\phi]/c(x_1)$ for some $g\ge0$ that does not depend on $x_1$. If $c(x_1)$ is constant, then $q(x_1\mid\phi)=p(x_1\mid\phi)$ exactly and $q(\phi)\propto g(\phi)\,Z_\phi$.
     \end{proposition}
     ```
-    This needs `amsthm` in the preamble.
+    - Polynomials: store $\pm\phi$ and pick the orientation that contains $x_1$. Then $g=\pi$ and $c=1$.
+    - Boxes: draw the centre uniformly among boxes that contain $x_1$. Then $g(\phi)=\pi(h)/\mathrm{vol}(\mathcal B)$ and $c=1$.
+    - In Eq. 2, replace $\phi\sim p(\phi)$ with "$(\phi,x_1)$ drawn as in Proposition~\ref{prop:pairing}".
+    - Needs `amsthm`.
 
 ## Should fix
 
@@ -51,11 +54,11 @@
 - [pass] **9. Notation.**
   - The benchmark paragraph uses $P(x)$; use $C_\phi(x)$ throughout.
   - Eq. 1 uses `\mathbb{I}`; use `\mathds{1}`.
-- [ ] **10. Figure labels.**
+- [fixed] **10. Figure labels.**
   - SR → AR (5-panel figure).
   - "Coefficients/Functa" → "Explicit/Implicit" (trend legends).
   - The setup figure's feasible regions are shaded blue-gray, not "gray".
-- [ ] **11. Captions are underspecified.** Define:
+- [fixed] **11. Captions are underspecified.** Define:
   - AR;
   - SWD noise floor;
   - the first-order distance;

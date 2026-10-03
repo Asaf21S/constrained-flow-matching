@@ -12,13 +12,13 @@
     To illustrate that the encoder is not tied to one constraint family, we also meta-learn a SIREN jointly on polynomials and convex polygons (Figures~\ref{fig:siren_grid},~\ref{fig:siren_interp}); all generative results use the polynomial-only encoder.
     ```
 
-- [ ] **2. The interpolation figure comes from an outdated checkpoint.**
+- [fixed] **2. The interpolation figure comes from an outdated checkpoint.**
   - It was made with the old `joint_siren`, while the grid figure uses the newer `joint_siren_sharp`.
   - Fix: regenerate with `--siren-dir constrained_fm/functa_dataset/joint_siren_sharp`, and update the script default.
 
 - [fixed] **3. "Lower … KLD than inference-time baselines" is false.** KLD is undefined for ECI and HardFlow. Remove it from that sentence.
 
-- [ ] **4. The CAVIA expansion is wrong.** CAVIA is "Fast Context Adaptation via Meta-Learning" (Zintgraf et al., 2019). Cite Functa (Dupont et al., 2022) separately.
+- [fixed] **4. The CAVIA expansion is wrong.** CAVIA is "Fast Context Adaptation via Meta-Learning" (Zintgraf et al., 2019). Cite Functa (Dupont et al., 2022) separately.
 
 ## Should fix
 
@@ -37,7 +37,7 @@
   - Time is not concatenated with $\psi$; it enters only through AdaGN.
   - Latents are precomputed once per constraint, not over "a diverse distribution of query sets".
 - [fixed] **9. The rationale for the SIREN feature is not backed by evidence.** An ablation on an older encoder showed almost no effect. Soften "to provide localized geometric grounding" to a design choice.
-- [ ] **10. Notation and references.**
+- [fixed] **10. Notation and references.**
   - The grid colorbar $f_\theta(x,z)$ → $f_\omega(x,\psi)$, because $\theta$ is the FM.
   - The path is defined in `sec:explicit_method`, not `sec:explicit_training`.
   - The figure includes both `functa_diagram.tex` and `functa_diagram_v2.tex`; keep only v2.

@@ -36,7 +36,7 @@
   - The result holds with 64 ODE steps and for boxes with $P(\mathcal B)\le2\%$.
   - At 10 % mass, equal-time rejection is as good. With ≤ 16 steps, rejection wins.
   - Fix the caption's "even with equal time … diverge" accordingly.
-- [ ] **8. State the premise.** Rejection samples the *learned* unconstrained flow, not the simulator. Add one clause: the simulator is assumed expensive or unavailable.
+- [fixed] **8. State the premise.** Rejection samples the *learned* unconstrained flow, not the simulator. Add one clause: the simulator is assumed expensive or unavailable.
 - [ ] **9. Box training pairs use a different exact construction.**
   - The box centre is drawn uniformly so that the box contains $x$; this is not the sign flip.
   - Add one sentence so the "exact without rejection" claim covers this case.

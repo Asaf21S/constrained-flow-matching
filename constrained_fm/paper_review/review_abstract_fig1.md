@@ -4,19 +4,19 @@
 
 ## Must fix
 
-- [ ] **1. "Enforcing hard constraints" overstates what the method does.**
+- [noted] **1. "Enforcing hard constraints" overstates what the method does.**
   - Problem: our models reach a median AR of 98.6 % (explicit) and 97.9 % (implicit). ECI and HardFlow reach 100 %. "Outperforming" them is only true for fidelity and likelihood, not for feasibility.
   - Fix: name the axis on which we win (fidelity + exact likelihood). Add that the few infeasible samples can be discarded at negligible cost.
 
-- [ ] **2. "In the low-data regime" needs a threshold.**
+- [pass] **2. "In the low-data regime" needs a threshold.**
   - Problem: the implicit model beats fine-tuning only below roughly 500 samples. The two are at parity around 1000, and fine-tuning is slightly ahead at 2000.
   - Fix: write "when fewer than a few hundred constraint samples are available".
 
-- [ ] **3. The implicit representation is described inaccurately.**
+- [pass] **3. The implicit representation is described inaccurately.**
   - Problem: the encoder receives *continuous* values $\tanh C(x)$ at query points, not membership answers. It also runs a 15-step latent fit at test time.
   - Fix: replace "defined only via spatial queries" with "accessed only through pointwise evaluations of a constraint function". Replace "zero-shot" with "without retraining".
 
-- [ ] **4. The Fig. 1 caption is wrong and incomplete.**
+- [fixed] **4. The Fig. 1 caption is wrong and incomplete.**
   - Problem: it calls all panels "constraint amortization methods", but ECI and HardFlow are not.
   - Problem: it leaves AR, SWD, the dashed overlay and "on the wall" undefined.
   - Problem: the x-axis is the first-order distance $C/\lVert\nabla C\rVert$, not the true signed distance.
@@ -24,10 +24,10 @@
 
 ## Should fix
 
-- [ ] **5. State the setting.** The target distribution is fixed and only the constraint varies. This is never said.
-- [ ] **6. Add one headline number.** For example: SWD is 6.5–10× lower than ECI/HardFlow over 1000 held-out constraints.
-- [ ] **7. Make the last sentence concrete.** Optimizing the constraint means *fitting it to data*. For IS, give the result: up to 5.6× lower error than equal-time rejection.
-- [ ] **8. Wording.**
+- [pass] **5. State the setting.** The target distribution is fixed and only the constraint varies. This is never said.
+- [noted] **6. Add one headline number.** For example: SWD is 6.5–10× lower than ECI/HardFlow over 1000 held-out constraints.
+- [noted] **7. Make the last sentence concrete.** Optimizing the constraint means *fitting it to data*. For IS, give the result: up to 5.6× lower error than equal-time rejection.
+- [fixed] **8. Wording.**
   - "heuristics" → "inference-time correction methods"
   - fix the typo "is is"
   - fix the double space in "by  gradient"
